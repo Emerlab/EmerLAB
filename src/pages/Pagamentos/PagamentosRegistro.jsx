@@ -28,6 +28,7 @@ import {
     formatarDataAtualizadoEm,
     inserirPagamentoRegistro,
     agruparPendenciasPorPrestador,
+    agruparPendenciasFiltradas,
     listarPagamentosPendentesNota,
     listarPagamentosRegistros,
     listarPagamentosRegistrosIntervalo,
@@ -58,6 +59,7 @@ import PagamentosComprovanteModal from './PagamentosComprovanteModal.jsx'
 import PagamentosMenuFlutuante from './PagamentosMenuFlutuante.jsx'
 import PagamentosPainelPrestador from './PagamentosPainelPrestador.jsx'
 import PagamentosAPagar from './PagamentosAPagar.jsx'
+import { exportarAprovadosAPagarExcel } from '../../lib/exportAprovadosAPagarExcel.js'
 import PagamentosVincularRelatorioModal from './PagamentosVincularRelatorioModal.jsx'
 import './PagamentosRegistro.css'
 import PagamentosExportarModal from './PagamentosExportarModal.jsx'
@@ -328,6 +330,14 @@ export default function PagamentosRegistro() {
         void carregarPendentes()
     }, [carregarPendentes, assinaturaPendentes])
     const qtdPrestadoresAPagar = useMemo(() => agruparPendenciasPorPrestador(pendentesPagar).length, [pendentesPagar])
+    const exportarAprovadosAPagar = async () => {
+        try {
+            const r = await exportarAprovadosAPagarExcel(agruparPendenciasFiltradas(pendentesPagar, buscaNome))
+            if (!r.ok) setErro(r.erro)
+        } catch (e) {
+            setErro(e?.message || 'Não foi possível exportar.')
+        }
+    }
     /** «Habilitar edição»: desligado, prestador e valor aparecem como texto (sem contorno) e não editam. */
     const [edicaoAtiva, setEdicaoAtiva] = useState(() => {
         try {
@@ -1463,7 +1473,15 @@ export default function PagamentosRegistro() {
                             Enviar relatórios
                         </button>
                     )}
-                    <button type="button" className="ek-btn ek-btn--secondary" onClick={() => setExportModalAberto(true)}>
+                    <button
+                        type="button"
+                        className="ek-btn ek-btn--secondary"
+                        title={filaRapida === 'pagar' && repasseAtivo ? 'Exporta a lista de Aprovados a pagar (respeita a busca)' : undefined}
+                        onClick={() => {
+                            if (filaRapida === 'pagar' && repasseAtivo) void exportarAprovadosAPagar()
+                            else setExportModalAberto(true)
+                        }}
+                    >
                         Exportar Excel
                     </button>
                     <button type="button" className="ek-btn ek-btn--secondary" onClick={() => setMassaAberta(true)}>

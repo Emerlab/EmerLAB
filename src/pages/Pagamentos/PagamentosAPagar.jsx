@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
-import { agruparPendenciasPorPrestador, formatarDataAtualizadoEm } from '../../lib/pagamentosRegistros.js'
+import { agruparPendenciasFiltradas, formatarDataAtualizadoEm } from '../../lib/pagamentosRegistros.js'
 import { rotuloMesAnoCurto, rotuloTipoRepasse } from '../../lib/pagamentosPrestador.js'
-import { ehTipoRpa, formatarValorMonetarioBr, valorLiquidoRpa } from '../../lib/pagamentosValor.js'
-import { normalizarTextoBusca } from '../../lib/prestadorCadastroHelpers.js'
+import { ehTipoRpa, formatarValorMonetarioBr, valorAReceber } from '../../lib/pagamentosValor.js'
 import './PagamentosResumo.css'
 
-/** Valor que o prestador recebe: RPA com o desconto de 11%. */
-const aReceber = (tipoRepasse, bruto) => (ehTipoRpa(tipoRepasse) ? valorLiquidoRpa(bruto) ?? Number(bruto || 0) : Number(bruto || 0))
+/** Valor que o prestador recebe: RPA com o desconto de 11% em cada mês. */
+const aReceber = valorAReceber
 
 const rotuloQtdMeses = (n) => (Number(n) === 1 ? '1 Mês' : `${Number(n) || 0} Meses`)
 
@@ -21,12 +20,7 @@ export default function PagamentosAPagar({ registros, busca, carregando, podeEdi
     const [recolhidos, setRecolhidos] = useState(() => new Set())
 
     const grupos = useMemo(() => {
-        const todos = agruparPendenciasPorPrestador(registros)
-        const termo = normalizarTextoBusca(busca)
-        const filtrados = termo
-            ? todos.filter((g) => normalizarTextoBusca([g.prestadorNome, g.tipoRepasse, g.chavePix].filter(Boolean).join(' ')).includes(termo))
-            : todos
-        return filtrados.map((g) => ({
+        return agruparPendenciasFiltradas(registros, busca).map((g) => ({
             ...g,
             totalLiquido: g.meses.reduce((t, m) => t + aReceber(g.tipoRepasse, m.valor), 0),
         }))

@@ -84,6 +84,9 @@ import './CredenciamentoCadastro.css'
 const COLS_PRESTADOR =
     'id, nome, tipo, telefone, celular, email, cpf_cnpj, crmv, cidade_id, endereco, modalidade, especialidade_id, situacao_id, cep, endereco_logradouro, endereco_numero, endereco_complemento, endereco_pais, endereco_uf, endereco_cidade, endereco_bairro, chave_pix, tipo_pix, tipo_repasse, ativo, latitude, longitude, cadastrado_por, cadastrado_por_nome'
 
+/** Coluna nova (migração pendente em alguns ambientes): lida à parte, com retorno ao select antigo se faltar. */
+const COL_EMAIL_FINANCEIRO = ', email_financeiro'
+
 const COLS_PRESTADOR_SEM_TIPO_PIX =
     'id, nome, tipo, telefone, celular, email, cpf_cnpj, crmv, cidade_id, endereco, modalidade, especialidade_id, situacao_id, cep, endereco_logradouro, endereco_numero, endereco_complemento, endereco_pais, endereco_uf, endereco_cidade, endereco_bairro, chave_pix, tipo_repasse, ativo, latitude, longitude, cadastrado_por, cadastrado_por_nome'
 
@@ -146,6 +149,7 @@ const estadoVazio = () => ({
     chave_pix: '',
     tipo_pix: '',
     tipo_repasse: '',
+    email_financeiro: '',
     modalidade: '',
     cidade_id: '',
     latitude: '',
@@ -285,7 +289,10 @@ const CredenciamentoCadastroForm = () => {
         setLoading(true)
         setErro('')
         try {
-            let { data, error } = await supabase.from('prestadores').select(COLS_PRESTADOR).eq('id', prestadorId).single()
+            let { data, error } = await supabase.from('prestadores').select(COLS_PRESTADOR + COL_EMAIL_FINANCEIRO).eq('id', prestadorId).single()
+            if (error && String(error.message || '').toLowerCase().includes('email_financeiro')) {
+                ;({ data, error } = await supabase.from('prestadores').select(COLS_PRESTADOR).eq('id', prestadorId).single())
+            }
             const msgErr = String(error?.message || '').toLowerCase()
             if (error && msgErr.includes('cadastrado_por')) {
                 const fallback = await supabase
@@ -347,6 +354,7 @@ const CredenciamentoCadastroForm = () => {
                     return bruto ? formatarChavePixEntrada(bruto, tipo) : ''
                 })(),
                 tipo_repasse: data.tipo_repasse || '',
+                email_financeiro: data.email_financeiro ? formatarEmailEntrada(data.email_financeiro) : '',
                 modalidade: data.modalidade || '',
                 cidade_id: cidadeIdForm,
                 latitude: data.latitude != null ? String(data.latitude) : '',
@@ -758,6 +766,11 @@ const CredenciamentoCadastroForm = () => {
                 salvouCoordenadasManual = true
             }
 
+            const emailFinanceiroSalvar = normalizarEmailParaSalvar(form.email_financeiro) || null
+            if (emailFinanceiroSalvar && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailFinanceiroSalvar)) {
+                throw new Error('E-mail financeiro inválido.')
+            }
+
             const payload = {
                 nome: form.nome.trim(),
                 cpf_cnpj: normalizarCpfCnpjParaSalvar(form.cpf_cnpj),
@@ -780,6 +793,7 @@ const CredenciamentoCadastroForm = () => {
                 chave_pix: normalizarChavePixParaSalvar(form.chave_pix, form.tipo_pix),
                 tipo_pix: form.tipo_pix ? String(form.tipo_pix).toLowerCase() : null,
                 tipo_repasse: form.tipo_repasse || null,
+                email_financeiro: emailFinanceiroSalvar,
                 modalidade: (usaClinica ? modalidadeAutoClinica : form.modalidade).trim() || null,
                 cidade_id: cidadePrincipalId,
                 ativo: true,
@@ -804,6 +818,16 @@ const CredenciamentoCadastroForm = () => {
                     .toLowerCase()
                     .includes('tipo_pix')
 
+            // coluna `email_financeiro` ausente (migração não aplicada): sem valor informado, salva sem ela; com valor, avisa
+            const erroColunaEmailFin = (err) => String(err?.message || '').toLowerCase().includes('email_financeiro')
+            const semEmailFin = () => {
+                if (emailFinanceiroSalvar) {
+                    throw new Error('O e-mail financeiro ainda não pode ser salvo: a coluna não existe no banco (migração pendente).')
+                }
+                const { email_financeiro: _e, ...resto } = payload
+                return resto
+            }
+
             let pid = prestadorId
             if (isNovo) {
                 payload.data_cadastro = new Date().toISOString()
@@ -813,6 +837,11 @@ const CredenciamentoCadastroForm = () => {
                     payload.cadastrado_por_nome = responsavel.nome
                 }
                 let { data: ins, error: errIns } = await supabase.from('prestadores').insert(payload).select('id').single()
+                if (errIns && erroColunaEmailFin(errIns)) {
+                    const retry = await supabase.from('prestadores').insert(semEmailFin()).select('id').single()
+                    ins = retry.data
+                    errIns = retry.error
+                }
                 if (errIns && String(errIns.message || '').toLowerCase().includes('cadastrado_por')) {
                     const { cadastrado_por: _c, cadastrado_por_nome: _n, ...semCad } = payload
                     const retry = await supabase.from('prestadores').insert(semCad).select('id').single()
@@ -830,6 +859,10 @@ const CredenciamentoCadastroForm = () => {
                 if (responsavel.nome) setCadastradoPorNome(responsavel.nome)
             } else {
                 let { error: errUp } = await supabase.from('prestadores').update(payload).eq('id', pid)
+                if (errUp && erroColunaEmailFin(errUp)) {
+                    const retry = await supabase.from('prestadores').update(semEmailFin()).eq('id', pid)
+                    errUp = retry.error
+                }
                 if (errUp && erroColunaTipoPix(errUp)) {
                     const { tipo_pix: _t, ...semTipo } = payload
                     const retry = await supabase.from('prestadores').update(semTipo).eq('id', pid)
@@ -1490,6 +1523,21 @@ const CredenciamentoCadastroForm = () => {
                             </SelectDropdown>
                             <p className="pcad_field_tip">{TIPO_REPASSE_DICA}</p>
                         </div>
+                        <label className="pcad_field" htmlFor="pcad_email_financeiro">
+                            E-mail financeiro (alternativo)
+                            <input
+                                id="pcad_email_financeiro"
+                                type="email"
+                                className="credenciamento_main_input"
+                                placeholder="Opcional — recebe os e-mails de repasse e comprovante"
+                                value={form.email_financeiro}
+                                onChange={(e) => setCampo('email_financeiro', formatarEmailEntrada(e.target.value))}
+                                disabled={somenteLeitura}
+                            />
+                            <p className="pcad_field_tip">
+                                Vale para todos os meses. Se vazio, os e-mails vão para o e-mail do cadastro.
+                            </p>
+                        </label>
                     </div>
                 </section>
 

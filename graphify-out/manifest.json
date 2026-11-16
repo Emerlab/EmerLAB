@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "api/_lib/repasseEmails.js": {
-    "mtime": 1793971170.3971848,
-    "seen": 1793972285.35952,
-    "ast_hash": "f39d902e588319ed7b40ff0d9c7a3ecd",
+    "mtime": 1794847062.0440197,
+    "seen": 1794847133.2170208,
+    "ast_hash": "59ec5c689a58e54e24fd5c294b0fb0d2",
     "semantic_hash": ""
   },
   "api/_lib/resendMail.js": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "api/email.js": {
-    "mtime": 1793971170.4021835,
-    "seen": 1793972285.3599427,
-    "ast_hash": "b64c49278d186454451396429346147d",
+    "mtime": 1794425923.2760174,
+    "seen": 1794576371.3556187,
+    "ast_hash": "6a6264059c3be8bec81808a62df25a4d",
     "semantic_hash": ""
   },
   "api/geocode-prestador.js": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1793103369.9598002,
-    "seen": 1793728847.1368577,
-    "ast_hash": "a9acda7b3d940608758a00529f253cbd",
+    "mtime": 1794425923.3428502,
+    "seen": 1794576371.3563218,
+    "ast_hash": "607012c577b92716c9995b6fa8d0b4e0",
     "semantic_hash": ""
   },
   "postcss.config.js": {
@@ -204,9 +204,9 @@
     "semantic_hash": ""
   },
   "scripts/dev-api-server.mjs": {
-    "mtime": 1793971170.5317495,
-    "seen": 1793972285.3615732,
-    "ast_hash": "98e3c5e961be19c2a26884356259d1c0",
+    "mtime": 1794425923.3732862,
+    "seen": 1794576371.3570054,
+    "ast_hash": "0a1cf11f97fa30624299142b3a84681c",
     "semantic_hash": ""
   },
   "scripts/export_tabelas_planos_massa.py": {
@@ -258,9 +258,9 @@
     "semantic_hash": ""
   },
   "src/App.jsx": {
-    "mtime": 1793971170.545747,
-    "seen": 1793972285.3618863,
-    "ast_hash": "8313ac5b0f9b6377b1f35243586fe089",
+    "mtime": 1794425923.3830628,
+    "seen": 1794576371.3597775,
+    "ast_hash": "b3509c5b3786be1a085e07bcec5a6691",
     "semantic_hash": ""
   },
   "src/components/BatePapo/BatePapoFloating.jsx": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "src/lib/buscarQuemRealizaPrestadores.js": {
-    "mtime": 1791492291.1906493,
-    "seen": 1793728847.1371338,
-    "ast_hash": "d5008e043cf125e207fdf48a7c3b05c7",
+    "mtime": 1794400566.3180673,
+    "seen": 1794576371.3667793,
+    "ast_hash": "ca5b98b3676661101312b138bfdc5a4e",
     "semantic_hash": ""
   },
   "src/lib/calendarExport.js": {
@@ -773,18 +773,6 @@
     "ast_hash": "509f9d54299d9a72a8869c8ff4c13a0f",
     "semantic_hash": ""
   },
-  "src/lib/configuracoes/conferenciaLaboratorio.js": {
-    "mtime": 1794250005.8815148,
-    "seen": 1794335483.4011087,
-    "ast_hash": "7b6180c203c1bf1b64b0124785332d15",
-    "semantic_hash": ""
-  },
-  "src/lib/configuracoes/conferenciaLaboratorio.matching.test.js": {
-    "mtime": 1793103370.0132499,
-    "seen": 1793728847.1372216,
-    "ast_hash": "0b09fb7987c7bab8100d3cd54d96564b",
-    "semantic_hash": ""
-  },
   "src/lib/configuracoes/conferenciaLaboratorioExcel.js": {
     "mtime": 1793103370.0145314,
     "seen": 1793728847.1372252,
@@ -792,15 +780,15 @@
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferenciaLaboratorioPrecos.js": {
-    "mtime": 1793103370.0155306,
-    "seen": 1793728847.1372309,
-    "ast_hash": "b55ff2fc9d4405a6ab553cc7e73cb2f4",
+    "mtime": 1794576243.052217,
+    "seen": 1794576371.3699608,
+    "ast_hash": "2218e7a78889b7851127c18c4085e205",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/classify.js": {
-    "mtime": 1791471015.480709,
-    "seen": 1793728847.1372342,
-    "ast_hash": "66d54f722ca58dbadc7f91ebe51c1012",
+    "mtime": 1794575539.575037,
+    "seen": 1794576371.3699632,
+    "ast_hash": "654aff35ed1cf7787048cd528cbd5b60",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/confidence.js": {
@@ -822,51 +810,51 @@
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/export.js": {
-    "mtime": 1791471075.4502778,
-    "seen": 1793728847.1372483,
-    "ast_hash": "141c33ba132e0bb6b6de08afe34d720f",
+    "mtime": 1794575820.357928,
+    "seen": 1794576371.3702667,
+    "ast_hash": "da59261558d51bf6fd086649beec48c3",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/index.js": {
-    "mtime": 1791471075.838406,
-    "seen": 1793728847.1372516,
-    "ast_hash": "37ad5118cf3fcc4a8225d422fa487c99",
+    "mtime": 1794576199.4508097,
+    "seen": 1794576371.3702703,
+    "ast_hash": "5a833eab72077bfc79109657a4acef7e",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/lookupBase.js": {
-    "mtime": 1787331407.4724152,
-    "seen": 1793728847.137255,
-    "ast_hash": "19e2b00f6fa72565c345558549df3e92",
+    "mtime": 1794576199.4518082,
+    "seen": 1794576371.3702734,
+    "ast_hash": "7d8f19fe6ce5f1be44b237d057f00337",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/matching.js": {
-    "mtime": 1787071183.3454957,
-    "seen": 1793728847.1372583,
-    "ast_hash": "32d5474070b8dd45b9335835cbc65ee6",
+    "mtime": 1794575526.275274,
+    "seen": 1794576371.3702762,
+    "ast_hash": "1386a87002a866ff0f2625f7d2e30c4f",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/matching.test.js": {
-    "mtime": 1791471076.4723253,
-    "seen": 1793728847.137264,
-    "ast_hash": "a3a1baa264fe49c335c5ae1fa3980b52",
+    "mtime": 1794575641.9510179,
+    "seen": 1794576371.3702788,
+    "ast_hash": "bfce1f5544b8dba9f5da78164ab5db3b",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/normalize.js": {
-    "mtime": 1787070955.5110102,
-    "seen": 1793728847.1372674,
-    "ast_hash": "22dbd98a5a0710537707c48e977a9855",
+    "mtime": 1794575527.7502086,
+    "seen": 1794576371.3702817,
+    "ast_hash": "8b7ee1b8a5f1f00d92025b17e34b05b3",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/persist.js": {
-    "mtime": 1794250005.8785095,
-    "seen": 1794335483.402203,
-    "ast_hash": "883c30b433d7e5abb5aa46ba483bb226",
+    "mtime": 1794575765.6267855,
+    "seen": 1794576371.3702836,
+    "ast_hash": "45d0a6470960f1cfe276716e24ae4d00",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/persist.test.js": {
-    "mtime": 1787331407.475416,
-    "seen": 1793728847.137274,
-    "ast_hash": "9d9b83d9184d7263ea2f2e5144107047",
+    "mtime": 1794575777.5625565,
+    "seen": 1794576371.370286,
+    "ast_hash": "d9b104350d69d1d83ab1e7bc884ae181",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/profiles.js": {
@@ -876,9 +864,9 @@
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/sessaoLocal.js": {
-    "mtime": 1787077084.6280913,
-    "seen": 1793728847.137282,
-    "ast_hash": "f77d562c1d3b39e6e708a81c48c6fb31",
+    "mtime": 1794575812.0361633,
+    "seen": 1794576371.3704023,
+    "ast_hash": "34ec7ebc80af4ccf605c71298e419a61",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/sessaoLocal.test.js": {
@@ -1572,9 +1560,9 @@
     "semantic_hash": ""
   },
   "src/lib/navConfig.js": {
-    "mtime": 1793990070.9370399,
-    "seen": 1794335483.411972,
-    "ast_hash": "3e693fb6b635662c78556a95b8d0f394",
+    "mtime": 1794425923.5222032,
+    "seen": 1794576371.3902612,
+    "ast_hash": "ac3facaa461a4b80a241cb20b3f7f189",
     "semantic_hash": ""
   },
   "src/lib/negociacaoInativarPorCancelamento.js": {
@@ -1602,15 +1590,15 @@
     "semantic_hash": ""
   },
   "src/lib/pagamentosRegistros.js": {
-    "mtime": 1793971170.5838392,
-    "seen": 1793972285.382636,
-    "ast_hash": "cfa4fb30598fb76f31ed7c1c883757b7",
+    "mtime": 1794839601.9250567,
+    "seen": 1794847133.2530406,
+    "ast_hash": "d611b77bc1cc2444fd0876c5d181ba43",
     "semantic_hash": ""
   },
   "src/lib/pagamentosValor.js": {
-    "mtime": 1793971170.5848398,
-    "seen": 1793972285.382638,
-    "ast_hash": "1e0a78f6f7d8c05cdeef28c3529cccbe",
+    "mtime": 1794839418.3456175,
+    "seen": 1794847133.2530427,
+    "ast_hash": "0e04ee0518fd17bef2a83119157150e4",
     "semantic_hash": ""
   },
   "src/lib/parseCodigosEmMassa.js": {
@@ -1764,9 +1752,9 @@
     "semantic_hash": ""
   },
   "src/lib/repasse/apiRepasseMensal.test.js": {
-    "mtime": 1793971170.5898354,
-    "seen": 1793972285.3845785,
-    "ast_hash": "3e172d9b4261f0b0d2095cfbe204c7bf",
+    "mtime": 1794425923.534261,
+    "seen": 1794576371.395586,
+    "ast_hash": "a283135536063bc8770689d943a00613",
     "semantic_hash": ""
   },
   "src/lib/repasse/exportRelatorio.js": {
@@ -1926,9 +1914,9 @@
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ConferenciaLaboratorio/CadastroRegrasConferencia.jsx": {
-    "mtime": 1792075194.451603,
-    "seen": 1793728847.1378984,
-    "ast_hash": "8f50b33c910f954a735f4ee4800d904a",
+    "mtime": 1794576185.3028533,
+    "seen": 1794576371.4011579,
+    "ast_hash": "62e2747a963691a873f38a98cbe47957",
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ConferenciaLaboratorio/ComboExame.jsx": {
@@ -1938,27 +1926,15 @@
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ConferenciaLaboratorio/ConfigConferenciaLaboratorio.jsx": {
-    "mtime": 1793971170.6094532,
-    "seen": 1793972285.3865044,
-    "ast_hash": "2bac5022b75c2bac2e876d9b5b89e745",
-    "semantic_hash": ""
-  },
-  "src/pages/Configuracoes/ConferenciaLaboratorio/EtapaAliasesExames.jsx": {
-    "mtime": 1787058135.953835,
-    "seen": 1793728847.137909,
-    "ast_hash": "44a74d43c3b33b730e3e6269f19bdbd0",
-    "semantic_hash": ""
-  },
-  "src/pages/Configuracoes/ConferenciaLaboratorio/EtapaExamesIndividuais.jsx": {
-    "mtime": 1787344283.6666152,
-    "seen": 1793728847.1379123,
-    "ast_hash": "6c1090d89e20157c32a3597960cf8501",
+    "mtime": 1794576185.3008542,
+    "seen": 1794576371.4012744,
+    "ast_hash": "288a5d2ebe7f5309edd85dbefbdf5bfd",
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ConferenciaLaboratorio/PainelDetalheConferencia.jsx": {
-    "mtime": 1787344283.6686633,
-    "seen": 1793728847.1379158,
-    "ast_hash": "a66d22041f7faddc3f2bfa3019b1a422",
+    "mtime": 1794576185.301854,
+    "seen": 1794576371.4012809,
+    "ast_hash": "a287209191811beba27a22d93594ae38",
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ConferenciaLaboratorio/useDrawerDialog.js": {
@@ -2046,9 +2022,9 @@
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/CredenciamentoCadastroForm.jsx": {
-    "mtime": 1793971170.6264546,
-    "seen": 1793972285.3877196,
-    "ast_hash": "106100ed67274d0796e4167813d97641",
+    "mtime": 1794840180.5383065,
+    "seen": 1794847133.262856,
+    "ast_hash": "93a3dcbaa7a0016befcad1faf5f43b13",
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/CredenciamentoCadastroLista.jsx": {
@@ -2190,9 +2166,9 @@
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/QuemRealiza/CredenciamentoQuemRealiza.jsx": {
-    "mtime": 1793103370.0836885,
-    "seen": 1793728847.1380777,
-    "ast_hash": "efcf648b8a5ce9049d781b41f4ec690a",
+    "mtime": 1794401007.2604146,
+    "seen": 1794576371.408247,
+    "ast_hash": "c1918b1c5ccb86f02c0b4f8bff997497",
     "semantic_hash": ""
   },
   "src/pages/Emerzap/Emerzap.jsx": {
@@ -2256,15 +2232,15 @@
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosMenuFlutuante.jsx": {
-    "mtime": 1793971170.6568139,
-    "seen": 1793972285.3894396,
-    "ast_hash": "ec5ff26942dff0b10761f55ce7579280",
+    "mtime": 1794404294.9677572,
+    "seen": 1794576371.411451,
+    "ast_hash": "5319fd3d95fdd40410a032be5eb5acc3",
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosRegistro.jsx": {
-    "mtime": 1794250005.8935094,
-    "seen": 1794335483.4213872,
-    "ast_hash": "cbd3bcb94bd4c3949e113a3c9bbb06e3",
+    "mtime": 1794839614.376437,
+    "seen": 1794847133.2668567,
+    "ast_hash": "c35cf44d2f869f8226dcfbde0e6df372",
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosResumo.jsx": {
@@ -2442,15 +2418,15 @@
     "semantic_hash": ""
   },
   "vercel.json": {
-    "mtime": 1794250005.8985102,
-    "seen": 1794335483.423746,
-    "ast_hash": "a135178e55d902575e7989f09703cdbb",
+    "mtime": 1794425923.6405332,
+    "seen": 1794576371.4151998,
+    "ast_hash": "1d2f1d3f56faf151bbeac69a4c89d449",
     "semantic_hash": ""
   },
   "vite.config.js": {
-    "mtime": 1793971170.6895723,
-    "seen": 1793972285.3914607,
-    "ast_hash": "1e76d3b884a76c23fcf16d9f0bfd47ca",
+    "mtime": 1794425923.6595347,
+    "seen": 1794576371.4152024,
+    "ast_hash": "a65b6168d4dc918e945716599e59d636",
     "semantic_hash": ""
   },
   "zap-emerlab/.taste-skill/after/report.json": {
@@ -2544,9 +2520,9 @@
     "semantic_hash": ""
   },
   "zap-emerlab/server/router.js": {
-    "mtime": 1794250005.9035172,
-    "seen": 1794335483.4254556,
-    "ast_hash": "64dc6bbc095c7c1253bf3dca54aef1ef",
+    "mtime": 1794403569.3229222,
+    "seen": 1794576371.4178784,
+    "ast_hash": "6856b8ec38ced86d4bc13962416664c5",
     "semantic_hash": ""
   },
   "zap-emerlab/server/wati.js": {
@@ -2592,9 +2568,9 @@
     "semantic_hash": ""
   },
   "zap-emerlab/src/components/Admin.jsx": {
-    "mtime": 1793971170.7092323,
-    "seen": 1793972285.391513,
-    "ast_hash": "096cb2fa4eb4e65ad97fbe7ba7d672d2",
+    "mtime": 1794403570.1458547,
+    "seen": 1794576371.4189408,
+    "ast_hash": "2b6a74c17e733bd94cc6e13f83e45aaa",
     "semantic_hash": ""
   },
   "zap-emerlab/src/components/Chat.jsx": {
@@ -3396,9 +3372,9 @@
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosAPagar.jsx": {
-    "mtime": 1793971170.6547148,
-    "seen": 1793972285.389297,
-    "ast_hash": "5a11e625ada9ee2d19317bc3fde4bf5d",
+    "mtime": 1794839609.609285,
+    "seen": 1794847133.2663333,
+    "ast_hash": "242afb58416ef2bb98608a1c4519938b",
     "semantic_hash": ""
   },
   "scripts/enviar-repasse-teste.mjs": {
@@ -3420,9 +3396,9 @@
     "semantic_hash": ""
   },
   "api/_lib/repasseMensalHandler.js": {
-    "mtime": 1793971170.3981862,
-    "seen": 1793972285.3595235,
-    "ast_hash": "f82ac102a0a27ee3547486f8ecf14b77",
+    "mtime": 1794847064.062839,
+    "seen": 1794847133.217023,
+    "ast_hash": "780063bb7d0d09988a40feec68793c92",
     "semantic_hash": ""
   },
   "src/lib/notifContagens.js": {
@@ -3504,9 +3480,9 @@
     "semantic_hash": ""
   },
   "zap-emerlab/docs/microsoft-outlook-teams.md": {
-    "mtime": 1793971196.5170152,
-    "seen": 1793972285.3932061,
-    "ast_hash": "6c364d693312aa007818c6f4d64c7ce2",
+    "mtime": 1794425994.1815982,
+    "seen": 1794576371.428001,
+    "ast_hash": "a9e37666e0c34446b42b7524b02c1262",
     "semantic_hash": ""
   },
   "api/_lib/emerRadarRunsHandler.js": {
@@ -3636,15 +3612,15 @@
     "semantic_hash": ""
   },
   "docs/api/especificacao-design.md": {
-    "mtime": 1794313757.3484514,
-    "seen": 1794335483.430609,
-    "ast_hash": "e3eb5174971e7246ad20d14f1c0cc38e",
+    "mtime": 1794425923.287469,
+    "seen": 1794576371.4257088,
+    "ast_hash": "b9d35642f3faf5c664e6c4bbb3a2fd7a",
     "semantic_hash": ""
   },
   "docs/api/plano-implementacao.md": {
-    "mtime": 1794313757.349452,
-    "seen": 1794335483.4306111,
-    "ast_hash": "a0e943a65e2e0a3d3ad627cbdbfc4707",
+    "mtime": 1794425923.3204916,
+    "seen": 1794576371.4257185,
+    "ast_hash": "6afb9de22ed1f769bf64f1365e00d942",
     "semantic_hash": ""
   },
   "src/lib/clicksign/clicksignConfig.js": {
@@ -3867,6 +3843,270 @@
     "mtime": 1794229422.6382394,
     "seen": 1794335483.429715,
     "ast_hash": "38e00ca2e334f55c90ff79231d9bcd73",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/chavesAdminRotas.js": {
+    "mtime": 1794425923.192501,
+    "seen": 1794576371.353941,
+    "ast_hash": "3f992a2dfd90118d8706a9bc6c084da0",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/indiceRotas.js": {
+    "mtime": 1794425923.2005074,
+    "seen": 1794576371.3539462,
+    "ast_hash": "1ee66b09d8e2890b0fa215defe51eddc",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/pagamentosRotas.js": {
+    "mtime": 1794425923.2135286,
+    "seen": 1794576371.3539498,
+    "ast_hash": "ca281fcbdd4c3fa2425062978f22de99",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/redeDados.js": {
+    "mtime": 1794425923.2225277,
+    "seen": 1794576371.3539543,
+    "ast_hash": "6c18a0e30cb209078a0c17b01e9c7f8d",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/redeRotas.js": {
+    "mtime": 1794425923.2253208,
+    "seen": 1794576371.3539572,
+    "ast_hash": "46ee87f9a5fcd850b37dbb09580f5cc4",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/roteador.js": {
+    "mtime": 1794425923.2353318,
+    "seen": 1794576371.35396,
+    "ast_hash": "036921d4b55f238fb99cd5e11b856ca7",
+    "semantic_hash": ""
+  },
+  "api/_lib/repasseComprovante.js": {
+    "mtime": 1794840156.0662744,
+    "seen": 1794847133.2170174,
+    "ast_hash": "f087c363cea19dad16cb8624e15ddb76",
+    "semantic_hash": ""
+  },
+  "docs/api/openapi.json": {
+    "mtime": 1794425923.2964904,
+    "seen": 1794576371.3562217,
+    "ast_hash": "cbeec8559e77798516baa5ffbb323f90",
+    "semantic_hash": ""
+  },
+  "public/api-docs/openapi.json": {
+    "mtime": 1794425923.3546178,
+    "seen": 1794576371.3564181,
+    "ast_hash": "cbeec8559e77798516baa5ffbb323f90",
+    "semantic_hash": ""
+  },
+  "scripts/api-docs-gerar.mjs": {
+    "mtime": 1794425923.3642907,
+    "seen": 1794576371.3565173,
+    "ast_hash": "01701e1b64aa01532123256f3bc99108",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chaves.js": {
+    "mtime": 1794425923.3853588,
+    "seen": 1794576371.365617,
+    "ast_hash": "dfff1013b42f4f7af6dc83463b3601f2",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chaves.test.js": {
+    "mtime": 1794425923.3863542,
+    "seen": 1794576371.3656197,
+    "ast_hash": "ffa8435c300425e9684e0f183a066331",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chavesAdminApi.js": {
+    "mtime": 1794425923.3954563,
+    "seen": 1794576371.3656213,
+    "ast_hash": "5c398ed353ec0b2694aeccd0f9659345",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chavesAdminApi.test.js": {
+    "mtime": 1794425923.4064574,
+    "seen": 1794576371.3656235,
+    "ast_hash": "234cc83828168d9675300f432bffa27d",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chavesAdminRegras.js": {
+    "mtime": 1794425923.4174585,
+    "seen": 1794576371.3656259,
+    "ast_hash": "8076ff3411ca7b997b35c8fb55cb35a8",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chavesAdminRegras.test.js": {
+    "mtime": 1794425923.4264581,
+    "seen": 1794576371.3656278,
+    "ast_hash": "563e7908aa5e7f50737ec1f83e5f0ab9",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/chavesAdminRotas.test.js": {
+    "mtime": 1794425923.4364724,
+    "seen": 1794576371.3656294,
+    "ast_hash": "2c748a26660bc2272f3d9059dd7b7333",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/openapi.test.js": {
+    "mtime": 1794425923.446457,
+    "seen": 1794576371.3656313,
+    "ast_hash": "eae5933571da183f26a833486f446bb0",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/pagamentosRegras.js": {
+    "mtime": 1794425923.4584613,
+    "seen": 1794576371.3656332,
+    "ast_hash": "9fe86afd076d8faf4775e4fffa8ca45c",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/pagamentosRegras.test.js": {
+    "mtime": 1794425923.4704564,
+    "seen": 1794576371.3656354,
+    "ast_hash": "91724f1d5745700a29dc6ec87e5764fe",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/pagamentosRotas.test.js": {
+    "mtime": 1794425923.4804575,
+    "seen": 1794576371.3656373,
+    "ast_hash": "d1224ba214362983c26999f7925d94e3",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/redeRegras.js": {
+    "mtime": 1794425923.4814608,
+    "seen": 1794576371.3656392,
+    "ast_hash": "7fd6d8410c0706268255f88048201db8",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/redeRegras.test.js": {
+    "mtime": 1794425923.4824574,
+    "seen": 1794576371.3656409,
+    "ast_hash": "be131ee847ca66a6807340d4d80f0d4f",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/redeRotas.test.js": {
+    "mtime": 1794425923.4924574,
+    "seen": 1794576371.3656428,
+    "ast_hash": "47697163890e29a823424f72fb27039d",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/roteador.test.js": {
+    "mtime": 1794425923.5025644,
+    "seen": 1794576371.3656442,
+    "ast_hash": "7eb66324c352d44cf0807672a154b7fc",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/vercelRewrites.test.js": {
+    "mtime": 1794425923.5112014,
+    "seen": 1794576371.3656461,
+    "ast_hash": "2e5db74edc393208d285b61dc1307f38",
+    "semantic_hash": ""
+  },
+  "src/lib/configuracoes/conferenciaLaboratorioExcel.test.js": {
+    "mtime": 1794576243.0512228,
+    "seen": 1794576371.3699577,
+    "ast_hash": "23e98a2ab5a3b59220d4e89fabf7c7f5",
+    "semantic_hash": ""
+  },
+  "src/lib/configuracoes/conferencia/revisao.js": {
+    "mtime": 1794575588.2157636,
+    "seen": 1794576371.3703945,
+    "ast_hash": "227bea9f2a059097ea6c60c17c5f3d19",
+    "semantic_hash": ""
+  },
+  "src/lib/configuracoes/conferencia/revisao.test.js": {
+    "mtime": 1794575701.6248639,
+    "seen": 1794576371.3703983,
+    "ast_hash": "4c2d789df32b15eeab52b4ec6029d4e9",
+    "semantic_hash": ""
+  },
+  "src/lib/configuracoes/conferencia/sugestoes.js": {
+    "mtime": 1794575837.333881,
+    "seen": 1794576371.3705075,
+    "ast_hash": "40b35899537477c4169961fc02ecf43a",
+    "semantic_hash": ""
+  },
+  "src/lib/configuracoes/conferencia/sugestoes.test.js": {
+    "mtime": 1794575838.290055,
+    "seen": 1794576371.37051,
+    "ast_hash": "ca8751e7a7013b8e2754130a2db6926c",
+    "semantic_hash": ""
+  },
+  "src/pages/Administrativo/Api/AdminApi.jsx": {
+    "mtime": 1794425923.5522668,
+    "seen": 1794576371.3996062,
+    "ast_hash": "0504c2042fd6b9f1aced015c7751243d",
+    "semantic_hash": ""
+  },
+  "src/pages/Administrativo/Api/AdminApiChaves.jsx": {
+    "mtime": 1794425923.5602665,
+    "seen": 1794576371.399609,
+    "ast_hash": "2fbc773889e97437fe4af07077520165",
+    "semantic_hash": ""
+  },
+  "src/pages/Administrativo/Api/AdminApiTestar.jsx": {
+    "mtime": 1794425923.568879,
+    "seen": 1794576371.3996117,
+    "ast_hash": "49be2132bfd62278134e276398703f7f",
+    "semantic_hash": ""
+  },
+  "src/pages/Configuracoes/ConferenciaLaboratorio/ConfigConferenciaLaboratorio.smoke.test.jsx": {
+    "mtime": 1794576322.0029018,
+    "seen": 1794576371.401278,
+    "ast_hash": "b13741043982d395e974d1b0a079cf71",
+    "semantic_hash": ""
+  },
+  "src/pages/Configuracoes/ConferenciaLaboratorio/ResultadoTabela.jsx": {
+    "mtime": 1794576137.50007,
+    "seen": 1794576371.401283,
+    "ast_hash": "02e66e13e15bb10f4603dc339c59a752",
+    "semantic_hash": ""
+  },
+  "docs/api/README.md": {
+    "mtime": 1794425923.2864754,
+    "seen": 1794576371.4257028,
+    "ast_hash": "8f3741cbd48694e5cb3a945644b989ed",
+    "semantic_hash": ""
+  },
+  "docs/api/pagamentos.md": {
+    "mtime": 1794425923.3094904,
+    "seen": 1794576371.4257123,
+    "ast_hash": "1b6c570e726c0d2c1a045104a33324bf",
+    "semantic_hash": ""
+  },
+  "docs/api/rede-credenciada.md": {
+    "mtime": 1794425923.3304904,
+    "seen": 1794576371.4257221,
+    "ast_hash": "8be5b1056842187926f20ef07046e3f7",
+    "semantic_hash": ""
+  },
+  "docs/auditoria-negociacoes-2026-11-11.md": {
+    "mtime": 1794428594.4929924,
+    "seen": 1794576371.4257252,
+    "ast_hash": "76d232fe87256dd4cf2a0d3c1e665e4b",
+    "semantic_hash": ""
+  },
+  "public/api-docs/index.html": {
+    "mtime": 1794425923.352848,
+    "seen": 1794576371.4268954,
+    "ast_hash": "b9439f66fa986aec3b3c0984ccf10411",
+    "semantic_hash": ""
+  },
+  "src/lib/exportAprovadosAPagarExcel.js": {
+    "mtime": 1794839418.3856158,
+    "seen": 1794847133.2492359,
+    "ast_hash": "da2d591fe53bb41b3402ffca59f4e7c4",
+    "semantic_hash": ""
+  },
+  "src/lib/exportAprovadosAPagarExcel.test.js": {
+    "mtime": 1794839459.606416,
+    "seen": 1794847133.249255,
+    "ast_hash": "8762bcd92c2d0886262967fe2b158c80",
+    "semantic_hash": ""
+  },
+  "src/lib/repasse/repasseEmails.comprovante.test.js": {
+    "mtime": 1794847070.2764902,
+    "seen": 1794847133.2574253,
+    "ast_hash": "43802758afc31c8815a295de3a678b60",
     "semantic_hash": ""
   },
   "package-lock.json": {
