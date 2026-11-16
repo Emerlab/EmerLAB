@@ -23,7 +23,8 @@ const RECUSAS = [
         'Na WATI este ticket ainda está como Solved (resolvido). O painel pode já ter reaberto — a atribuição ficou só no painel.'],
     // v3 conversations/{target}/status sem conversa aberta: o bot/atendente fechou ou a janela expirou
     // "Conversation Expired" (PUT status em chat que expirou) também vale como já encerrada
-    [/conversation\s+with\s+.*\bnot\s+found\b|\bconversation\s+(has\s+)?expired\b/i, 'conversa_fechada',
+    // "Ticket not found": a conversa expirou (24h) e a WATI já não tem ticket para resolver
+    [/conversation\s+with\s+.*\bnot\s+found\b|\bconversation\s+(has\s+)?expired\b|\bticket\s+not\s+found\b/i, 'conversa_fechada',
         'Na WATI esta conversa já está encerrada (fechada pelo bot, por um atendente ou expirada).'],
     // o número tentado não existe como contato (ex.: a variante com/sem o 9º dígito que a WATI não usa)
     [/\bcontact\s+(was\s+)?not\s+found\b|\bcontact\s+does\s+not\s+exist\b/i, 'contato_inexistente',
