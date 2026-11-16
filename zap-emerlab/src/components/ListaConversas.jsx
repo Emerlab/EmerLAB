@@ -1,4 +1,4 @@
-import { iniciais, corAvatar, nomeExibicao, dataLista, canalDoId } from '../util.js'
+import { iniciais, corAvatar, nomeExibicao, dataLista, canalDoId, ROTULO_TIPO_CONTATO } from '../util.js'
 import Icone from './Icone.jsx'
 import IconeCanal from './IconeCanal.jsx'
 
@@ -10,7 +10,8 @@ function dicaAnuncio(a) {
 }
 
 export function ContatoMetaPills({ tipo, cidade, anuncio }) {
-    const t = String(tipo || '').trim()
+    const tBruto = String(tipo || '').trim()
+    const t = ROTULO_TIPO_CONTATO[tBruto.toLowerCase()] || tBruto
     const c = String(cidade || '').trim()
     if (!t && !c && !anuncio) return null
     return (
