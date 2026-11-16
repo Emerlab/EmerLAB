@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
-import { formatarTelefone, canalDoId, CANAIS, TIPOS_CONTATO, normalizarTextoBusca } from '../util.js'
+import { formatarTelefone, canalDoId, CANAIS, TIPOS_CONTATO, ROTULO_TIPO_CONTATO, normalizarTextoBusca } from '../util.js'
 import Icone from './Icone.jsx'
 import { Avatar } from './ListaConversas.jsx'
 import SelectUfBusca from './SelectUfBusca.jsx'
@@ -8,13 +8,13 @@ import SelectMunicipioBusca from './SelectMunicipioBusca.jsx'
 
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
-const OPCOES_TIPO = TIPOS_CONTATO.map((nome) => ({ id: nome, nome }))
+const OPCOES_TIPO = TIPOS_CONTATO.map((id) => ({ id, nome: ROTULO_TIPO_CONTATO[id] }))
 
-/** Se o valor salvo bater com um tipo padrão (ignorando acento/caixa), devolve o rótulo canônico. */
+/** Se o valor bater com um tipo padrão (ignorando acento/caixa, espaço ou hífen), devolve o valor padrão (slug). */
 function tipoCanonico(valor) {
-    const v = normalizarTextoBusca(valor)
+    const v = normalizarTextoBusca(valor).replace(/\s+/g, '-')
     if (!v) return ''
-    return TIPOS_CONTATO.find((t) => normalizarTextoBusca(t) === v) || String(valor || '').trim()
+    return TIPOS_CONTATO.find((t) => t === v) || String(valor || '').trim()
 }
 
 // Atributos da WATI exibidos na ficha (o servidor manda nesta ordem: name, phone, cidade, uf, tipo)
@@ -233,7 +233,7 @@ export default function Perfil({ conversa, sugestoesTags, aoFechar, aoSalvo, avi
             const valor = tipoCanonico(a.value)
             // valor livre antigo (fora da lista) entra nas opções só nesta sessão, para continuar visível
             const extras =
-                valor && !OPCOES_TIPO.some((o) => normalizarTextoBusca(o.nome) === normalizarTextoBusca(valor))
+                valor && !OPCOES_TIPO.some((o) => o.id === valor)
                     ? [{ id: valor, nome: valor }]
                     : []
             return (
@@ -242,6 +242,7 @@ export default function Perfil({ conversa, sugestoesTags, aoFechar, aoSalvo, avi
                     <SelectMunicipioBusca
                         options={[...OPCOES_TIPO, ...extras]}
                         value={valor}
+                        valueKey="id"
                         onChange={(v) => mudarAtributo(i, tipoCanonico(v) || v, true)}
                         placeholder="Selecionar tipo…"
                         searchPlaceholder="Buscar tipo…"

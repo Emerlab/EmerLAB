@@ -284,7 +284,15 @@ export function respostasDaPlanilha(texto) {
 export const UFS_BRASIL = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
 
 /** Tipos padrão do atributo "tipo" na ficha do contato (WATI). */
-export const TIPOS_CONTATO = ['Cliente', 'Não-Cliente', 'Credenciado', 'Não-Credenciado', 'Outros']
+// Valor gravado no atributo `tipo` da WATI (minúsculo, sem acento) e o rótulo mostrado no painel
+export const TIPOS_CONTATO = ['cliente', 'nao-cliente', 'credenciado', 'nao-credenciado', 'outros']
+export const ROTULO_TIPO_CONTATO = {
+    cliente: 'Cliente',
+    'nao-cliente': 'Não-Cliente',
+    credenciado: 'Credenciado',
+    'nao-credenciado': 'Não-Credenciado',
+    outros: 'Outros',
+}
 
 // sem acento, minúsculo, só letras/números — para buscar "sao" e achar "São Paulo"
 export const normalizarTextoBusca = (texto) =>
