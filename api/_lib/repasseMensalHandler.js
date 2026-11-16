@@ -590,9 +590,15 @@ async function enviarComprovanteLote(admin, { relatorio_ids, path, data_pagament
     const forma = formaDoRegistro(registros[0])
     const ordenados = [...rels].sort((a, b) => a.ano - b.ano || a.mes - b.mes)
     const competencia = ordenados.map((r) => competenciaLabel(r.mes, r.ano)).join(', ')
+    // cada mês com o valor que o prestador recebe (RPA já com o desconto), na mesma ordem das competências
+    const valorDoMes = (r) => {
+        const reg = registros[rels.indexOf(r)]
+        return tipoDoRegistro(reg) === 'rpa' ? descontoRpaDoRepasse(r.total_repasse).liquido : Number(r.total_repasse)
+    }
+    const mesesEmail = ordenados.map((r) => ({ competencia: competenciaLabel(r.mes, r.ano), valor: valorDoMes(r), link: linkPublico(tokenDoRelatorio(r.id, r.token_versao)) }))
     const m = montarEmailRepasseComprovante({
         prestador: registros[0].prestador_nome || primeiro.nome_a1, competencia, valor: v,
-        dataPagamento: dataBr(data_pagamento), forma, chavePix: registros[0].chave_pix || '', vencimentoBoleto: '',
+        dataPagamento: dataBr(data_pagamento), forma, chavePix: registros[0].chave_pix || '', vencimentoBoleto: '', meses: mesesEmail,
         link: linkPublico(tokenDoRelatorio(primeiro.id, primeiro.token_versao)), whatsapp: config.whatsapp_financeiro,
     })
     const ext = path.split('.').pop()

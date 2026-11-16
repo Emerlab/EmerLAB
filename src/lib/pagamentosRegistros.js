@@ -262,6 +262,15 @@ export function agruparPendenciasPorPrestador(registros) {
     return lista
 }
 
+/** Grupos de «Aprovados a pagar» já filtrados pela busca (prestador, tipo ou PIX), como a tela os mostra. */
+export function agruparPendenciasFiltradas(registros, busca) {
+    const todos = agruparPendenciasPorPrestador(registros)
+    const termo = normalizarTextoBusca(busca)
+    return termo
+        ? todos.filter((g) => normalizarTextoBusca([g.prestadorNome, g.tipoRepasse, g.chavePix].filter(Boolean).join(' ')).includes(termo))
+        : todos
+}
+
 export async function inserirPagamentoRegistro(row) {
     const payload = rowParaInsert(row)
     const { data, error } = await supabase.from(TABELA).insert(payload).select('*').single()

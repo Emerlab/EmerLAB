@@ -80,27 +80,48 @@ export function montarEmailRepasseDocumentoDevolvido({ prestador, competencia, m
     }
 }
 
-/** Comprovante de pagamento → prestador (arquivo vai anexado pela rota). */
-export function montarEmailRepasseComprovante({ prestador, competencia, valor, dataPagamento, forma, chavePix, vencimentoBoleto, link, whatsapp }) {
+/**
+ * Comprovante de pagamento → prestador (arquivo vai anexado pela rota).
+ * `meses` ([{ competencia, valor }]) lista cada mês e seu valor quando o pagamento cobre mais de um mês;
+ * `valor` é o total pago.
+ */
+export function montarEmailRepasseComprovante({ prestador, competencia, valor, dataPagamento, forma, chavePix, vencimentoBoleto, link, whatsapp, meses = [] }) {
+    const varios = Array.isArray(meses) && meses.length > 1
     const wa = linkWhatsapp(whatsapp, `Olá! Tenho uma dúvida sobre o pagamento do repasse de ${competencia} (${prestador}).`)
-    const linhas = [
-        linhaCartao('Competência', competencia),
-        linhaCartao('Valor pago', brl(valor)),
-        linhaCartao('Data do pagamento', dataPagamento),
-        linhaCartao('Forma', forma === 'pix' ? 'PIX' : 'Boleto'),
-    ]
+    const linhas = varios
+        ? [
+              ...meses.map((m) => linhaCartao(m.competencia, brl(m.valor))),
+              linhaCartao('Total pago', brl(valor)),
+          ]
+        : [linhaCartao('Competência', competencia), linhaCartao('Valor pago', brl(valor))]
+    linhas.push(linhaCartao('Data do pagamento', dataPagamento), linhaCartao('Forma', forma === 'pix' ? 'PIX' : 'Boleto'))
     if (forma === 'pix' && chavePix) linhas.push(linhaCartao('Chave PIX', chavePix))
     if (forma === 'boleto' && vencimentoBoleto) linhas.push(linhaCartao('Vencimento do boleto', vencimentoBoleto))
+    const abertura = varios
+        ? `Olá, ${prestador}. O pagamento dos seus repasses de ${meses.length} meses foi realizado, conforme o detalhamento abaixo. O comprovante segue em anexo.`
+        : `Olá, ${prestador}. O pagamento do seu repasse de ${competencia} foi realizado. O comprovante segue em anexo.`
+    const formaTxt = forma === 'pix' ? 'PIX' : 'boleto'
+    const itensTxt = meses.map((m) => `• ${m.competencia}: ${brl(m.valor)}`).join('\n')
+    const comLink = varios ? meses.filter((m) => m.link) : []
+    const linksHtml = comLink.length
+        ? `<p style="margin:0 0 6px;font-size:13px;color:${BRAND.muted};">Relatório e comprovante de cada mês</p><p style="margin:0 0 20px;font-size:14px;line-height:1.9;">${comLink
+              .map((m) => `<a href="${escapeHtml(m.link)}" style="color:${BRAND.accent};font-weight:650;text-decoration:none;">${escapeHtml(m.competencia)} →</a>`)
+              .join('<br/>')}</p>`
+        : ''
+    const linksTxt = comLink.length ? `Relatório e comprovante de cada mês:\n${comLink.map((m) => `• ${m.competencia}: ${m.link}`).join('\n')}` : ''
+    const resumoTexto = varios
+        ? `Pagamento realizado — repasses de ${meses.length} meses em ${dataPagamento} (${formaTxt}):\n${itensTxt}\nTotal pago: ${brl(valor)}. Comprovante em anexo.`
+        :`Pagamento realizado — repasse de ${competencia}: ${brl(valor)} em ${dataPagamento} (${forma === 'pix' ? 'PIX' : 'boleto'}). Comprovante em anexo.`
     return {
-        subject: `Pagamento realizado — repasse de ${competencia}`,
+        subject: varios ? `Pagamento realizado — repasses de ${meses.map((m) => m.competencia).join(', ')}` : `Pagamento realizado — repasse de ${competencia}`,
         html: envelopeHtml({
             preheader: `Pagamento de ${brl(valor)} realizado`,
             titulo: 'Pagamento realizado',
-            corpoHtml: `${paragrafos(`Olá, ${prestador}. O pagamento do seu repasse de ${competencia} foi realizado. O comprovante segue em anexo.`)}${cartao(linhas)}${botaoSecundario('Dúvidas? WhatsApp', wa)}`,
-            ctaLabel: 'Ver relatório',
+            corpoHtml: `${paragrafos(abertura)}${cartao(linhas)}${linksHtml}${botaoSecundario('Dúvidas? WhatsApp', wa)}`,
+            ctaLabel: 'Ver relatório e comprovante',
             ctaHref: link,
             produto: PRODUTO,
         }),
-        text: textoPuro([`Pagamento realizado — repasse de ${competencia}: ${brl(valor)} em ${dataPagamento} (${forma === 'pix' ? 'PIX' : 'boleto'}). Comprovante em anexo.`, link && `Ver relatório: ${link}`, `Dúvidas? ${wa}`]),
+        text: textoPuro([resumoTexto, linksTxt || (link && `Ver relatório e comprovante: ${link}`), `Dúvidas? ${wa}`]),
     }
 }

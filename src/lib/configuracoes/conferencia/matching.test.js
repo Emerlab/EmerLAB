@@ -116,6 +116,7 @@ describe('conferência Laboratório × Plano', () => {
         })
         expect(resultados[0].status).toBe('REVISAO_MANUAL')
         expect(resultados[0].candidatos.length).toBe(2)
+        expect(resultados[0].honorarios).toBeNull()
         const found = findBestMatch(
             L({ id: 'm1', exame: 'Hemograma Completo MellisLab' }),
             hon,

@@ -1,6 +1,6 @@
 import { carregarPortesDb, mapaLetraPorPorteId } from '../prestadorProcedimentos.js'
 import { resolverVeterinarioIdsParaPrestador } from '../prestadorNomeAlternativo.js'
-import { normalizarNomeExame } from './conferenciaLaboratorio.js'
+import { normalizarNomeExame } from './conferenciaLaboratorioExcel.js'
 import { supabase } from '../supabase.js'
 
 async function buscarPaginado(montarQuery, tamanho = 500) {

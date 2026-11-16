@@ -14,6 +14,8 @@ export default function CadastroRegrasConferencia({
     onAtualizarEquivalencia,
     onRemoverEquivalencia,
     onSalvarPerfil,
+    onRemoverPerfil,
+    nomeLaboratorio = '',
 }) {
     const [nomeA, setNomeA] = useState('')
     const [nomeB, setNomeB] = useState('')
@@ -72,7 +74,11 @@ export default function CadastroRegrasConferencia({
             >
                 <header>
                     <div>
-                        <p className="conf_lab_kicker">Esta conferência</p>
+                        <p className="conf_lab_kicker">
+                            {nomeLaboratorio
+                                ? `Laboratório: ${nomeLaboratorio}`
+                                : "Esta conferência (sem laboratório selecionado)"}
+                        </p>
                         <h2 id="conf-lab-regras-title">Equivalências e perfis</h2>
                     </div>
                     <button
@@ -277,11 +283,25 @@ export default function CadastroRegrasConferencia({
                         Salvar perfil
                     </button>
                     <ul className="conf_lab_regras_lista">
-                        {perfis.map((p) => (
-                            <li key={p.id || p.nome}>
-                                <strong>{p.nome}</strong>
-                                {p.valor != null ? ` · ${p.valor}` : ''}
-                                {(p.exames || []).length ? ` · ${p.exames.join(', ')}` : ''}
+                        {perfis.map((p, idx) => (
+                            <li key={p.id || `${p.nome}-${idx}`} className="conf_lab_regras_item">
+                                <span>
+                                    <strong>{p.nome}</strong>
+                                    {p.valor != null && p.valor !== '' ? ` · ${p.valor}` : ''}
+                                    {(p.exames || []).length ? ` · ${p.exames.join(', ')}` : ''}
+                                </span>
+                                {onRemoverPerfil ? (
+                                    <span className="conf_lab_regras_item_acoes">
+                                        <button
+                                            type="button"
+                                            className="credenciamento_main_action_btn secondary conf_lab_regras_btn"
+                                            aria-label={`Remover perfil ${p.nome}`}
+                                            onClick={() => onRemoverPerfil(idx)}
+                                        >
+                                            Remover
+                                        </button>
+                                    </span>
+                                ) : null}
                             </li>
                         ))}
                     </ul>

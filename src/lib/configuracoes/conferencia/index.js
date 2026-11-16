@@ -1,12 +1,8 @@
-import { findBestMatch, avaliarPar } from './matching.js'
+import { parearEmPassadas, avaliarPar } from './matching.js'
 import { classifyComparison, classifyOrphan, statusEhOk, statusEhDivergencia, rotuloStatusConferencia } from './classify.js'
 import { montarMatchScore } from './confidence.js'
 import { applyProfileEquivalence } from './profiles.js'
-import {
-    EQUIVALENCIAS_PADRAO,
-    indexarEquivalencias,
-    applyExamEquivalence,
-} from './examSimilarity.js'
+import { EQUIVALENCIAS_PADRAO, indexarEquivalencias } from './examSimilarity.js'
 import { compareValues } from './values.js'
 import { aplicarValoresBase, examesPendentesVinculo } from './lookupBase.js'
 
@@ -35,7 +31,7 @@ export function normalizarLinhaInterna(linha, origem, indice) {
     }
 }
 
-function montarResultadoPar({ honorarios, mellis, av, classificacao, prioridade, candidatos = [] }) {
+export function montarResultadoPar({ honorarios, mellis, av, classificacao, prioridade, candidatos = [] }) {
     const score = montarMatchScore({
         tutor: av.tutorOk ? 1000 : av.tutorAlias ? 800 : 0,
         pet: av.petOk ? 1000 : 0,
@@ -79,7 +75,7 @@ function montarResultadoPar({ honorarios, mellis, av, classificacao, prioridade,
     }
 }
 
-function contextoMatching({ equivalencias = [], mapeamentosExame = [], aliasesPessoa = [] } = {}) {
+export function contextoMatching({ equivalencias = [], mapeamentosExame = [], aliasesPessoa = [] } = {}) {
     const eqs = indexarEquivalencias([
         ...EQUIVALENCIAS_PADRAO,
         ...equivalenciasDeMapeamentos(mapeamentosExame),
@@ -89,7 +85,7 @@ function contextoMatching({ equivalencias = [], mapeamentosExame = [], aliasesPe
     return { equivalencias: eqs, aliasesTutor }
 }
 
-function montarOrfao(linha, origem) {
+export function montarOrfao(linha, origem) {
     const { status, motivo } = classifyOrphan(origem)
     const hon = origem === 'honorarios' ? linha : null
     const mel = origem === 'mellislab' ? linha : null
@@ -154,6 +150,7 @@ export function resumirConferencia(resultados = []) {
     ) / 100
 
     const contar = (pred) => list.filter(pred).length
+    const pendente = (r) => !r.revisao?.ignorar
 
     return {
         totalHonorarios,
@@ -162,10 +159,12 @@ export function resumirConferencia(resultados = []) {
         itensOk: contar((r) => statusEhOk(r.status)),
         valoresDivergentes: contar((r) => r.status === 'VALOR_DIVERGENTE'),
         datasDivergentes: contar((r) => r.status === 'DATA_DIVERGENTE'),
-        orfaosMellis: contar((r) => r.status === 'ORFAO_MELLISLAB'),
-        orfaosHonorarios: contar((r) => r.status === 'ORFAO_HONORARIOS'),
+        orfaosMellis: contar((r) => r.status === 'ORFAO_MELLISLAB' && pendente(r)),
+        orfaosHonorarios: contar((r) => r.status === 'ORFAO_HONORARIOS' && pendente(r)),
         revisoesManuais: contar((r) => r.status === 'REVISAO_MANUAL'),
-        divergentes: contar((r) => statusEhDivergencia(r.status)),
+        divergentes: contar((r) => statusEhDivergencia(r.status) && pendente(r)),
+        valoresAceitos: contar((r) => r.status === 'VALOR_ACEITO'),
+        ignorados: contar((r) => Boolean(r.revisao?.ignorar)),
         diferencaFinanceira,
         valoresCobradosAMais: aMais,
         valoresCobradosAMenos: aMenos,
@@ -205,57 +204,32 @@ export function runConferencia({
     const hon = honFonte.map((l, i) => normalizarLinhaInterna(l, 'honorarios', i))
     const mel = melBruto.map((l, i) => normalizarLinhaInterna(l, 'mellislab', i))
 
-    const usadosH = new Set()
-    const usadosM = new Set()
     const resultados = []
+    const pareamento = parearEmPassadas(mel, hon, ctx)
+    const usadosH = new Set(pareamento.usadosH)
+    const usadosM = new Set(pareamento.usadosM)
 
-    for (const m of mel) {
-        const livres = hon.filter((h) => !usadosH.has(h.id))
-        const found = findBestMatch(m, livres, ctx)
-        if (found.tipo === 'unico') {
-            const { honorarios: h, av } = found.match
-            usadosH.add(h.id)
-            usadosM.add(m.id)
-            const classificacao = classifyComparison({
-                ...av,
-                exameHonorarios: h.exame,
-                exameMellis: m.exame,
-            })
-            resultados.push(
-                montarResultadoPar({
-                    honorarios: h,
-                    mellis: m,
-                    av,
-                    classificacao,
-                    prioridade: found.prioridade,
-                }),
-            )
-        } else if (found.tipo === 'ambiguo') {
-            usadosM.add(m.id)
-            const primeiro = found.candidatos[0]
-            if (primeiro?.honorarios?.id) usadosH.add(primeiro.honorarios.id)
-            const av = primeiro?.av || {
-                tutorOk: false,
-                tutorAlias: false,
-                petOk: false,
-                data: {},
-                valor: {},
-                exame: applyExamEquivalence('', '', eqs),
-            }
-            const classificacao = classifyComparison({ ambiguo: true })
-            resultados.push({
-                ...montarResultadoPar({
-                    honorarios: primeiro.honorarios,
-                    mellis: m,
-                    av,
-                    classificacao,
-                    prioridade: found.prioridade,
-                    candidatos: found.candidatos,
-                }),
-                honorarios: primeiro.honorarios,
-                candidatos: found.candidatos.map((c) => c.honorarios),
-            })
-        }
+    for (const { m, h, av, prioridade } of pareamento.pares) {
+        const classificacao = classifyComparison({
+            ...av,
+            exameHonorarios: h.exame,
+            exameMellis: m.exame,
+        })
+        resultados.push(
+            montarResultadoPar({ honorarios: h, mellis: m, av, classificacao, prioridade }),
+        )
+    }
+
+    // Ambíguo: não consome nenhum candidato do plano (eles seguem como órfãos até a decisão humana).
+    for (const { m, prioridade, candidatos } of pareamento.ambiguos) {
+        usadosM.add(m.id)
+        resultados.push({
+            ...montarOrfao(m, 'mellislab'),
+            status: 'REVISAO_MANUAL',
+            motivo: 'Mais de um candidato possível — revisão humana obrigatória.',
+            prioridade,
+            candidatos: candidatos.map((c) => c.honorarios),
+        })
     }
 
     const orfaosH = hon.filter((h) => !usadosH.has(h.id))

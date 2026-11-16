@@ -60,15 +60,19 @@ export async function evento(admin, relatorioId, tipo, dados = {}, autor = 'sist
 }
 
 /**
- * Destino dos e-mails ao prestador (regra única do painel e da API): o e-mail financeiro alternativo do registro
- * (`pagamentos_registros.email_financeiro`), se informado, tem prioridade sobre o e-mail do cadastro do prestador.
+ * Destino dos e-mails ao prestador (regra única do painel e da API), por ordem de prioridade:
+ *   1. `pagamentos_registros.email_financeiro` (ajuste pontual de um mês, legado);
+ *   2. `prestadores.email_financeiro` (e-mail financeiro alternativo do cadastro, vale para todos os meses);
+ *   3. `prestadores.email` (e-mail do cadastro).
+ * Enquanto a coluna `prestadores.email_financeiro` não existir no banco, cai direto no e-mail do cadastro.
  */
 export async function emailDoPrestador(admin, prestadorId, emailFinanceiro) {
     const alt = String(emailFinanceiro || '').trim().toLowerCase()
     if (alt) return alt
     if (prestadorId == null) return ''
-    const { data } = await admin.from('prestadores').select('email').eq('id', prestadorId).maybeSingle()
-    return String(data?.email || '').trim().toLowerCase()
+    let { data, error } = await admin.from('prestadores').select('email, email_financeiro').eq('id', prestadorId).maybeSingle()
+    if (error) ({ data } = await admin.from('prestadores').select('email').eq('id', prestadorId).maybeSingle())
+    return String(data?.email_financeiro || '').trim().toLowerCase() || String(data?.email || '').trim().toLowerCase()
 }
 
 export const tipoDoRegistro = (registro) => {

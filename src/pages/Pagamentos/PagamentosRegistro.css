@@ -1661,16 +1661,17 @@ body.dark-mode .pag_reg_fila.is-on b {
 }
 
 /* —— Painel do prestador —— */
+/* Abaixo dos modais (--ek-z-modal: 90) para o diálogo de comprovante ficar por cima do painel */
 .pag_painel_fundo {
     position: fixed;
     inset: 0;
-    z-index: 880;
+    z-index: 82;
     background: rgba(15, 30, 50, 0.35);
 }
 
 .pag_painel {
     position: fixed;
-    z-index: 890;
+    z-index: 84;
     top: 0;
     right: 0;
     bottom: 0;

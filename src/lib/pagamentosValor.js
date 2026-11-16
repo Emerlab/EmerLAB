@@ -35,3 +35,8 @@ export function valorLiquidoRpa(valor) {
     if (valor == null || valor === '' || !Number.isFinite(v)) return null
     return Math.round(v * (1 - DESCONTO_RPA) * 100) / 100
 }
+
+/** Valor que o prestador recebe de um mês: RPA com o desconto de 11% aplicado em cada mês (não sobre o total). */
+export function valorAReceber(tipoRepasse, bruto) {
+    return ehTipoRpa(tipoRepasse) ? valorLiquidoRpa(bruto) ?? Number(bruto || 0) : Number(bruto || 0)
+}
