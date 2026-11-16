@@ -23,16 +23,16 @@ export function tokensNome(texto) {
  * Tutores equivalentes: iguais após normalizar, ou o menor (2+ tokens)
  * está contido no maior (abreviações / nome do meio).
  */
-export function nomesPessoaEquivalentes(a, b) {
-    const na = normalizeName(a)
-    const nb = normalizeName(b)
-    if (!na || !nb) return false
-    if (na === nb) return true
-    const ta = tokensNome(a)
-    const tb = tokensNome(b)
+export function tokensEquivalentes(ta, tb) {
+    if (!ta.length || !tb.length) return false
+    if (ta.join(' ') === tb.join(' ')) return true
     if (ta.length < 2 || tb.length < 2) return false
     const [menor, maior] = ta.length <= tb.length ? [ta, tb] : [tb, ta]
     return menor.every((t) => maior.includes(t))
+}
+
+export function nomesPessoaEquivalentes(a, b) {
+    return tokensEquivalentes(tokensNome(a), tokensNome(b))
 }
 
 export function petsEquivalentes(a, b) {

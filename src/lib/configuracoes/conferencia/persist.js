@@ -1,16 +1,23 @@
 import { supabase } from '../../supabase.js'
-import { normalizarTextoBusca } from '../../prestadorCadastroHelpers.js'
-import {
-    carregarAliasesPessoaLaboratorio,
-    salvarAliasPessoa,
-    carregarMapeamentosLaboratorio,
-    salvarMapeamentoExame,
-    carregarSessaoConferencia,
-    salvarSessaoConferencia,
-} from '../conferenciaLaboratorio.js'
+import { idsEspecialidadeLaboratorio, normalizarTextoBusca } from '../../prestadorCadastroHelpers.js'
 
-function tabelaAusente(error) {
-    return /does not exist|schema cache|42P01|PGRST/i.test(String(error?.message || error || ''))
+/**
+ * Regras da Conferência Laboratório persistidas por laboratório
+ * (equivalências de exame, tutor alternativo, perfis, vínculos com a Valores de Base)
+ * e trilha de revisão. Migração: supabase/migrations/pendentes/20261113120000_*.sql
+ */
+
+/** Só "tabela/RPC inexistente" é tratada como migração pendente — outros erros (RLS, rede) aparecem. */
+export function erroTabelaAusente(error) {
+    const txt = `${error?.code || ''} ${error?.message || error || ''}`
+    return /42P01|PGRST205|PGRST202|does not exist|could not find the (table|function)|schema cache/i.test(txt)
+}
+
+const MSG_MIGRACAO =
+    'As regras ainda não são salvas no banco (migração pendente). Elas valem só nesta sessão.'
+
+function motivoErro(error) {
+    return erroTabelaAusente(error) ? MSG_MIGRACAO : error?.message || String(error)
 }
 
 async function uidAtual() {
@@ -22,113 +29,184 @@ async function uidAtual() {
     }
 }
 
-export {
-    carregarAliasesPessoaLaboratorio,
-    salvarAliasPessoa,
-    carregarMapeamentosLaboratorio,
-    salvarMapeamentoExame,
-    carregarSessaoConferencia,
-    salvarSessaoConferencia,
+function idLab(laboratorioId) {
+    const id = Number(laboratorioId)
+    return Number.isFinite(id) && id > 0 ? id : null
 }
 
-export async function carregarEquivalenciasLaboratorio(laboratorioId) {
-    const id = Number(laboratorioId)
-    if (!id) return []
-    try {
-        const { data, error } = await supabase
-            .from('lab_exame_equivalencia')
-            .select(
-                'id, laboratorio_id, nome_a, nome_a_normalizado, nome_b, nome_b_normalizado, ativo',
-            )
-            .eq('laboratorio_id', id)
-            .eq('ativo', true)
-            .order('nome_a', { ascending: true })
-        if (error) {
-            if (tabelaAusente(error)) return []
-            console.warn('[conferencia] equivalencias:', error.message)
-            return []
-        }
-        return (data || []).map((r) => ({
-            id: r.id,
-            a: r.nome_a,
-            b: r.nome_b,
-            ativo: r.ativo !== false,
-        }))
-    } catch (e) {
-        console.warn('[conferencia] equivalencias:', e?.message || e)
-        return []
-    }
+export async function listarLaboratorios() {
+    const { data: esp, error: errE } = await supabase.from('especialidades').select('id, nome')
+    if (errE) throw errE
+    const ids = idsEspecialidadeLaboratorio(esp || [])
+    const { data, error } = await supabase
+        .from('prestadores')
+        .select('id, nome, ativo')
+        .in('especialidade_id', ids)
+        .order('nome', { ascending: true })
+        .limit(1000)
+    if (error) throw error
+    return (data || []).map((p) => ({ id: p.id, nome: p.nome, ativo: p.ativo !== false }))
 }
 
-export async function salvarEquivalenciaExame({ laboratorioId, nomeA, nomeB, userId }) {
-    const id = Number(laboratorioId)
-    const a = String(nomeA || '').trim()
-    const b = String(nomeB || '').trim()
-    if (!id || !a || !b) return { ok: false, motivo: 'Dados incompletos.' }
-    const payload = {
-        laboratorio_id: id,
-        nome_a: a,
-        nome_a_normalizado: normalizarTextoBusca(a),
-        nome_b: b,
-        nome_b_normalizado: normalizarTextoBusca(b),
-        ativo: true,
-        criado_por: userId || (await uidAtual()),
-        atualizado_em: new Date().toISOString(),
-    }
+/**
+ * Carrega todas as regras do laboratório de uma vez.
+ * @returns {{ ok: boolean, migracaoPendente?: boolean, motivo?: string, equivalencias, aliasesPessoa, perfis, vinculos }}
+ */
+export async function carregarRegrasLaboratorio(laboratorioId) {
+    const id = idLab(laboratorioId)
+    const vazio = { equivalencias: [], aliasesPessoa: [], perfis: [], vinculos: [] }
+    if (!id) return { ok: false, motivo: 'Selecione o laboratório.', ...vazio }
     try {
-        const { error } = await supabase
-            .from('lab_exame_equivalencia')
-            .upsert(payload, {
-                onConflict: 'laboratorio_id,nome_a_normalizado,nome_b_normalizado',
-            })
-        if (error) {
-            if (tabelaAusente(error)) {
-                return {
-                    ok: false,
-                    motivo:
-                        'Tabela de equivalências não configurada. Execute scripts/sql/conferencia_laboratorio.sql.',
-                }
+        const [eq, al, pf, vb] = await Promise.all([
+            supabase
+                .from('lab_exame_equivalencia')
+                .select('id, nome_a, nome_b')
+                .eq('laboratorio_id', id)
+                .eq('ativo', true)
+                .order('nome_a', { ascending: true }),
+            supabase
+                .from('lab_pessoa_alias')
+                .select('id, tipo, nome_plano, nome_lab')
+                .eq('laboratorio_id', id)
+                .eq('ativo', true),
+            supabase
+                .from('lab_exame_perfil')
+                .select(
+                    'id, nome, descricao, valor, vigencia_inicio, vigencia_fim, ativo, lab_exame_perfil_item(id, nome_exame)',
+                )
+                .eq('laboratorio_id', id)
+                .eq('ativo', true)
+                .order('nome', { ascending: true }),
+            supabase
+                .from('lab_vinculo_base')
+                .select('exame_normalizado, exame_plano, codigo_base, nome_base')
+                .eq('laboratorio_id', id),
+        ])
+        const erro = eq.error || al.error || pf.error || vb.error
+        if (erro) {
+            return {
+                ok: false,
+                migracaoPendente: erroTabelaAusente(erro),
+                motivo: motivoErro(erro),
+                ...vazio,
             }
-            return { ok: false, motivo: error.message }
         }
-        return { ok: true }
+        return {
+            ok: true,
+            equivalencias: (eq.data || []).map((r) => ({ id: r.id, a: r.nome_a, b: r.nome_b })),
+            aliasesPessoa: (al.data || []).map((r) => ({
+                id: r.id,
+                tipo: r.tipo || 'tutor',
+                nomePlano: r.nome_plano,
+                nomeLab: r.nome_lab,
+            })),
+            perfis: (pf.data || []).map((p) => ({
+                id: p.id,
+                nome: p.nome,
+                descricao: p.descricao,
+                valor: p.valor,
+                vigencia_inicio: p.vigencia_inicio,
+                vigencia_fim: p.vigencia_fim,
+                ativo: p.ativo !== false,
+                exames: (p.lab_exame_perfil_item || []).map((i) => i.nome_exame),
+            })),
+            vinculos: (vb.data || []).map((v) => ({
+                chave: v.exame_normalizado,
+                exame: v.exame_plano,
+                codigo: v.codigo_base,
+                nome: v.nome_base,
+            })),
+        }
+    } catch (e) {
+        return { ok: false, motivo: e?.message || String(e), ...vazio }
+    }
+}
+
+async function executar(promessa) {
+    try {
+        const { data, error } = await promessa
+        if (error) return { ok: false, migracaoPendente: erroTabelaAusente(error), motivo: motivoErro(error) }
+        return { ok: true, data }
     } catch (e) {
         return { ok: false, motivo: e?.message || String(e) }
     }
 }
 
-export async function carregarPerfisLaboratorio(laboratorioId) {
-    const id = Number(laboratorioId)
-    if (!id) return []
-    try {
-        const { data, error } = await supabase
-            .from('lab_exame_perfil')
-            .select(
-                'id, laboratorio_id, nome, descricao, valor, vigencia_inicio, vigencia_fim, ativo, lab_exame_perfil_item(id, nome_exame, nome_exame_normalizado)',
+export async function salvarEquivalenciaExame({ laboratorioId, nomeA, nomeB }) {
+    const id = idLab(laboratorioId)
+    const a = String(nomeA || '').trim()
+    const b = String(nomeB || '').trim()
+    if (!id || !a || !b) return { ok: false, motivo: 'Dados incompletos.' }
+    const r = await executar(
+        supabase
+            .from('lab_exame_equivalencia')
+            .upsert(
+                {
+                    laboratorio_id: id,
+                    nome_a: a,
+                    nome_a_normalizado: normalizarTextoBusca(a),
+                    nome_b: b,
+                    nome_b_normalizado: normalizarTextoBusca(b),
+                    ativo: true,
+                    criado_por: await uidAtual(),
+                    atualizado_em: new Date().toISOString(),
+                },
+                { onConflict: 'laboratorio_id,nome_a_normalizado,nome_b_normalizado' },
             )
-            .eq('laboratorio_id', id)
-            .eq('ativo', true)
-            .order('nome', { ascending: true })
-        if (error) {
-            if (tabelaAusente(error)) return []
-            console.warn('[conferencia] perfis:', error.message)
-            return []
-        }
-        return (data || []).map((p) => ({
-            id: p.id,
-            nome: p.nome,
-            descricao: p.descricao,
-            valor: p.valor,
-            vigencia_inicio: p.vigencia_inicio,
-            vigencia_fim: p.vigencia_fim,
-            ativo: p.ativo !== false,
-            exames: (p.lab_exame_perfil_item || []).map((i) => i.nome_exame),
-            itens: p.lab_exame_perfil_item || [],
-        }))
-    } catch (e) {
-        console.warn('[conferencia] perfis:', e?.message || e)
-        return []
-    }
+            .select('id')
+            .single(),
+    )
+    return r.ok ? { ok: true, id: r.data?.id } : r
+}
+
+export async function atualizarEquivalenciaExame({ id, nomeA, nomeB }) {
+    const a = String(nomeA || '').trim()
+    const b = String(nomeB || '').trim()
+    if (!id || !a || !b) return { ok: false, motivo: 'Dados incompletos.' }
+    return executar(
+        supabase
+            .from('lab_exame_equivalencia')
+            .update({
+                nome_a: a,
+                nome_a_normalizado: normalizarTextoBusca(a),
+                nome_b: b,
+                nome_b_normalizado: normalizarTextoBusca(b),
+                atualizado_em: new Date().toISOString(),
+            })
+            .eq('id', id),
+    )
+}
+
+export async function removerEquivalenciaExame(id) {
+    if (!id) return { ok: true }
+    return executar(
+        supabase
+            .from('lab_exame_equivalencia')
+            .update({ ativo: false, atualizado_em: new Date().toISOString() })
+            .eq('id', id),
+    )
+}
+
+export async function salvarAliasPessoa({ laboratorioId, nomePlano, nomeLab, tipo = 'tutor' }) {
+    const id = idLab(laboratorioId)
+    const p = String(nomePlano || '').trim()
+    const l = String(nomeLab || '').trim()
+    if (!id || !p || !l) return { ok: false, motivo: 'Dados incompletos.' }
+    return executar(
+        supabase.from('lab_pessoa_alias').upsert(
+            {
+                laboratorio_id: id,
+                tipo,
+                nome_plano: p,
+                nome_plano_normalizado: normalizarTextoBusca(p),
+                nome_lab: l,
+                nome_lab_normalizado: normalizarTextoBusca(l),
+                ativo: true,
+                criado_por: await uidAtual(),
+            },
+            { onConflict: 'laboratorio_id,tipo,nome_plano_normalizado,nome_lab_normalizado' },
+        ),
+    )
 }
 
 export async function salvarPerfilExame({
@@ -139,17 +217,18 @@ export async function salvarPerfilExame({
     vigenciaInicio,
     vigenciaFim,
     exames,
-    userId,
 }) {
-    const id = Number(laboratorioId)
+    const id = idLab(laboratorioId)
     const titulo = String(nome || '').trim()
     if (!id || !titulo) return { ok: false, motivo: 'Informe o nome do perfil.' }
-    try {
-        const { data, error } = await supabase.rpc('salvar_lab_exame_perfil', {
+    const valorNum =
+        valor == null || valor === '' ? null : Number(String(valor).replace(',', '.'))
+    const r = await executar(
+        supabase.rpc('salvar_lab_exame_perfil', {
             p_laboratorio_id: id,
             p_nome: titulo,
             p_descricao: String(descricao || '').trim() || null,
-            p_valor: valor == null || valor === '' ? null : Number(valor),
+            p_valor: Number.isFinite(valorNum) ? valorNum : null,
             p_vigencia_inicio: vigenciaInicio || null,
             p_vigencia_fim: vigenciaFim || null,
             p_itens: (exames || [])
@@ -159,87 +238,85 @@ export async function salvarPerfilExame({
                     nome_exame: nomeExame,
                     nome_exame_normalizado: normalizarTextoBusca(nomeExame),
                 })),
-            p_criado_por: userId || (await uidAtual()),
-        })
-        if (error) {
-            if (tabelaAusente(error)) {
-                return {
-                    ok: false,
-                    motivo:
-                        'Tabela de perfis não configurada. Execute scripts/sql/conferencia_laboratorio.sql.',
-                }
-            }
-            return { ok: false, motivo: error.message }
-        }
-        return { ok: true, id: data }
-    } catch (e) {
-        return { ok: false, motivo: e?.message || String(e) }
-    }
+            p_criado_por: await uidAtual(),
+        }),
+    )
+    return r.ok ? { ok: true, id: r.data } : r
 }
 
-export async function salvarRevisaoConferencia({
-    laboratorioId,
-    sessaoId,
-    acao,
-    registroIds,
-    justificativa,
-    resultadoId,
-    userId,
-}) {
-    const id = Number(laboratorioId)
-    if (!id || !acao) return { ok: false }
-    try {
-        const { error } = await supabase.from('lab_conferencia_revisao').insert({
-            laboratorio_id: id,
-            sessao_id: sessaoId || null,
-            usuario_id: userId || (await uidAtual()),
-            acao,
-            registro_ids: registroIds || [],
-            justificativa: justificativa || null,
-            resultado_id: resultadoId || null,
-        })
-        if (error) {
-            if (tabelaAusente(error)) return { ok: false, motivo: error.message }
-            return { ok: false, motivo: error.message }
-        }
-        return { ok: true }
-    } catch (e) {
-        return { ok: false, motivo: e?.message || String(e) }
-    }
+export async function removerPerfilExame(id) {
+    if (!id) return { ok: true }
+    return executar(
+        supabase
+            .from('lab_exame_perfil')
+            .update({ ativo: false, atualizado_em: new Date().toISOString() })
+            .eq('id', id),
+    )
 }
 
-export function estadoSessaoV2({
-    passo,
-    laboratorioId,
-    periodoYm,
-    mapColsHonorarios,
-    mapColsMellis,
-    mapColsBase,
-    linhasHonorarios,
-    linhasMellis,
-    linhasBase,
-    vinculosBase,
-    resultados,
-    resumo,
-    revisoes,
-    aliasesPessoa,
-} = {}) {
-    return {
-        versao: 2,
-        passo: passo || 'setup',
-        laboratorioId: laboratorioId ? Number(laboratorioId) : null,
-        periodoYm: periodoYm || '',
-        mapColsHonorarios: mapColsHonorarios || {},
-        mapColsMellis: mapColsMellis || {},
-        mapColsBase: mapColsBase || {},
-        linhasHonorarios: linhasHonorarios || [],
-        linhasMellis: linhasMellis || [],
-        linhasBase: linhasBase || [],
-        vinculosBase: vinculosBase || {},
-        resultados: resultados || [],
-        resumo: resumo || null,
-        revisoes: revisoes || [],
-        aliasesPessoa: aliasesPessoa || [],
-        atualizadoEm: new Date().toISOString(),
+export async function salvarVinculoBase({ laboratorioId, exame, chave, codigo, nome }) {
+    const id = idLab(laboratorioId)
+    if (!id || !chave || !codigo) return { ok: false, motivo: 'Dados incompletos.' }
+    return executar(
+        supabase.from('lab_vinculo_base').upsert(
+            {
+                laboratorio_id: id,
+                exame_normalizado: chave,
+                exame_plano: exame || chave,
+                codigo_base: String(codigo),
+                nome_base: nome || null,
+                criado_por: await uidAtual(),
+                atualizado_em: new Date().toISOString(),
+            },
+            { onConflict: 'laboratorio_id,exame_normalizado' },
+        ),
+    )
+}
+
+export async function removerVinculoBase({ laboratorioId, chave }) {
+    const id = idLab(laboratorioId)
+    if (!id || !chave) return { ok: true }
+    return executar(
+        supabase.from('lab_vinculo_base').delete().eq('laboratorio_id', id).eq('exame_normalizado', chave),
+    )
+}
+
+/** Grava a trilha das decisões manuais (best-effort: falha não bloqueia o trabalho). */
+export async function registrarRevisoes({ laboratorioId, periodoYm, sessaoId, revisoes }) {
+    const id = idLab(laboratorioId)
+    const lista = (revisoes || []).filter(Boolean)
+    if (!id || !lista.length) return { ok: true }
+    const uid = await uidAtual()
+    const linhas = lista.map((r) => ({
+        laboratorio_id: id,
+        periodo_ym: /^\d{4}-(0[1-9]|1[0-2])$/.test(periodoYm || '') ? periodoYm : null,
+        sessao_id: sessaoId || null,
+        usuario_id: uid,
+        usuario_nome: r.usuario || null,
+        acao: r.acao,
+        resultado_id: r.resultadoId || null,
+        status_final: r.statusFinal || null,
+        justificativa: r.justificativa || null,
+        dados: { emMassa: Boolean(r.emMassa), dataHora: r.dataHora || null, resumo: r.resumoLinha || null },
+    }))
+    return executar(supabase.from('lab_conferencia_revisao').insert(linhas))
+}
+
+/**
+ * Casa os vínculos salvos (exame do plano → código na base) com os itens da base desta conferência.
+ * Só preenche chaves que o usuário ainda não definiu nesta sessão.
+ */
+export function resolverVinculosSalvos(vinculosSalvos, linhasBase, vinculosAtuais = {}) {
+    const porCodigo = new Map()
+    for (const b of linhasBase || []) {
+        const cod = String(b.codigo || '').trim()
+        if (cod && !porCodigo.has(cod)) porCodigo.set(cod, b)
     }
+    const out = {}
+    for (const v of vinculosSalvos || []) {
+        if (!v.chave || vinculosAtuais[v.chave]) continue
+        const item = porCodigo.get(String(v.codigo || '').trim())
+        if (item) out[v.chave] = item.id
+    }
+    return out
 }

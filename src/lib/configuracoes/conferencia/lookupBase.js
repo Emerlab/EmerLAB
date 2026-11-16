@@ -55,7 +55,7 @@ export function buscarValorBase(exameOuCodigo, valoresBase = [], { vinculos = {}
     if (exatos.length > 1) return { tipo: 'ambiguo', item: null, candidatos: exatos, via: 'exato' }
 
     const equivalentes = itens.filter((x) => {
-        const ev = applyExamEquivalence(termo, x.nome, equivalencias)
+        const ev = applyExamEquivalence(termoNorm, x.nomeNorm || x.nome, equivalencias)
         return ev.equivalent || ev.exact
     })
     if (equivalentes.length === 1) {
@@ -70,10 +70,17 @@ export function buscarValorBase(exameOuCodigo, valoresBase = [], { vinculos = {}
 
 export function aplicarValoresBase(linhasPlano = [], valoresBase = [], vinculos = {}, equivalencias = []) {
     const itens = (valoresBase || []).map((l, i) => normalizarItemBase(l, i))
+    // Muitas linhas repetem o mesmo exame: a busca (cara) é feita uma vez por nome/código.
+    const cache = new Map()
+    const buscar = (termo) => {
+        const k = String(termo || '')
+        if (!cache.has(k)) cache.set(k, buscarValorBase(termo, itens, { vinculos, equivalencias }))
+        return cache.get(k)
+    }
     return (linhasPlano || []).map((linha, i) => {
-        let found = buscarValorBase(linha.exame || linha.codigo, itens, { vinculos, equivalencias })
+        let found = buscar(linha.exame || linha.codigo)
         if (found.tipo !== 'unico' && linha.codigo && linha.codigo !== (linha.exame || '')) {
-            const porCodigo = buscarValorBase(linha.codigo, itens, { vinculos, equivalencias })
+            const porCodigo = buscar(linha.codigo)
             if (porCodigo.tipo === 'unico') found = porCodigo
         }
         const item = found.item

@@ -17,21 +17,19 @@ const STATUS_OK = new Set([
     'OK_COM_TUTOR_ALTERNATIVO',
     'OK_COM_EXAME_EQUIVALENTE',
     'PERFIL_EQUIVALENTE',
+    'VALOR_ACEITO',
 ])
 
 export function statusEhOk(status) {
     return STATUS_OK.has(status)
 }
 
+/**
+ * Divergência = qualquer situação que ainda não está OK (inclui órfãos e revisão manual).
+ * Definição única usada no resumo, no filtro da tela e nas abas do Excel.
+ */
 export function statusEhDivergencia(status) {
-    return (
-        status === 'VALOR_DIVERGENTE' ||
-        status === 'DATA_DIVERGENTE' ||
-        status === 'TUTOR_DIVERGENTE' ||
-        status === 'PET_DIVERGENTE' ||
-        status === 'EXAME_DIVERGENTE' ||
-        status === 'REVISAO_MANUAL'
-    )
+    return Boolean(status) && !STATUS_OK.has(status)
 }
 
 export function classifyComparison({
@@ -137,6 +135,7 @@ const ROTULO_STATUS = {
     OK_COM_TUTOR_ALTERNATIVO: 'OK com tutor alternativo',
     OK_COM_EXAME_EQUIVALENTE: 'OK com exame equivalente',
     PERFIL_EQUIVALENTE: 'Perfil equivalente',
+    VALOR_ACEITO: 'Valor aceito',
     VALOR_DIVERGENTE: 'Valor divergente',
     DATA_DIVERGENTE: 'Data divergente',
     TUTOR_DIVERGENTE: 'Tutor divergente',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     PERMISSION_KEYS,
     getStoredAccessProfile,
@@ -14,13 +14,38 @@ import {
 } from '../../../lib/configuracoes/conferenciaLaboratorioExcel.js'
 import { parsearExcelConferenciaViaWorker } from '../../../lib/configuracoes/conferenciaExcelWorkerClient.js'
 import {
-    montarParManual,
     resumirConferencia,
     runConferencia,
     statusEhDivergencia,
     statusEhOk,
     rotuloStatusConferencia,
 } from '../../../lib/configuracoes/conferencia/index.js'
+import {
+    aplicarAcao,
+    adicionarAliasUnico,
+    adicionarEquivalenciaUnica,
+    ehOrfaoStatus,
+    itemAceitaAcao,
+    parearOrfaos,
+} from '../../../lib/configuracoes/conferencia/revisao.js'
+import {
+    EQUIVALENCIAS_PADRAO,
+    indexarEquivalencias,
+} from '../../../lib/configuracoes/conferencia/examSimilarity.js'
+import {
+    atualizarEquivalenciaExame,
+    carregarRegrasLaboratorio,
+    listarLaboratorios,
+    registrarRevisoes,
+    removerEquivalenciaExame,
+    removerPerfilExame,
+    removerVinculoBase,
+    resolverVinculosSalvos,
+    salvarAliasPessoa,
+    salvarEquivalenciaExame,
+    salvarPerfilExame,
+    salvarVinculoBase,
+} from '../../../lib/configuracoes/conferencia/persist.js'
 import { aplicarValoresBase, examesPendentesVinculo } from '../../../lib/configuracoes/conferencia/lookupBase.js'
 import { exportarConferenciaHonorariosExcel } from '../../../lib/configuracoes/conferencia/export.js'
 import {
@@ -39,11 +64,16 @@ import CredenciamentoMainAlert from '../../../components/Toast/CredenciamentoMai
 import PainelDetalheConferencia from './PainelDetalheConferencia.jsx'
 import CadastroRegrasConferencia from './CadastroRegrasConferencia.jsx'
 import ComboExame from './ComboExame.jsx'
-import logoE from '../../../assets/logo_E.png'
+import ResultadoTabela from './ResultadoTabela.jsx'
 import '../../Credenciamento/Credenciamento_main/Credenciamento_main.css'
 import './ConfigConferenciaLaboratorio.css'
 import { PageHeader } from '../../../components/ui'
 import { SelectDropdown } from '../../../components/ui/Dropdown.jsx'
+
+function mesAtualYm() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 const ROTULO_CAMPO = {
     codigo: 'Código',
@@ -220,17 +250,6 @@ function DashCard({ label, valor, destaque }) {
     )
 }
 
-function classeStatus(status) {
-    if (statusEhOk(status)) return 'is-ok'
-    if (status === 'REVISAO_MANUAL') return 'is-rev'
-    if (String(status || '').startsWith('ORFAO')) return 'is-orf'
-    return 'is-div'
-}
-
-function ehOrfaoStatus(status) {
-    return status === 'ORFAO_MELLISLAB' || status === 'ORFAO_HONORARIOS'
-}
-
 function ehOrfaoPendente(r) {
     return Boolean(r) && ehOrfaoStatus(r.status) && !r.revisao?.ignorar
 }
@@ -244,96 +263,6 @@ function proximoOrfaoApos(lista, idAtual, idsExcluir = []) {
     return [...depois, ...antes].find((r) => ehOrfaoPendente(r) && !excluir.has(r.id)) || null
 }
 
-function itemAceitaAcao(r, acao) {
-    if (!r) return false
-    if (acao === 'ignorar') return true
-    const temPar = Boolean(r.honorarios && r.mellis)
-    if (acao === 'nao_corresponde') return temPar
-    if (
-        acao === 'confirmar' ||
-        acao === 'tutor_alternativo' ||
-        acao === 'exame_equivalente' ||
-        acao === 'perfil_equivalente'
-    ) {
-        return temPar && !ehOrfaoStatus(r.status)
-    }
-    return false
-}
-
-function aplicarAcaoNoResultado(r, acao, extra, revisao) {
-    if (acao === 'nao_corresponde') {
-        return {
-            ...r,
-            status: r.mellis ? 'ORFAO_MELLISLAB' : 'ORFAO_HONORARIOS',
-            revisao,
-            acao: 'Não corresponde',
-        }
-    }
-    if (acao === 'confirmar') {
-        const hon =
-            extra.honorariosId && r.candidatos?.length
-                ? r.candidatos.find((c) => c.id === extra.honorariosId) || r.honorarios
-                : r.honorarios
-        return {
-            ...r,
-            honorarios: hon,
-            status: 'OK',
-            motivo: 'Correspondência confirmada manualmente.',
-            acao: 'Confirmado',
-            revisao,
-        }
-    }
-    if (acao === 'tutor_alternativo') {
-        return {
-            ...r,
-            status: 'OK_COM_TUTOR_ALTERNATIVO',
-            motivo: 'Tutor alternativo autorizado.',
-            acao: 'Tutor alternativo',
-            revisao,
-        }
-    }
-    if (acao === 'exame_equivalente') {
-        return {
-            ...r,
-            status: 'OK_COM_EXAME_EQUIVALENTE',
-            motivo: 'Exame equivalente confirmado.',
-            acao: 'Exame equivalente',
-            revisao,
-        }
-    }
-    if (acao === 'perfil_equivalente') {
-        return {
-            ...r,
-            status: 'PERFIL_EQUIVALENTE',
-            motivo: 'Perfil equivalente confirmado.',
-            acao: 'Perfil equivalente',
-            revisao,
-        }
-    }
-    return { ...r, acao: 'Ignorado', revisao }
-}
-
-function cliqueAbreDetalhe(e) {
-    return !e.target.closest('input, button, label, a')
-}
-
-function CheckboxIndeterminado({ checked, indeterminate, onChange, label }) {
-    const ref = useRef(null)
-    useEffect(() => {
-        if (ref.current) ref.current.indeterminate = Boolean(indeterminate)
-    }, [indeterminate])
-    return (
-        <input
-            ref={ref}
-            type="checkbox"
-            checked={checked}
-            onChange={onChange}
-            onClick={(e) => e.stopPropagation()}
-            aria-label={label}
-        />
-    )
-}
-
 const ACOES_MASSA = [
     { id: 'confirmar', label: 'Confirmar' },
     { id: 'nao_corresponde', label: 'Não corresponde' },
@@ -343,16 +272,9 @@ const ACOES_MASSA = [
     { id: 'ignorar', label: 'Ignorar' },
 ]
 
-function textoDiferencaValor(r) {
-    const dv = r.diferenca_valor
-    if (dv == null || dv === '') return '—'
-    const sinal = Number(dv) > 0 ? '+' : ''
-    return `${sinal}${formatarValorConferencia(Math.abs(dv)).replace('R$', '').trim()}`
-}
-
 function filtrarResultados(resultados, filtro, busca) {
     let list = resultados || []
-    if (filtro === 'divergencias') list = list.filter((r) => statusEhDivergencia(r.status) || !statusEhOk(r.status))
+    if (filtro === 'divergencias') list = list.filter((r) => statusEhDivergencia(r.status) && !r.revisao?.ignorar)
     if (filtro === 'valores') list = list.filter((r) => r.status === 'VALOR_DIVERGENTE')
     if (filtro === 'orfaos') {
         list = list.filter((r) => r.status === 'ORFAO_MELLISLAB' || r.status === 'ORFAO_HONORARIOS')
@@ -409,27 +331,6 @@ function compararOrdenacao(a, b) {
     if (bVazio) return -1
     if (typeof a === 'number' && typeof b === 'number') return a - b
     return String(a).localeCompare(String(b), 'pt-BR', { numeric: true, sensitivity: 'base' })
-}
-
-function ThOrdenavel({ coluna, ordem, onOrdenar, className, children }) {
-    const ativo = ordem.chave === coluna
-    return (
-        <th
-            className={className}
-            aria-sort={ativo ? (ordem.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-        >
-            <button
-                type="button"
-                className={`conf_lab_th_sort${ativo ? ' is-on' : ''}`}
-                onClick={() => onOrdenar(coluna)}
-            >
-                {children}
-                <span className="conf_lab_th_seta" aria-hidden>
-                    {ativo ? (ordem.dir === 'asc' ? '▲' : '▼') : '↕'}
-                </span>
-            </button>
-        </th>
-    )
 }
 
 function passoEfetivoSessao(e) {
@@ -490,6 +391,12 @@ const ConfigConferenciaLaboratorio = () => {
     const [aviso, setAviso] = useState('')
     const [feedback, setFeedback] = useState('')
 
+    const [laboratorios, setLaboratorios] = useState([])
+    const [laboratorioId, setLaboratorioId] = useState('')
+    const [periodoYm, setPeriodoYm] = useState(mesAtualYm)
+    const [vinculosSalvos, setVinculosSalvos] = useState([])
+    const [regrasInfo, setRegrasInfo] = useState({ carregando: false, migracaoPendente: false, motivo: '' })
+
     const [arquivoHonorarios, setArquivoHonorarios] = useState(null)
     const [arquivoMellis, setArquivoMellis] = useState(null)
     const [arquivoBase, setArquivoBase] = useState(null)
@@ -526,16 +433,24 @@ const ConfigConferenciaLaboratorio = () => {
     })
     const [sessoes, setSessoes] = useState([])
     const [histAberto, setHistAberto] = useState(false)
-    const sujoRef = useRef(false)
+    const pendenteSalvarRef = useRef(false)
     const sessaoIdRef = useRef(null)
     const ignorarSaveRef = useRef(false)
     const histRef = useRef(null)
     const estadoSessaoRef = useRef(null)
 
+    const laboratorioNome = useMemo(
+        () => laboratorios.find((l) => String(l.id) === String(laboratorioId))?.nome || '',
+        [laboratorios, laboratorioId],
+    )
+    const eqsPreview = useMemo(
+        () => indexarEquivalencias([...EQUIVALENCIAS_PADRAO, ...equivalencias]),
+        [equivalencias],
+    )
     const mapeamentoOk = !faltHonorarios.length && !faltMellis.length && !faltBase.length
     const planoComBase = useMemo(
-        () => aplicarValoresBase(linhasHonorarios, linhasBase, vinculosBase),
-        [linhasHonorarios, linhasBase, vinculosBase],
+        () => aplicarValoresBase(linhasHonorarios, linhasBase, vinculosBase, eqsPreview),
+        [linhasHonorarios, linhasBase, vinculosBase, eqsPreview],
     )
     const pendentesVinculo = useMemo(
         () => examesPendentesVinculo(planoComBase),
@@ -570,6 +485,7 @@ const ConfigConferenciaLaboratorio = () => {
     }, [linhasBase, linhasHonorarios, linhasMellis])
     const podeComparar =
         podeEditar &&
+        laboratorioId &&
         linhasHonorarios.length &&
         linhasMellis.length &&
         linhasBase.length &&
@@ -585,12 +501,12 @@ const ConfigConferenciaLaboratorio = () => {
         })
     }, [resultados, filtro, busca, ordem])
 
-    const alternarOrdem = (chave) => {
+    const alternarOrdem = useCallback((chave) => {
         setOrdem((prev) => {
             if (prev.chave !== chave) return { chave, dir: 'asc' }
             return { chave, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         })
-    }
+    }, [])
     const idsVisiveis = useMemo(() => visiveis.map((r) => r.id), [visiveis])
     const todosVisiveisMarcados =
         idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionados.has(id))
@@ -604,12 +520,111 @@ const ConfigConferenciaLaboratorio = () => {
         [resultados],
     )
 
+    // ── Laboratórios e regras salvas por laboratório ────────────────────────────
     useEffect(() => {
-        sujoRef.current = Boolean(
-            linhasHonorarios.length || linhasMellis.length || linhasBase.length || resultados.length,
-        )
-    }, [linhasHonorarios.length, linhasMellis.length, linhasBase.length, resultados.length])
+        let vivo = true
+        listarLaboratorios()
+            .then((lista) => vivo && setLaboratorios(lista))
+            .catch((e) => {
+                if (vivo) setAviso(`Não foi possível carregar os laboratórios: ${e?.message || e}`)
+            })
+        return () => {
+            vivo = false
+        }
+    }, [])
 
+    useEffect(() => {
+        if (!laboratorioId) return undefined
+        let vivo = true
+        setRegrasInfo({ carregando: true, migracaoPendente: false, motivo: '' })
+        carregarRegrasLaboratorio(laboratorioId).then((r) => {
+            if (!vivo) return
+            setRegrasInfo({
+                carregando: false,
+                migracaoPendente: Boolean(r.migracaoPendente),
+                motivo: r.ok ? '' : r.motivo || '',
+            })
+            if (!r.ok) return
+            const mesclar = (doBanco, local, adicionar) =>
+                local.filter((x) => !x.id).reduce((acc, x) => adicionar(acc, x), doBanco)
+            setEquivalencias((prev) => mesclar(r.equivalencias, prev, adicionarEquivalenciaUnica))
+            setAliasesPessoa((prev) => mesclar(r.aliasesPessoa, prev, adicionarAliasUnico))
+            setPerfis((prev) => [...r.perfis, ...prev.filter((p) => !p.id && !r.perfis.some((q) => q.nome === p.nome))])
+            setVinculosSalvos(r.vinculos)
+        })
+        return () => {
+            vivo = false
+        }
+    }, [laboratorioId])
+
+    // Vínculos salvos (por código da base) viram vínculos desta conferência, sem sobrescrever os já feitos.
+    useEffect(() => {
+        if (!vinculosSalvos.length || !linhasBase.length) return
+        const novos = resolverVinculosSalvos(vinculosSalvos, linhasBase, vinculosBase)
+        if (Object.keys(novos).length) setVinculosBase((prev) => ({ ...novos, ...prev }))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vinculosSalvos, linhasBase])
+
+    const trocarLaboratorio = (novoId) => {
+        if (String(novoId) === String(laboratorioId)) return
+        if (resultados.length && !window.confirm('Trocar o laboratório descarta o resultado atual e as decisões manuais. Continuar?')) {
+            return
+        }
+        descartarResultados()
+        setLaboratorioId(novoId)
+        setEquivalencias([])
+        setAliasesPessoa([])
+        setPerfis([])
+        setVinculosSalvos([])
+        setVinculosBase({})
+        setRegrasInfo({ carregando: false, migracaoPendente: false, motivo: '' })
+    }
+
+    const avisarFalhaRegra = (r) => {
+        if (r && !r.ok) setAviso(r.motivo || 'Não foi possível salvar a regra no banco.')
+    }
+
+    const aprender = (ap) => {
+        if (!ap) return
+        if (ap.alias) {
+            setAliasesPessoa((prev) => adicionarAliasUnico(prev, ap.alias))
+            if (laboratorioId) {
+                void salvarAliasPessoa({
+                    laboratorioId,
+                    nomePlano: ap.alias.nomePlano,
+                    nomeLab: ap.alias.nomeLab,
+                }).then(avisarFalhaRegra)
+            }
+        }
+        if (ap.equivalencia) {
+            const eq = ap.equivalencia
+            setEquivalencias((prev) => adicionarEquivalenciaUnica(prev, eq))
+            if (laboratorioId) {
+                void salvarEquivalenciaExame({ laboratorioId, nomeA: eq.a, nomeB: eq.b }).then((r) => {
+                    avisarFalhaRegra(r)
+                    if (r.ok && r.id) {
+                        setEquivalencias((prev) =>
+                            prev.map((p) => (!p.id && p.a === eq.a && p.b === eq.b ? { ...p, id: r.id } : p)),
+                        )
+                    }
+                })
+            }
+        }
+    }
+
+    const registrarRevisoesBanco = (lista) => {
+        if (!laboratorioId || !lista.length) return
+        void registrarRevisoes({
+            laboratorioId,
+            periodoYm,
+            sessaoId: sessaoIdRef.current,
+            revisoes: lista,
+        }).then((r) => {
+            if (!r.ok && !r.migracaoPendente) setAviso(`Trilha de revisão não gravada: ${r.motivo}`)
+        })
+    }
+
+    // ── Sessão local (autosave leve) ───────────────────────────────────────────
     const nomesArquivosAtuais = {
         base: arquivoBase?.name || nomesArquivosSalvos.base || '',
         plano: arquivoHonorarios?.name || nomesArquivosSalvos.plano || '',
@@ -618,6 +633,9 @@ const ConfigConferenciaLaboratorio = () => {
 
     const estadoParaSalvar = {
         passo,
+        laboratorioId,
+        laboratorioNome,
+        periodoYm,
         nomesArquivos: nomesArquivosAtuais,
         headersHonorarios,
         headersMellis,
@@ -643,7 +661,7 @@ const ConfigConferenciaLaboratorio = () => {
 
     const recarregarSessoes = async () => {
         try {
-            setSessoes(await listarSessoesConferencia())
+            setSessoes(await listarSessoesConferencia(userId))
         } catch (e) {
             console.warn('[conferencia] sessões locais:', e?.message || e)
         }
@@ -653,9 +671,10 @@ const ConfigConferenciaLaboratorio = () => {
         const estado = estadoSessaoRef.current
         if (!estado || !sessaoTemConteudo(estado)) return
         try {
-            const meta = await salvarSessaoLocal(sessaoIdRef.current, estado)
+            const meta = await salvarSessaoLocal(userId, sessaoIdRef.current, estado)
             sessaoIdRef.current = meta.id
-            await recarregarSessoes()
+            pendenteSalvarRef.current = false
+            setSessoes((prev) => [meta, ...prev.filter((s) => s.id !== meta.id)])
         } catch (e) {
             console.warn('[conferencia] salvar sessão:', e?.message || e)
             setAviso('Não foi possível salvar a sessão neste computador (espaço ou permissão).')
@@ -664,20 +683,25 @@ const ConfigConferenciaLaboratorio = () => {
 
     useEffect(() => {
         void recarregarSessoes()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
         if (ignorarSaveRef.current) {
             ignorarSaveRef.current = false
-            return
+            return undefined
         }
-        if (!sessaoTemConteudo(estadoParaSalvar)) return
+        if (!sessaoTemConteudo(estadoParaSalvar)) return undefined
+        pendenteSalvarRef.current = true
         const t = setTimeout(() => {
             void persistirSessao()
         }, 700)
         return () => clearTimeout(t)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         passo,
+        laboratorioId,
+        periodoYm,
         nomesArquivosAtuais.base,
         nomesArquivosAtuais.plano,
         nomesArquivosAtuais.lab,
@@ -703,8 +727,9 @@ const ConfigConferenciaLaboratorio = () => {
     ])
 
     useEffect(() => {
+        // Só avisa ao sair se ainda há alteração que não chegou a ser gravada na sessão local.
         const onBeforeUnload = (e) => {
-            if (!sujoRef.current) return
+            if (!pendenteSalvarRef.current) return
             e.preventDefault()
             e.returnValue = ''
         }
@@ -717,10 +742,11 @@ const ConfigConferenciaLaboratorio = () => {
             window.removeEventListener('beforeunload', onBeforeUnload)
             document.removeEventListener('visibilitychange', onVisivel)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
-        if (!histAberto) return
+        if (!histAberto) return undefined
         const onDoc = (e) => {
             if (!histRef.current?.contains(e.target)) setHistAberto(false)
         }
@@ -728,6 +754,7 @@ const ConfigConferenciaLaboratorio = () => {
         return () => document.removeEventListener('mousedown', onDoc)
     }, [histAberto])
 
+    // ── Importação ─────────────────────────────────────────────────────────────
     const parseArquivo = async (arquivo, mapCols, origem) => {
         const buffer = await arquivo.arrayBuffer()
         return parsearExcelConferenciaViaWorker(buffer, {
@@ -765,14 +792,38 @@ const ConfigConferenciaLaboratorio = () => {
         return falt
     }
 
-    const onFileBase = async (file) => {
+    /** Limpa o resultado e as decisões manuais (que dependem dos arquivos/regras atuais). */
+    function descartarResultados() {
+        setResultados([])
+        setResumo(null)
+        setRevisoes([])
+        setSelecionados(new Set())
+        setItemAberto(null)
+        setFiltro('todos')
+        setBusca('')
+    }
+
+    const receberArquivo = async (file, origem) => {
         if (!file) return
-        setArquivoBase(file)
+        if (resultados.length) {
+            const msg = revisoes.length
+                ? 'Trocar o arquivo descarta o resultado atual e as decisões manuais já feitas. Continuar?'
+                : 'Trocar o arquivo descarta o resultado atual. Continuar?'
+            if (!window.confirm(msg)) return
+            descartarResultados()
+        }
+        if (origem === 'valores_base') {
+            setArquivoBase(file)
+            setVinculosBase({})
+        } else if (origem === 'honorarios') setArquivoHonorarios(file)
+        else setArquivoMellis(file)
+        const mapa =
+            origem === 'valores_base' ? mapColsBase : origem === 'honorarios' ? mapColsHonorarios : mapColsMellis
         setErro('')
         setProcessando(true)
         try {
-            const parsed = await parseArquivo(file, mapColsBase, 'valores_base')
-            const falt = aplicarParse(parsed, 'valores_base')
+            const parsed = await parseArquivo(file, mapa, origem)
+            const falt = aplicarParse(parsed, origem)
             if (parsed.erro && falt.length) setErro(parsed.erro)
             else setPasso('preview')
         } catch (e) {
@@ -782,43 +833,16 @@ const ConfigConferenciaLaboratorio = () => {
         }
     }
 
-    const onFileHonorarios = async (file) => {
-        if (!file) return
-        setArquivoHonorarios(file)
-        setErro('')
-        setProcessando(true)
-        try {
-            const parsed = await parseArquivo(file, mapColsHonorarios, 'honorarios')
-            const falt = aplicarParse(parsed, 'honorarios')
-            if (parsed.erro && falt.length) setErro(parsed.erro)
-            else setPasso('preview')
-        } catch (e) {
-            setErro(e?.message || String(e))
-        } finally {
-            setProcessando(false)
-        }
-    }
-
-    const onFileMellis = async (file) => {
-        if (!file) return
-        setArquivoMellis(file)
-        setErro('')
-        setProcessando(true)
-        try {
-            const parsed = await parseArquivo(file, mapColsMellis, 'mellislab')
-            const falt = aplicarParse(parsed, 'mellislab')
-            if (parsed.erro && falt.length) setErro(parsed.erro)
-            else setPasso('preview')
-        } catch (e) {
-            setErro(e?.message || String(e))
-        } finally {
-            setProcessando(false)
-        }
-    }
+    const onFileBase = (file) => receberArquivo(file, 'valores_base')
+    const onFileHonorarios = (file) => receberArquivo(file, 'honorarios')
+    const onFileMellis = (file) => receberArquivo(file, 'mellislab')
 
     const reparseComMapeamento = async () => {
         if (!arquivoBase || !arquivoHonorarios || !arquivoMellis) {
             setErro('Envie as três planilhas: Valores de Base, Relatório Plano e Relatório Laboratório.')
+            return
+        }
+        if (resultados.length && !window.confirm('Atualizar a prévia descarta o resultado atual. Continuar?')) {
             return
         }
         setProcessando(true)
@@ -836,6 +860,7 @@ const ConfigConferenciaLaboratorio = () => {
                 setErro(b.erro || h.erro || m.erro || 'Ajuste o mapeamento das colunas obrigatórias.')
                 return
             }
+            descartarResultados()
             setPasso('preview')
             setFeedback('Prévia atualizada. Confira as linhas e os vínculos de exame antes de comparar.')
         } catch (e) {
@@ -845,17 +870,57 @@ const ConfigConferenciaLaboratorio = () => {
         }
     }
 
+    const alterarVinculo = (p, id) => {
+        setVinculosBase((prev) => {
+            const next = { ...prev }
+            if (!id) delete next[p.chave]
+            else next[p.chave] = id
+            return next
+        })
+        setVinculosSalvos((prev) => prev.filter((v) => v.chave !== p.chave))
+        if (!laboratorioId) return
+        if (!id) {
+            void removerVinculoBase({ laboratorioId, chave: p.chave }).then(avisarFalhaRegra)
+            return
+        }
+        const item = linhasBase.find((b) => String(b.id) === String(id))
+        if (!item?.codigo) return
+        const salvo = { chave: p.chave, exame: p.exame, codigo: item.codigo, nome: item.nome || item.exame }
+        setVinculosSalvos((prev) => [...prev, salvo])
+        void salvarVinculoBase({
+            laboratorioId,
+            chave: salvo.chave,
+            exame: salvo.exame,
+            codigo: salvo.codigo,
+            nome: salvo.nome,
+        }).then(avisarFalhaRegra)
+    }
+
+    // ── Comparação ─────────────────────────────────────────────────────────────
     const executarComparacao = async () => {
         if (!podeComparar) {
             setErro(
-                pendentesVinculo.length
-                    ? 'Vincule os exames do plano à lista de Valores de Base (ambiguidades são manuais).'
-                    : 'Mapeie as três planilhas e gere a prévia antes de comparar.',
+                !laboratorioId
+                    ? 'Selecione o laboratório antes de comparar (as regras são guardadas por laboratório).'
+                    : pendentesVinculo.length
+                      ? 'Vincule os exames do plano à lista de Valores de Base (ambiguidades são manuais).'
+                      : 'Mapeie as três planilhas e gere a prévia antes de comparar.',
             )
+            return
+        }
+        if (
+            resultados.length &&
+            revisoes.length &&
+            !window.confirm(
+                'Já existem decisões manuais neste resultado. Comparar de novo descarta essas decisões. Continuar?',
+            )
+        ) {
             return
         }
         setProcessando(true)
         setErro('')
+        // Deixa o "Comparando…" aparecer antes do cálculo.
+        await new Promise((resolve) => setTimeout(resolve, 30))
         try {
             const out = runConferencia({
                 honorarios: linhasHonorarios,
@@ -868,7 +933,9 @@ const ConfigConferenciaLaboratorio = () => {
             })
             setResultados(out.resultados)
             setResumo(out.resumo)
+            setRevisoes([])
             setSelecionados(new Set())
+            setItemAberto(null)
             setPasso('resultado')
             setFeedback('Comparação concluída. O valor oficial é o de Valores de Base.')
         } catch (e) {
@@ -881,6 +948,9 @@ const ConfigConferenciaLaboratorio = () => {
     const aplicarEstadoSessao = (e) => {
         const passoRest = passoEfetivoSessao(e)
         setPasso(passoRest)
+        setLaboratorioId(e.laboratorioId ? String(e.laboratorioId) : '')
+        setPeriodoYm(e.periodoYm || mesAtualYm())
+        setVinculosSalvos([])
         setNomesArquivosSalvos(e.nomesArquivos || { base: '', plano: '', lab: '' })
         setArquivoHonorarios(null)
         setArquivoMellis(null)
@@ -915,7 +985,7 @@ const ConfigConferenciaLaboratorio = () => {
         setProcessando(true)
         setErro('')
         try {
-            const reg = await carregarSessaoLocal(id)
+            const reg = await carregarSessaoLocal(userId, id)
             if (!reg?.estado) {
                 setErro('Sessão não encontrada ou já expirou (30 dias).')
                 await recarregarSessoes()
@@ -924,7 +994,7 @@ const ConfigConferenciaLaboratorio = () => {
             ignorarSaveRef.current = true
             sessaoIdRef.current = reg.id
             aplicarEstadoSessao(reg.estado)
-            await salvarSessaoLocal(reg.id, {
+            await salvarSessaoLocal(userId, reg.id, {
                 ...reg.estado,
                 passo: passoEfetivoSessao(reg.estado),
             })
@@ -941,7 +1011,7 @@ const ConfigConferenciaLaboratorio = () => {
     const excluirSessao = async (id, ev) => {
         ev?.stopPropagation?.()
         try {
-            await excluirSessaoLocal(id)
+            await excluirSessaoLocal(userId, id)
             if (sessaoIdRef.current === id) sessaoIdRef.current = null
             await recarregarSessoes()
             setFeedback('Sessão excluída.')
@@ -950,93 +1020,83 @@ const ConfigConferenciaLaboratorio = () => {
         }
     }
 
+    // ── Revisão manual ─────────────────────────────────────────────────────────
+    const nomeUsuario = profile?.nome || userId || ''
+
     const registrarRevisao = async (item, acao, extra = {}) => {
-        const agora = new Date().toISOString()
         const revisao = {
+            ...extra,
             acao,
-            usuario: profile?.nome || userId || '',
-            dataHora: agora,
-            justificativa: extra.justificativa || '',
+            usuario: nomeUsuario,
+            dataHora: new Date().toISOString(),
+            justificativa: String(extra.justificativa || '').trim(),
             resultadoId: item.id,
             ignorar: acao === 'ignorar',
-            ...extra,
         }
+        const ctx = { equivalencias, aliasesPessoa }
+        let proximoResultados
+        let aprendizado
+        let selecaoRemover = [item.id]
+        let selecaoAdd = []
+        let excluirDaFila = [item.id]
+
         if (acao === 'parear') {
             const oposto = resultados.find((r) => r.id === extra.opostoId)
-            if (!oposto) {
-                setErro('Escolha uma entrada do relatório oposto para encaixar.')
+            const out = parearOrfaos(resultados, item, oposto, ctx, revisao)
+            if (out.erro) {
+                setErro(out.erro)
                 return
             }
-            const hon =
-                item.status === 'ORFAO_HONORARIOS' ? item.honorarios : oposto.honorarios
-            const mel = item.status === 'ORFAO_MELLISLAB' ? item.mellis : oposto.mellis
-            if (!hon || !mel) {
-                setErro('Não foi possível montar o par: falta um dos lados.')
+            proximoResultados = out.resultados
+            selecaoRemover = [item.id, oposto.id]
+            selecaoAdd = [out.par.id]
+            excluirDaFila = [item.id, oposto.id]
+            revisao.statusFinal = out.par.status
+        } else {
+            const out = aplicarAcao(resultados, item.id, acao, extra, revisao, ctx)
+            if (out.erro) {
+                setErro(out.erro)
                 return
             }
-            const par = {
-                ...montarParManual(hon, mel, { equivalencias, aliasesPessoa }),
-                revisao,
-            }
-            const next = resultados.filter((r) => r.id !== item.id && r.id !== oposto.id)
-            next.push(par)
-            setRevisoes((prev) => [...prev, revisao])
-            setResultados(next)
-            setResumo(resumirConferencia(next))
-            setSelecionados((prev) => {
-                const s = new Set(prev)
-                s.delete(item.id)
-                s.delete(oposto.id)
-                s.add(par.id)
-                return s
-            })
-            const fila = visiveis.length ? visiveis : resultados
-            const proximo = proximoOrfaoApos(fila, item.id, [oposto.id])
-            setItemAberto(proximo)
-            setFeedback(
-                proximo
-                    ? 'Correspondência encaixada. Abrindo o próximo órfão.'
-                    : 'Correspondência encaixada. Não há mais órfãos na lista.',
-            )
-            return
+            proximoResultados = out.resultados
+            aprendizado = out.aprendizado
+            revisao.statusFinal = proximoResultados.find((r) => r.revisao === revisao)?.status || ''
         }
-        const next = resultados.map((r) =>
-            r.id !== item.id ? r : aplicarAcaoNoResultado(r, acao, extra, revisao),
-        )
+
         setRevisoes((prev) => [...prev, revisao])
-        setResultados(next)
-        setResumo(resumirConferencia(next))
-        const avancarOrfao = acao === 'confirmar' || acao === 'ignorar'
+        setResultados(proximoResultados)
+        setResumo(resumirConferencia(proximoResultados))
+        setSelecionados((prev) => {
+            const s = new Set(prev)
+            for (const id of selecaoRemover) s.delete(id)
+            for (const id of selecaoAdd) s.add(id)
+            return s
+        })
+        const avancar = acao === 'parear' || acao === 'confirmar' || acao === 'ignorar'
         const fila = visiveis.length ? visiveis : resultados
-        const proximo = avancarOrfao ? proximoOrfaoApos(fila, item.id) : null
-        setItemAberto(proximo)
-        if (acao === 'tutor_alternativo' && item.honorarios && item.mellis) {
-            setAliasesPessoa((prev) => [
-                ...prev,
-                {
-                    tipo: 'tutor',
-                    nomeLab: item.mellis.tutor,
-                    nomePlano: item.honorarios.tutor,
-                },
-            ])
-        }
-        if (acao === 'exame_equivalente' && item.honorarios && item.mellis) {
-            setEquivalencias((prev) => [
-                ...prev,
-                { a: item.honorarios.exame, b: item.mellis.exame },
-            ])
-        }
-        setFeedback('Ação registrada no histórico.')
+        const proximo = avancar
+            ? proximoOrfaoApos(fila, item.id, excluirDaFila.filter((x) => x !== item.id))
+            : null
+        setItemAberto(proximo ? proximoResultados.find((r) => r.id === proximo.id) || null : null)
+        aprender(aprendizado)
+        registrarRevisoesBanco([revisao])
+        setFeedback(
+            acao === 'parear'
+                ? proximo
+                    ? 'Correspondência encaixada. Abrindo o próximo órfão.'
+                    : 'Correspondência encaixada. Não há mais órfãos na lista.'
+                : 'Ação registrada no histórico.',
+        )
     }
 
-    const alternarSelecao = (id) => {
+    const alternarSelecao = useCallback((id) => {
         setSelecionados((prev) => {
             const next = new Set(prev)
             if (next.has(id)) next.delete(id)
             else next.add(id)
             return next
         })
-    }
+    }, [])
 
     const alternarTodosVisiveis = () => {
         setSelecionados((prev) => {
@@ -1058,50 +1118,143 @@ const ConfigConferenciaLaboratorio = () => {
             return
         }
         const agora = new Date().toISOString()
-        const novasRevisoes = alvos.map((item) => ({
-            acao,
-            usuario: profile?.nome || userId || '',
-            dataHora: agora,
-            justificativa: '',
-            resultadoId: item.id,
-            ignorar: acao === 'ignorar',
-            emMassa: true,
-        }))
-        const porId = new Map(novasRevisoes.map((x) => [x.resultadoId, x]))
-        const idsOk = new Set(alvos.map((a) => a.id))
-        const next = resultados.map((r) =>
-            idsOk.has(r.id) ? aplicarAcaoNoResultado(r, acao, {}, porId.get(r.id)) : r,
-        )
-        setRevisoes((prev) => [...prev, ...novasRevisoes])
-        setResultados(next)
-        setResumo(resumirConferencia(next))
-        if (acao === 'tutor_alternativo') {
-            setAliasesPessoa((prev) => [
-                ...prev,
-                ...alvos
-                    .filter((i) => i.honorarios && i.mellis)
-                    .map((i) => ({
-                        tipo: 'tutor',
-                        nomeLab: i.mellis.tutor,
-                        nomePlano: i.honorarios.tutor,
-                    })),
-            ])
+        const ctx = { equivalencias, aliasesPessoa }
+        let atual = resultados
+        const feitas = []
+        let falhas = 0
+        let aliases = aliasesPessoa
+        let eqs = equivalencias
+        const aprendidos = []
+        for (const item of alvos) {
+            const revisao = {
+                acao,
+                usuario: nomeUsuario,
+                dataHora: agora,
+                justificativa: '',
+                resultadoId: item.id,
+                ignorar: acao === 'ignorar',
+                emMassa: true,
+            }
+            const out = aplicarAcao(atual, item.id, acao, {}, revisao, { equivalencias: eqs, aliasesPessoa: aliases })
+            if (out.erro) {
+                falhas += 1
+                continue
+            }
+            atual = out.resultados
+            revisao.statusFinal = atual.find((r) => r.revisao === revisao)?.status || ''
+            feitas.push(revisao)
+            if (out.aprendizado?.alias) {
+                aliases = adicionarAliasUnico(aliases, out.aprendizado.alias)
+                aprendidos.push(out.aprendizado)
+            }
+            if (out.aprendizado?.equivalencia) {
+                eqs = adicionarEquivalenciaUnica(eqs, out.aprendizado.equivalencia)
+                aprendidos.push(out.aprendizado)
+            }
         }
-        if (acao === 'exame_equivalente') {
-            setEquivalencias((prev) => [
-                ...prev,
-                ...alvos
-                    .filter((i) => i.honorarios && i.mellis)
-                    .map((i) => ({ a: i.honorarios.exame, b: i.mellis.exame })),
-            ])
+        void ctx
+        if (!feitas.length) {
+            setErro('Nenhuma das linhas selecionadas pôde receber essa ação.')
+            return
         }
+        setRevisoes((prev) => [...prev, ...feitas])
+        setResultados(atual)
+        setResumo(resumirConferencia(atual))
+        aprendidos.forEach(aprender)
+        registrarRevisoesBanco(feitas)
         setSelecionados(new Set())
-        const pulados = selecionados.size - alvos.length
+        const pulados = selecionados.size - feitas.length
         setFeedback(
             pulados
-                ? `Ação aplicada em ${alvos.length} linha(s). ${pulados} não aceita(m) essa ação.`
-                : `Ação aplicada em ${alvos.length} linha(s).`,
+                ? `Ação aplicada em ${feitas.length} linha(s). ${pulados} não aceita(m) essa ação${falhas ? ` (${falhas} com erro)` : ''}.`
+                : `Ação aplicada em ${feitas.length} linha(s).`,
         )
+    }
+
+    // ── Regras (equivalências e perfis) ────────────────────────────────────────
+    const semLaboratorioAviso = () =>
+        !laboratorioId
+            ? ' Selecione um laboratório para guardar para os próximos meses.'
+            : ''
+
+    const salvarEquivalencia = async (a, b) => {
+        if (!String(a || '').trim() || !String(b || '').trim()) {
+            setErro('Informe os dois nomes da equivalência.')
+            return
+        }
+        const eq = { a: a.trim(), b: b.trim() }
+        setEquivalencias((prev) => adicionarEquivalenciaUnica(prev, eq))
+        if (!laboratorioId) {
+            setFeedback(`Equivalência adicionada nesta conferência.${semLaboratorioAviso()}`)
+            return
+        }
+        const r = await salvarEquivalenciaExame({ laboratorioId, nomeA: eq.a, nomeB: eq.b })
+        avisarFalhaRegra(r)
+        if (r.ok && r.id) {
+            setEquivalencias((prev) =>
+                prev.map((p) => (!p.id && p.a === eq.a && p.b === eq.b ? { ...p, id: r.id } : p)),
+            )
+            setFeedback(`Equivalência guardada para ${laboratorioNome || 'o laboratório'}.`)
+        }
+    }
+
+    const atualizarEquivalencia = async (idx, a, b) => {
+        const i = Number(idx)
+        const atual = equivalencias[i]
+        if (!atual) return
+        if (!String(a || '').trim() || !String(b || '').trim()) {
+            setErro('Informe os dois nomes da equivalência.')
+            return
+        }
+        setEquivalencias((prev) =>
+            prev.map((p, j) => (j === i ? { ...p, a: a.trim(), b: b.trim() } : p)),
+        )
+        if (atual.id) avisarFalhaRegra(await atualizarEquivalenciaExame({ id: atual.id, nomeA: a, nomeB: b }))
+        setFeedback('Equivalência atualizada.')
+    }
+
+    const removerEquivalencia = async (idx) => {
+        const i = Number(idx)
+        const atual = equivalencias[i]
+        if (!atual) return
+        setEquivalencias((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerEquivalenciaExame(atual.id))
+        setFeedback('Equivalência removida.')
+    }
+
+    const salvarPerfil = async (dados) => {
+        if (!String(dados?.nome || '').trim()) {
+            setErro('Informe o nome do perfil.')
+            return
+        }
+        const local = {
+            nome: dados.nome.trim(),
+            descricao: dados.descricao,
+            valor: dados.valor,
+            vigencia_inicio: dados.vigenciaInicio || null,
+            vigencia_fim: dados.vigenciaFim || null,
+            exames: dados.exames || [],
+        }
+        setPerfis((prev) => [...prev, local])
+        if (!laboratorioId) {
+            setFeedback(`Perfil adicionado nesta conferência.${semLaboratorioAviso()}`)
+            return
+        }
+        const r = await salvarPerfilExame({ laboratorioId, ...dados })
+        avisarFalhaRegra(r)
+        if (r.ok && r.id) {
+            setPerfis((prev) => prev.map((p) => (p === local ? { ...p, id: r.id } : p)))
+            setFeedback(`Perfil guardado para ${laboratorioNome || 'o laboratório'}.`)
+        }
+    }
+
+    const removerPerfil = async (idx) => {
+        const i = Number(idx)
+        const atual = perfis[i]
+        if (!atual) return
+        setPerfis((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerPerfilExame(atual.id))
+        setFeedback('Perfil removido.')
     }
 
     const codigoElabDoItem = (item) => item?.honorarios?.codigo_base || item?.honorarios?.codigo || ''
@@ -1258,6 +1411,45 @@ const ConfigConferenciaLaboratorio = () => {
                         </div>
                     </div>
 
+                    <div className="conf_lab_ident !grid !grid-cols-1 gap-4 md:!grid-cols-3">
+                        <label className="conf_lab_ident_campo">
+                            <span>Laboratório</span>
+                            <SelectDropdown
+                                value={laboratorioId}
+                                onChange={(e) => trocarLaboratorio(e.target.value)}
+                                disabled={processando || !podeEditar}
+                            >
+                                <option value="">Selecione o laboratório…</option>
+                                {laboratorios.map((l) => (
+                                    <option key={l.id} value={String(l.id)}>
+                                        {l.nome}
+                                        {l.ativo ? '' : ' (inativo)'}
+                                    </option>
+                                ))}
+                            </SelectDropdown>
+                        </label>
+                        <label className="conf_lab_ident_campo">
+                            <span>Competência</span>
+                            <input
+                                type="month"
+                                value={periodoYm}
+                                onChange={(e) => setPeriodoYm(e.target.value)}
+                                disabled={processando || !podeEditar}
+                            />
+                        </label>
+                        <p className="conf_lab_muted conf_lab_ident_info">
+                            {!laboratorioId
+                                ? 'Escolha o laboratório: equivalências, perfis, tutores alternativos e vínculos ficam guardados para os próximos meses.'
+                                : regrasInfo.carregando
+                                  ? 'Carregando as regras deste laboratório…'
+                                  : regrasInfo.migracaoPendente
+                                    ? 'Regras ainda não são salvas no banco (migração pendente): valem só nesta sessão.'
+                                    : regrasInfo.motivo
+                                      ? `Não foi possível carregar as regras: ${regrasInfo.motivo}`
+                                      : `${equivalencias.length} equivalência(s), ${aliasesPessoa.length} tutor(es) alternativo(s) e ${perfis.length} perfil(is) deste laboratório.`}
+                        </p>
+                    </div>
+
                     <div className="conf_lab_uploads conf_lab_uploads_tres !grid !grid-cols-1 gap-4 md:!grid-cols-3">
                         <UploadZone
                             titulo="Valores de Base"
@@ -1380,14 +1572,7 @@ const ConfigConferenciaLaboratorio = () => {
                                                     value={vinculosBase[p.chave] || ''}
                                                     placeholder="Buscar código ou nome…"
                                                     vazio="Nenhum exame na Valores de Base"
-                                                    onChange={(id) => {
-                                                        setVinculosBase((prev) => {
-                                                            const next = { ...prev }
-                                                            if (!id) delete next[p.chave]
-                                                            else next[p.chave] = id
-                                                            return next
-                                                        })
-                                                    }}
+                                                    onChange={(id) => alterarVinculo(p, id)}
                                                 />
                                             </li>
                                         ))}
@@ -1458,6 +1643,9 @@ const ConfigConferenciaLaboratorio = () => {
                         />
                         <DashCard label="Órfãos Laboratório" valor={resumo.orfaosMellis} />
                         <DashCard label="Órfãos Plano" valor={resumo.orfaosHonorarios} />
+                        {resumo.valoresAceitos ? (
+                            <DashCard label="Valores aceitos" valor={resumo.valoresAceitos} />
+                        ) : null}
                         <DashCard
                             label="Revisões manuais"
                             valor={resumo.revisoesManuais}
@@ -1519,175 +1707,19 @@ const ConfigConferenciaLaboratorio = () => {
                         </div>
                     ) : null}
 
-                    <div className="conf_lab_table_wrap conf_lab_table_wrap_compact overflow-x-auto">
-                        <table className="conf_lab_table conf_lab_table_compact">
-                            <thead>
-                                <tr>
-                                    <th className="conf_lab_col_sel">
-                                        {podeEditar ? (
-                                            <CheckboxIndeterminado
-                                                checked={todosVisiveisMarcados}
-                                                indeterminate={
-                                                    algunsVisiveisMarcados && !todosVisiveisMarcados
-                                                }
-                                                onChange={alternarTodosVisiveis}
-                                                label="Selecionar todas as linhas visíveis"
-                                            />
-                                        ) : null}
-                                    </th>
-                                    <ThOrdenavel
-                                        coluna="status"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_status"
-                                    >
-                                        Status
-                                    </ThOrdenavel>
-                                    <th className="conf_lab_col_origem" aria-label="Origem" />
-                                    <ThOrdenavel coluna="tutor" ordem={ordem} onOrdenar={alternarOrdem}>
-                                        Tutor
-                                    </ThOrdenavel>
-                                    <ThOrdenavel coluna="animal" ordem={ordem} onOrdenar={alternarOrdem}>
-                                        Animal
-                                    </ThOrdenavel>
-                                    <ThOrdenavel
-                                        coluna="data"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_data"
-                                    >
-                                        Data
-                                    </ThOrdenavel>
-                                    <ThOrdenavel coluna="exame" ordem={ordem} onOrdenar={alternarOrdem}>
-                                        Exame
-                                    </ThOrdenavel>
-                                    <ThOrdenavel
-                                        coluna="valor"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_valor"
-                                    >
-                                        Valor
-                                    </ThOrdenavel>
-                                    <ThOrdenavel
-                                        coluna="difdias"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_difdias"
-                                    >
-                                        Dif dias
-                                    </ThOrdenavel>
-                                    <ThOrdenavel
-                                        coluna="difvalor"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_difvalor"
-                                    >
-                                        Dif Valor
-                                    </ThOrdenavel>
-                                    <ThOrdenavel
-                                        coluna="confianca"
-                                        ordem={ordem}
-                                        onOrdenar={alternarOrdem}
-                                        className="conf_lab_col_conf"
-                                    >
-                                        Confiança
-                                    </ThOrdenavel>
-                                    <ThOrdenavel coluna="resultado" ordem={ordem} onOrdenar={alternarOrdem}>
-                                        Resultado
-                                    </ThOrdenavel>
-                                </tr>
-                            </thead>
-                            {visiveis.map((r, i) => (
-                                <tbody
-                                    key={r.id}
-                                    className={`conf_lab_par ${classeStatus(r.status)}${selecionados.has(r.id) ? ' is-sel' : ''}`}
-                                    onClick={(e) => {
-                                        if (cliqueAbreDetalhe(e)) setItemAberto(r)
-                                    }}
-                                >
-                                    <tr>
-                                        <td className="conf_lab_col_sel" rowSpan={2}>
-                                            {podeEditar ? (
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selecionados.has(r.id)}
-                                                    onChange={() => alternarSelecao(r.id)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    aria-label={`Selecionar linha ${i + 1}`}
-                                                />
-                                            ) : (
-                                                i + 1
-                                            )}
-                                        </td>
-                                        <td className="conf_lab_col_status" rowSpan={2}>
-                                            <span className={`conf_lab_badge ${classeStatus(r.status)}`}>
-                                                {rotuloStatusConferencia(r.status)}
-                                            </span>
-                                        </td>
-                                        <td className="conf_lab_col_origem">
-                                            <img
-                                                src={logoE}
-                                                alt="Plano"
-                                                title="Plano"
-                                                className="conf_lab_ico_plano"
-                                            />
-                                        </td>
-                                        <td>{r.honorarios ? r.tutor_honorarios || '—' : '—'}</td>
-                                        <td>{r.honorarios ? r.pet_honorarios || '—' : '—'}</td>
-                                        <td className="conf_lab_col_data">
-                                            {r.honorarios
-                                                ? formatarDataConferencia(r.data_honorarios)
-                                                : '—'}
-                                        </td>
-                                        <td>
-                                            {r.honorarios ? r.exame_honorarios || '—' : '—'}
-                                        </td>
-                                        <td className="conf_lab_col_valor">
-                                            {r.honorarios
-                                                ? formatarValorConferencia(r.valor_honorarios)
-                                                : '—'}
-                                        </td>
-                                        <td className="conf_lab_col_difdias" rowSpan={2}>
-                                            {r.diferenca_dias ?? '—'}
-                                        </td>
-                                        <td className="conf_lab_col_difvalor" rowSpan={2}>
-                                            {textoDiferencaValor(r)}
-                                        </td>
-                                        <td className="conf_lab_col_conf" rowSpan={2}>
-                                            {r.confianca || '—'}
-                                        </td>
-                                        <td className="conf_lab_col_resultado" rowSpan={2}>
-                                            <span>{r.motivo || '—'}</span>
-                                            <small>{r.revisao?.acao || r.acao || 'Revisar'}</small>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td className="conf_lab_col_origem">
-                                            <span
-                                                className="conf_lab_ico_lab"
-                                                title="Laboratório"
-                                                aria-label="Laboratório"
-                                            >
-                                                <span className="conf_lab_frasco" aria-hidden="true" />
-                                            </span>
-                                        </td>
-                                        <td>{r.mellis ? r.tutor_mellislab || '—' : '—'}</td>
-                                        <td>{r.mellis ? r.pet_mellislab || '—' : '—'}</td>
-                                        <td className="conf_lab_col_data">
-                                            {r.mellis ? formatarDataConferencia(r.data_mellislab) : '—'}
-                                        </td>
-                                        <td>{r.mellis ? r.exame_mellislab || '—' : '—'}</td>
-                                        <td className="conf_lab_col_valor">
-                                            {r.mellis
-                                                ? formatarValorConferencia(r.valor_mellislab)
-                                                : '—'}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            ))}
-                        </table>
-                    </div>
+                    <ResultadoTabela
+                        key={`${filtro}|${busca}|${ordem.chave}|${ordem.dir}|${resultados.length}`}
+                        linhas={visiveis}
+                        selecionados={selecionados}
+                        podeEditar={podeEditar}
+                        ordem={ordem}
+                        onOrdenar={alternarOrdem}
+                        onToggle={alternarSelecao}
+                        onToggleTodos={alternarTodosVisiveis}
+                        onAbrir={setItemAberto}
+                        todosMarcados={todosVisiveisMarcados}
+                        algunsMarcados={algunsVisiveisMarcados}
+                    />
 
                     <div className="conf_lab_orfaos_grid !grid !grid-cols-1 gap-4 md:!grid-cols-2">
                         <div>
@@ -1744,6 +1776,8 @@ const ConfigConferenciaLaboratorio = () => {
                                     resultados,
                                     resumo,
                                     revisoes,
+                                    laboratorioNome,
+                                    periodoYm,
                                 })
                             }
                         >
@@ -1761,49 +1795,20 @@ const ConfigConferenciaLaboratorio = () => {
                 podeEditar={podeEditar}
                 orfaosPlano={orfaosHonorarios}
                 orfaosLab={orfaosMellis}
+                ctxMatching={{ equivalencias, aliasesPessoa }}
             />
             <CadastroRegrasConferencia
                 aberto={regrasAberto}
                 onClose={() => setRegrasAberto(false)}
+                nomeLaboratorio={laboratorioNome}
                 equivalencias={equivalencias}
                 perfis={perfis}
                 examesOpcoes={nomesExameOpcoes}
-                onSalvarEquivalencia={(a, b) => {
-                    if (!String(a || '').trim() || !String(b || '').trim()) {
-                        setErro('Informe os dois nomes da equivalência.')
-                        return
-                    }
-                    setEquivalencias((prev) => [...prev, { a: a.trim(), b: b.trim() }])
-                    setFeedback('Equivalência adicionada nesta conferência.')
-                }}
-                onAtualizarEquivalencia={(idx, a, b) => {
-                    const i = Number(idx)
-                    if (!Number.isInteger(i) || i < 0) return
-                    if (!String(a || '').trim() || !String(b || '').trim()) {
-                        setErro('Informe os dois nomes da equivalência.')
-                        return
-                    }
-                    setEquivalencias((prev) =>
-                        prev.map((p, j) =>
-                            j === i ? { ...p, a: a.trim(), b: b.trim() } : p,
-                        ),
-                    )
-                    setFeedback('Equivalência atualizada nesta conferência.')
-                }}
-                onRemoverEquivalencia={(idx) => {
-                    const i = Number(idx)
-                    if (!Number.isInteger(i) || i < 0) return
-                    setEquivalencias((prev) => prev.filter((_, j) => j !== i))
-                    setFeedback('Equivalência removida desta conferência.')
-                }}
-                onSalvarPerfil={(dados) => {
-                    if (!String(dados?.nome || '').trim()) {
-                        setErro('Informe o nome do perfil.')
-                        return
-                    }
-                    setPerfis((prev) => [...prev, dados])
-                    setFeedback('Perfil adicionado nesta conferência.')
-                }}
+                onSalvarEquivalencia={(a, b) => void salvarEquivalencia(a, b)}
+                onAtualizarEquivalencia={(idx, a, b) => void atualizarEquivalencia(idx, a, b)}
+                onRemoverEquivalencia={(idx) => void removerEquivalencia(idx)}
+                onSalvarPerfil={(dados) => void salvarPerfil(dados)}
+                onRemoverPerfil={(idx) => void removerPerfil(idx)}
             />
         </main>
     )

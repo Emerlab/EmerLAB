@@ -3731,3 +3731,94 @@ body.dark-mode .conf_lab_cmp_row {
 }
 
 
+
+/* ── Laboratório / competência, sugestões de encaixe e justificativa ── */
+.conf_lab_ident {
+    margin: 0 0 1rem;
+    align-items: end;
+}
+
+.conf_lab_ident_campo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.conf_lab_ident_campo input[type='month'] {
+    border: 1px solid var(--conf-line);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+    background: #fff;
+    min-height: 2.5rem;
+}
+
+.conf_lab_ident_info {
+    margin: 0;
+    align-self: center;
+}
+
+.conf_lab_sugestoes {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.conf_lab_sugestao {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    border: 1px solid var(--conf-line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.conf_lab_sugestao small {
+    color: #5b7488;
+}
+
+.conf_lab_sugestao.is-on,
+.conf_lab_sugestao:hover {
+    border-color: #1f6f9f;
+    background: #eef6fb;
+}
+
+.conf_lab_justificativa {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0.8rem 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.conf_lab_justificativa textarea {
+    border: 1px solid var(--conf-line);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+    resize: vertical;
+    background: #fff;
+}
+
+body.dark-mode .conf_lab_ident_campo input[type='month'],
+body.dark-mode .conf_lab_sugestao,
+body.dark-mode .conf_lab_justificativa textarea {
+    background: #14212b;
+    color: inherit;
+}
+
+body.dark-mode .conf_lab_sugestao.is-on,
+body.dark-mode .conf_lab_sugestao:hover {
+    background: #1b3345;
+}

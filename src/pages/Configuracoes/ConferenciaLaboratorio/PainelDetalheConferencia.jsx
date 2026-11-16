@@ -9,6 +9,9 @@ import { useDrawerDialog } from './useDrawerDialog.js'
 import { rotuloStatusConferencia } from '../../../lib/configuracoes/conferencia/index.js'
 import { nomesPessoaEquivalentes, petsEquivalentes } from '../../../lib/configuracoes/conferencia/normalize.js'
 import { normalizeExam } from '../../../lib/configuracoes/conferencia/examSimilarity.js'
+import { sugerirEncaixes } from '../../../lib/configuracoes/conferencia/sugestoes.js'
+import { compareValues } from '../../../lib/configuracoes/conferencia/values.js'
+import { JUSTIFICATIVA_MIN } from '../../../lib/configuracoes/conferencia/revisao.js'
 
 function rotuloLinhaRelatorio(linha) {
     if (!linha) return ''
@@ -124,13 +127,16 @@ export default function PainelDetalheConferencia({
     podeEditar,
     orfaosPlano = [],
     orfaosLab = [],
+    ctxMatching = {},
 }) {
     const [escolhaOposto, setEscolhaOposto] = useState({ itemId: null, value: '' })
+    const [justificativa, setJustificativa] = useState({ itemId: null, texto: '' })
     const closeRef = useDrawerDialog({ aberto: Boolean(item), onClose })
     const ehOrfaoLab = item?.status === 'ORFAO_MELLISLAB'
     const ehOrfaoPlano = item?.status === 'ORFAO_HONORARIOS'
     const ehOrfao = ehOrfaoLab || ehOrfaoPlano
     const escolhaAtual = escolhaOposto.itemId === item?.id ? escolhaOposto.value : ''
+    const textoJust = justificativa.itemId === item?.id ? justificativa.texto : ''
 
     const itensOpostos = useMemo(() => {
         const lista = ehOrfaoLab ? orfaosPlano : ehOrfaoPlano ? orfaosLab : []
@@ -147,6 +153,17 @@ export default function PainelDetalheConferencia({
             })
             .filter(Boolean)
     }, [ehOrfaoLab, ehOrfaoPlano, orfaosPlano, orfaosLab, item?.id])
+
+    const sugestoes = useMemo(() => {
+        if (!item || !ehOrfao) return []
+        const opostos = ehOrfaoLab ? orfaosPlano : orfaosLab
+        return sugerirEncaixes(item, opostos, ctxMatching, 5).map((sg) => {
+            const o = opostos.find((x) => x.id === sg.id)
+            const linha = ehOrfaoLab ? o?.honorarios : o?.mellis
+            return { ...sg, rotulo: rotuloLinhaRelatorio(linha) }
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [item?.id, ehOrfao, ehOrfaoLab, orfaosPlano, orfaosLab, ctxMatching.equivalencias, ctxMatching.aliasesPessoa])
 
     const linhaOposta = useMemo(() => {
         if (!escolhaAtual) return null
@@ -198,6 +215,26 @@ export default function PainelDetalheConferencia({
                             Busque e escolha a entrada do relatório oposto. A correspondência não é
                             escolhida sozinha.
                         </p>
+                        {sugestoes.length ? (
+                            <ul className="conf_lab_sugestoes" aria-label="Sugestões de encaixe">
+                                {sugestoes.map((sg) => (
+                                    <li key={sg.id}>
+                                        <button
+                                            type="button"
+                                            className={`conf_lab_sugestao${escolhaAtual === sg.id ? ' is-on' : ''}`}
+                                            onClick={() =>
+                                                setEscolhaOposto({ itemId: item?.id ?? null, value: sg.id })
+                                            }
+                                        >
+                                            <span>{sg.rotulo}</span>
+                                            <small>Parecido em: {sg.motivos.join(', ') || '—'}</small>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="conf_lab_muted">Nenhuma sugestão parecida — use a busca abaixo.</p>
+                        )}
                         <ComboExame
                             itens={itensOpostos}
                             value={escolhaAtual}
@@ -222,7 +259,7 @@ export default function PainelDetalheConferencia({
                     <p className="conf_lab_muted">Código na Valores de Base: {codigoElab}</p>
                 ) : null}
 
-                {item.candidatos?.length > 1 ? (
+                {item.candidatos?.length > 1 && !item.honorarios ? (
                     <div className="conf_lab_candidatos">
                         <h3>Candidatos (escolha um)</h3>
                         <ul>
@@ -236,7 +273,18 @@ export default function PainelDetalheConferencia({
                                         <button
                                             type="button"
                                             className="credenciamento_main_action_btn"
-                                            onClick={() => onAcao('confirmar', { honorariosId: c.id })}
+                                            disabled={!orfaosPlano.some((o) => o.honorarios?.id === c.id)}
+                                            title={
+                                                orfaosPlano.some((o) => o.honorarios?.id === c.id)
+                                                    ? ''
+                                                    : 'Este item do plano já foi usado em outro par.'
+                                            }
+                                            onClick={() =>
+                                                onAcao('confirmar', {
+                                                    honorariosId: c.id,
+                                                    justificativa: textoJust,
+                                                })
+                                            }
                                         >
                                             Usar este
                                         </button>
@@ -247,6 +295,20 @@ export default function PainelDetalheConferencia({
                     </div>
                 ) : null}
 
+                {podeEditar && !ehOrfao ? (
+                    <label className="conf_lab_justificativa">
+                        <span>
+                            Justificativa <small>(obrigatória para aceitar um valor divergente)</small>
+                        </span>
+                        <textarea
+                            rows={2}
+                            value={textoJust}
+                            onChange={(e) => setJustificativa({ itemId: item.id, texto: e.target.value })}
+                            placeholder="Ex.: reajuste autorizado pelo financeiro"
+                        />
+                    </label>
+                ) : null}
+
                 {podeEditar ? (
                     <footer className="conf_lab_drawer_acoes">
                         {!ehOrfao ? (
@@ -254,35 +316,52 @@ export default function PainelDetalheConferencia({
                                 <button
                                     type="button"
                                     className="credenciamento_main_action_btn"
-                                    onClick={() => onAcao('confirmar')}
+                                    onClick={() => onAcao('confirmar', { justificativa: textoJust })}
                                 >
                                     Confirmar correspondência
                                 </button>
+                                {item.honorarios &&
+                                item.mellis &&
+                                !compareValues(item.valor_honorarios, item.valor_mellislab).ok ? (
+                                    <button
+                                        type="button"
+                                        className="credenciamento_main_action_btn secondary"
+                                        disabled={textoJust.trim().length < JUSTIFICATIVA_MIN}
+                                        title={
+                                            textoJust.trim().length < JUSTIFICATIVA_MIN
+                                                ? 'Escreva a justificativa para aceitar o valor.'
+                                                : ''
+                                        }
+                                        onClick={() => onAcao('aceitar_valor', { justificativa: textoJust })}
+                                    >
+                                        Aceitar valor
+                                    </button>
+                                ) : null}
                                 <button
                                     type="button"
                                     className="credenciamento_main_action_btn secondary"
-                                    onClick={() => onAcao('nao_corresponde')}
+                                    onClick={() => onAcao('nao_corresponde', { justificativa: textoJust })}
                                 >
                                     Não corresponde
                                 </button>
                                 <button
                                     type="button"
                                     className="credenciamento_main_action_btn secondary"
-                                    onClick={() => onAcao('tutor_alternativo')}
+                                    onClick={() => onAcao('tutor_alternativo', { justificativa: textoJust })}
                                 >
                                     Tutor alternativo
                                 </button>
                                 <button
                                     type="button"
                                     className="credenciamento_main_action_btn secondary"
-                                    onClick={() => onAcao('exame_equivalente')}
+                                    onClick={() => onAcao('exame_equivalente', { justificativa: textoJust })}
                                 >
                                     Exame equivalente
                                 </button>
                                 <button
                                     type="button"
                                     className="credenciamento_main_action_btn secondary"
-                                    onClick={() => onAcao('perfil_equivalente')}
+                                    onClick={() => onAcao('perfil_equivalente', { justificativa: textoJust })}
                                 >
                                     Perfil equivalente
                                 </button>
@@ -291,7 +370,7 @@ export default function PainelDetalheConferencia({
                         <button
                             type="button"
                             className="credenciamento_main_action_btn secondary"
-                            onClick={() => onAcao('ignorar')}
+                            onClick={() => onAcao('ignorar', { justificativa: textoJust })}
                         >
                             Ignorar
                         </button>
