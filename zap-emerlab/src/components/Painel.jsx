@@ -16,6 +16,7 @@ import Redimensionar from './Redimensionar.jsx'
 import Modal from './Modal.jsx'
 import MenuContexto from './MenuContexto.jsx'
 import Transferir from './Transferir.jsx'
+import { eventosParaMim, textoEvento } from '../eventosConversa.js'
 import SeletorDepartamento from './SeletorDepartamento.jsx'
 import Seletor from './Seletor.jsx'
 import PreviaMicrosoft from './PreviaMicrosoft.jsx'
@@ -148,6 +149,8 @@ export default function Painel({ sessao, prefs, setPrefs, aoSair, recarregarSess
     // aviso: WATI aberta = operador online para o robô / round-robin
     const [avisoWatiAberta, setAvisoWatiAberta] = useState(() => !ler('zap.avisoWatiAbertaOk', false))
     const naoLidasAntes = useRef(null)
+    const listaAnterior = useRef(null)
+    const abrirRef = useRef(null)
     const campoBusca = useRef(null)
     const raiz = useRef(null)
     // largura da lista arrastada pelo atendente (null = padrão do layout)
@@ -245,7 +248,23 @@ export default function Painel({ sessao, prefs, setPrefs, aoSair, recarregarSess
                 setErroLista('')
                 const relevantes = lista.filter(noEscopoNotificacao)
                 const total = relevantes.reduce((s, c) => s + c.naoLidas, 0)
-                if (naoLidasAntes.current != null && total > naoLidasAntes.current) {
+                // eventos "para mim" (menção, transferida, resposta): só em leitura sem busca e no mesmo canal
+                const ant = listaAnterior.current
+                listaAnterior.current = q ? null : { canal, lista }
+                const eventos = !q && ant && ant.canal === canal ? eventosParaMim(ant.lista, lista, usuario.email) : []
+                if (eventos.length) {
+                    if (prefs.som) tocarBip()
+                    if (prefs.notificacoes && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+                        for (const ev of eventos.slice(0, 3)) {
+                            const n = new Notification(textoEvento(ev, nomeExibicao(ev.conversa)), { body: ev.conversa.ultimaMsg || '', icon: '/favicon.svg', tag: `ev:${ev.conversa.waId}` })
+                            n.onclick = () => {
+                                window.focus()
+                                abrirRef.current?.(ev.conversa)
+                                n.close()
+                            }
+                        }
+                    }
+                } else if (naoLidasAntes.current != null && total > naoLidasAntes.current) {
                     if (prefs.som) tocarBip()
                     if (prefs.notificacoes && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
                         const c = relevantes.find((x) => x.naoLidas > 0)
@@ -260,7 +279,7 @@ export default function Painel({ sessao, prefs, setPrefs, aoSair, recarregarSess
                 setCarregando(false)
             }
         },
-        [busca, canal, prefs.som, prefs.notificacoes, noEscopoNotificacao],
+        [busca, canal, prefs.som, prefs.notificacoes, noEscopoNotificacao, usuario.email],
     )
 
     // ao trocar visão admin ↔ atendente, recalcula o título sem disparar bip/notificação
@@ -508,6 +527,8 @@ export default function Painel({ sessao, prefs, setPrefs, aoSair, recarregarSess
             api(`conversas/${encodeURIComponent(c.waId)}/lida`, { method: 'POST' }).catch(() => {})
         }
     }
+
+    abrirRef.current = abrir
 
     // mensagem nova na conversa que está aberta (e visível) já conta como lida
     const naoLidasAberta = conversaAtual?.naoLidas || 0
@@ -1001,7 +1022,7 @@ export default function Painel({ sessao, prefs, setPrefs, aoSair, recarregarSess
                         avisar={avisar}
                     />
                 ) : (
-                    <FilaEspera conversas={conversasVisao} canal={canal} usuarioEmail={usuario.email} aoAbrir={abrir} />
+                    <FilaEspera conversas={conversasVisao} canal={canal} usuarioEmail={usuario.email} aoAbrir={abrir} prefs={prefs} setPrefs={setPrefs} />
                 )}
             </main>
             </>

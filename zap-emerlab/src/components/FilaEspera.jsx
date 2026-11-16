@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { tempoDesde, janelaDaConversa, calcularEspera, nomeExibicao, formatarTelefone, CANAIS } from '../util.js'
 import { Avatar, ContatoMetaPills } from './ListaConversas.jsx'
 import Icone from './Icone.jsx'
+import AvisoNotificacoes from './AvisoNotificacoes.jsx'
 
 // a partir de 20h de espera a janela entra em risco (faltam 4h para fechar)
 const RISCO_MS = 4 * 3600 * 1000
@@ -26,7 +27,7 @@ const CATEGORIAS = [
 ]
 
 // Painel mostrado quando nenhuma conversa está aberta: responde "quem está esperando resposta, e há quanto tempo?"
-export default function FilaEspera({ conversas, canal, usuarioEmail, aoAbrir }) {
+export default function FilaEspera({ conversas, canal, usuarioEmail, aoAbrir, prefs, setPrefs }) {
     // relógio próprio para os tempos de espera andarem sem recarregar a lista
     const [agora, setAgora] = useState(() => Date.now())
     const [categoria, setCategoria] = useState('esperando')
@@ -67,6 +68,7 @@ export default function FilaEspera({ conversas, canal, usuarioEmail, aoAbrir }) 
 
     return (
         <section className="fila-painel" aria-labelledby="fila-titulo">
+            {prefs && setPrefs ? <AvisoNotificacoes prefs={prefs} setPrefs={setPrefs} /> : null}
             <header className="fila-topo">
                 <div>
                     <h2 id="fila-titulo">Esperando resposta</h2>
