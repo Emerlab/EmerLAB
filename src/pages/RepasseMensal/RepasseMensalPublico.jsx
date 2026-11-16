@@ -387,7 +387,7 @@ export default function RepasseMensalPublico() {
                 <div className="rm_aviso rm_aviso--ok" role="status">
                     Pagamento feito por {r.comprovante.forma === 'pix' ? 'PIX' : 'boleto'} em {dataBr(r.comprovante.data)} ({brl(r.comprovante.valor)}).{' '}
                     <button type="button" className="rm_link" onClick={abrirComprovante}>
-                        Ver comprovante
+                        Baixar comprovante
                     </button>
                 </div>
             )}

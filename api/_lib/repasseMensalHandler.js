@@ -4,7 +4,7 @@
  * Públicas (POST, pelo token do link; sem JWT): publico-ler | publico-aprovar | publico-upload-url |
  *   publico-documento | publico-reprovar | publico-comprovante. Erros são genéricos para não revelar se o token existe.
  * Internas (JWT com pagamentos.edit): criar-relatorios | link | planejar-envio | enviar-lote | cancelar-agendamento |
- *   revisar-documento | marcar-tratado | upload-url | enviar-comprovante | enviar-comprovante-lote | desfazer-pagamento | revogar-link | novo-link | url-arquivo.
+ *   revisar-documento | marcar-tratado | upload-url | enviar-comprovante | enviar-comprovante-lote | upload-url-registro | enviar-comprovante-registros | desfazer-pagamento | revogar-link | novo-link | url-arquivo.
  *
  * O banco é acessado só com service role. O token em claro nunca é gravado: guardamos sha256 e o token é
  * recomputável por HMAC(id, versão) para o «Copiar link».
@@ -257,7 +257,10 @@ async function publicoComprovante(admin, { token }) {
     const rel = await resolverToken(admin, token)
     const { data } = await admin.from('repasse_comprovantes').select('storage_path').eq('relatorio_id', rel.id).order('enviado_em', { ascending: false }).limit(1)
     if (!data?.[0]) throw new ErroApi(404, 'Comprovante indisponível.')
-    const { data: url } = await admin.storage.from(BUCKET).createSignedUrl(data[0].storage_path, 120)
+    // `download` faz o navegador baixar o arquivo (com nome amigável) em vez de só abrir
+    const ext = String(data[0].storage_path).split('.').pop()
+    const nome = `comprovante-${competenciaLabel(rel.mes, rel.ano).replace('/', '-')}.${ext}`
+    const { data: url } = await admin.storage.from(BUCKET).createSignedUrl(data[0].storage_path, 120, { download: nome })
     return { url: url?.signedUrl || null }
 }
 
@@ -617,6 +620,81 @@ async function enviarComprovanteLote(admin, { relatorio_ids, path, data_pagament
     return { ok: true, meses: ids.length }
 }
 
+/** Pasta do comprovante de um registro, com ou sem relatório (mesmo caminho da API pública). */
+const pastaComprovanteRegistro = (reg) => `${reg.ano}-${String(reg.mes).padStart(2, '0')}/registro-${reg.id}/comprovante/`
+
+async function uploadUrlRegistro(admin, { registro_id, nome, tamanho }) {
+    const reg = await carregarRegistro(admin, registro_id)
+    const erro = validarArquivoRepasse({ nome, tamanho: Number(tamanho) })
+    if (erro) throw new ErroApi(400, erro)
+    const ext = String(nome).toLowerCase().split('.').pop()
+    const path = `${pastaComprovanteRegistro(reg)}${crypto.randomUUID()}.${ext}`
+    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path)
+    if (error) throw new ErroApi(500, 'Não foi possível preparar o envio do arquivo.')
+    return { path, uploadToken: data.token }
+}
+
+/**
+ * Comprovante para um ou mais meses do MESMO prestador, com ou sem relatório de repasse vinculado: um arquivo, um e-mail,
+ * uma linha de comprovante por registro. Meses sem relatório entram no e-mail sem link; sem nenhum relatório, o e-mail
+ * não tem o botão «Ver relatório». O arquivo foi subido por `upload-url-registro` do primeiro registro.
+ */
+async function enviarComprovanteRegistros(admin, { registro_ids, path, data_pagamento, valor }, ctx) {
+    const ids = [...new Set(Array.isArray(registro_ids) ? registro_ids : [])].filter(Boolean)
+    if (ids.length < 1 || ids.length > 24) throw new ErroApi(400, 'Selecione de 1 a 24 meses.')
+    const registros = []
+    for (const id of ids) registros.push(await carregarRegistro(admin, id))
+    const prestadorId = registros[0].prestador_id
+    if (prestadorId == null || registros.some((r) => String(r.prestador_id) !== String(prestadorId))) {
+        throw new ErroApi(400, 'Os meses precisam ser do mesmo prestador.')
+    }
+    const { data: relsBrutos } = await admin.from('repasse_relatorios').select('*').in('registro_id', ids).order('criado_em', { ascending: false })
+    const relDoRegistro = new Map()
+    for (const r of relsBrutos || []) if (!relDoRegistro.has(r.registro_id)) relDoRegistro.set(r.registro_id, r)
+    if ([...relDoRegistro.values()].some((r) => r.divergente)) throw new ErroApi(409, 'Há relatório com total que não confere.')
+    if (!String(path || '').startsWith(pastaComprovanteRegistro(registros[0]))) throw new ErroApi(400, 'Arquivo inválido.')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data_pagamento || ''))) throw new ErroApi(400, 'Informe a data do pagamento.')
+    const v = Number(valor)
+    if (!Number.isFinite(v) || v <= 0) throw new ErroApi(400, 'Informe o valor pago.')
+    const para = await emailDoPrestador(admin, prestadorId, registros.map((r) => r.email_financeiro).find((e) => String(e || '').trim()))
+    if (!para) throw new ErroApi(422, 'Prestador sem e-mail no cadastro.')
+    const { data: arquivo, error } = await admin.storage.from(BUCKET).download(path)
+    if (error || !arquivo) throw new ErroApi(400, 'Arquivo do comprovante não encontrado.')
+    const buf = Buffer.from(await arquivo.arrayBuffer())
+    const config = await carregarConfig(admin)
+    const forma = formaDoRegistro(registros[0])
+    const ordenados = [...registros].sort((a, b) => a.ano - b.ano || a.mes - b.mes)
+    // bruto do mês: o do relatório quando há (é o que o prestador aprovou), senão o do registro
+    const brutoDoMes = (reg) => Number(relDoRegistro.get(reg.id)?.total_repasse ?? reg.valor ?? 0)
+    const valorDoMes = (reg) => (String(reg.tipo_repasse || '').toLowerCase() === 'rpa' ? descontoRpaDoRepasse(brutoDoMes(reg)).liquido : brutoDoMes(reg))
+    const linkDoMes = (reg) => {
+        const rel = relDoRegistro.get(reg.id)
+        return rel ? linkPublico(tokenDoRelatorio(rel.id, rel.token_versao)) : ''
+    }
+    const competencia = ordenados.map((r) => competenciaLabel(r.mes, r.ano)).join(', ')
+    const mesesEmail = ordenados.map((r) => ({ competencia: competenciaLabel(r.mes, r.ano), valor: valorDoMes(r), link: linkDoMes(r) }))
+    const m = montarEmailRepasseComprovante({
+        prestador: registros[0].prestador_nome, competencia, valor: v,
+        dataPagamento: dataBr(data_pagamento), forma, chavePix: registros[0].chave_pix || '', vencimentoBoleto: '',
+        meses: ordenados.length > 1 ? mesesEmail : [],
+        link: ordenados.length === 1 ? mesesEmail[0].link : '', whatsapp: config.whatsapp_financeiro,
+    })
+    const ext = path.split('.').pop()
+    const enviado = await enviarEmailResend({
+        to: para, subject: m.subject, html: m.html, text: m.text, from: remetente(config),
+        attachments: [{ filename: `comprovante-${competencia.replace(/[/, ]+/g, '-')}.${ext}`, content: buf }],
+    })
+    for (const reg of registros) {
+        const valorMes = valorDoMes(reg)
+        await registrarComprovante(admin, {
+            registro: reg, relatorio: relDoRegistro.get(reg.id) || null, path, data_pagamento, valor: valorMes, forma,
+            autor: ctx.user.email || ctx.user.id, enviadoPor: ctx.user.id, resendEmailId: enviado?.id || null,
+            dadosEvento: { valor: arredondar(valorMes), valor_total_pago: arredondar(v), data_pagamento, forma, lote: ids.length },
+        })
+    }
+    return { ok: true, meses: ids.length, comRelatorio: registros.filter((r) => relDoRegistro.has(r.id)).length }
+}
+
 /** Desfaz um pagamento enviado por engano: remove o comprovante do relatório e desmarca «pago». Exige motivo. */
 async function desfazerPagamento(admin, { relatorio_id, motivo }, ctx) {
     const texto = String(motivo || '').trim()
@@ -680,6 +758,8 @@ const INTERNAS = {
     'upload-url': uploadUrlInterno,
     'enviar-comprovante': enviarComprovante,
     'enviar-comprovante-lote': enviarComprovanteLote,
+    'upload-url-registro': uploadUrlRegistro,
+    'enviar-comprovante-registros': enviarComprovanteRegistros,
     'desfazer-pagamento': desfazerPagamento,
     'revogar-link': revogarLink,
     'novo-link': novoLink,
