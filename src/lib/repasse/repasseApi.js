@@ -126,6 +126,14 @@ export async function enviarComprovanteLote(relatorio_ids, arquivo, { data_pagam
     return chamar('enviar-comprovante-lote', { relatorio_ids, path: prep.path, data_pagamento, valor })
 }
 
+/** Comprovante para meses do mesmo prestador com ou sem relatório vinculado (o arquivo sobe pelo primeiro registro). */
+export async function enviarComprovanteRegistros(registro_ids, arquivo, { data_pagamento, valor }) {
+    const prep = await chamar('upload-url-registro', { registro_id: registro_ids[0], nome: arquivo.name, tamanho: arquivo.size })
+    const { error } = await supabase.storage.from(BUCKET_REPASSE).uploadToSignedUrl(prep.path, prep.uploadToken, arquivo)
+    if (error) throw new Error('Não foi possível enviar o arquivo do comprovante.')
+    return chamar('enviar-comprovante-registros', { registro_ids, path: prep.path, data_pagamento, valor })
+}
+
 export const desfazerPagamento = (relatorio_id, motivo) => chamar('desfazer-pagamento', { relatorio_id, motivo })
 
 // ---- leituras diretas (RLS) ----

@@ -37,4 +37,16 @@ describe('e-mail de comprovante', () => {
         expect(m.html).toContain('https://x/r/out')
         expect(m.text).toContain('• out/2026: https://x/r/out')
     })
+    it('sem relatório vinculado: e-mail sem botão nem link de relatório', () => {
+        const m = montarEmailRepasseComprovante({ ...base, link: '', competencia: 'nov/2026', valor: 690 })
+        expect(m.html).not.toContain('Ver relatório')
+        expect(m.text).not.toContain('Ver relatório')
+        expect(m.html).toContain('Valor pago')
+        const varios = montarEmailRepasseComprovante({
+            ...base, link: '', competencia: 'set/2026, out/2026', valor: 810,
+            meses: [{ competencia: 'set/2026', valor: 400, link: '' }, { competencia: 'out/2026', valor: 410, link: 'https://x/r/out' }],
+        })
+        expect(varios.html).toContain('https://x/r/out')
+        expect(varios.html).not.toContain('https://x/r/set')
+    })
 })

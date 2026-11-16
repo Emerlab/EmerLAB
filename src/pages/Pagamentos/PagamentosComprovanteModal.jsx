@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ehTipoRpa, formatarValorMonetarioBr, valorLiquidoRpa } from '../../lib/pagamentosValor.js'
-import { enviarComprovante, enviarComprovanteLote } from '../../lib/repasse/repasseApi.js'
+import { enviarComprovante, enviarComprovanteLote, enviarComprovanteRegistros } from '../../lib/repasse/repasseApi.js'
 import { validarArquivoRepasse } from '../../lib/repasse/repasseCore.js'
 import { Button, Modal } from '../../components/ui'
 
@@ -23,7 +23,7 @@ function tipoDaChavePix(chave) {
 
 /** Valor a pagar de um item: RPA já com o desconto de 11%. */
 const valorAPagar = (item) => {
-    const bruto = Number(item.relatorio?.total_repasse || 0)
+    const bruto = Number(item.relatorio?.total_repasse ?? item.registro?.valor ?? 0)
     return ehTipoRpa(item.registro?.tipoRepasse) ? valorLiquidoRpa(bruto) ?? bruto : bruto
 }
 
@@ -54,9 +54,9 @@ function BotaoCopiar({ texto, rotulo = 'Copiar' }) {
  * itens = [{ registro, relatorio }]. Um item: comprovante de um mês. Vários (mesmo prestador): um comprovante
  * para todos os meses, um único e-mail ao prestador.
  */
-export default function PagamentosComprovanteModal({ open, onClose, itens, onEnviado, aviso = '' }) {
+export default function PagamentosComprovanteModal({ open, onClose, itens, onEnviado, onSoMarcar = null, aviso = '' }) {
     const lista = itens || []
-    const somaBruta = lista.reduce((t, i) => t + Number(i.relatorio?.total_repasse || 0), 0)
+    const somaBruta = lista.reduce((t, i) => t + Number(i.relatorio?.total_repasse ?? i.registro?.valor ?? 0), 0)
     const somaRepasse = Math.round(lista.reduce((t, i) => t + valorAPagar(i), 0) * 100) / 100
     const temRpa = lista.some((i) => ehTipoRpa(i.registro?.tipoRepasse))
     const [arquivo, setArquivo] = useState(null)
@@ -92,7 +92,8 @@ export default function PagamentosComprovanteModal({ open, onClose, itens, onEnv
     const lote = lista.length > 1
     const tipo = String(registro.tipoRepasse || '').toLowerCase()
     const forma = tipo === 'boleto' ? 'boleto' : 'pix'
-    const naoAprovados = lista.filter((i) => i.relatorio.status !== 'aprovado')
+    const semRelatorio = lista.filter((i) => !i.relatorio)
+    const naoAprovados = lista.filter((i) => i.relatorio && i.relatorio.status !== 'aprovado')
 
     const enviar = async () => {
         setErro('')
@@ -102,7 +103,8 @@ export default function PagamentosComprovanteModal({ open, onClose, itens, onEnv
         if (!Number.isFinite(v) || v <= 0) return setErro('Informe o valor pago.')
         setEnviando(true)
         try {
-            if (lote) await enviarComprovanteLote(lista.map((i) => i.relatorio.id), arquivo, { data_pagamento: data, valor: v })
+            if (semRelatorio.length) await enviarComprovanteRegistros(lista.map((i) => i.registro.id), arquivo, { data_pagamento: data, valor: v })
+            else if (lote) await enviarComprovanteLote(lista.map((i) => i.relatorio.id), arquivo, { data_pagamento: data, valor: v })
             else await enviarComprovante(lista[0].relatorio.id, arquivo, { data_pagamento: data, valor: v })
             onEnviado?.(lista.map((i) => i.registro.id))
             onClose()
@@ -121,10 +123,13 @@ export default function PagamentosComprovanteModal({ open, onClose, itens, onEnv
             onClose={onClose}
             busy={enviando}
             title={lote ? `Enviar comprovante de ${lista.length} meses` : 'Enviar comprovante'}
-            description={`${registro.prestadorNome} · ${lista.map((i) => comp(i.relatorio)).join(', ')}`}
+            description={`${registro.prestadorNome} · ${lista.map((i) => comp(i.relatorio || i.registro)).join(', ')}`}
             footer={
                 <>
                     <Button variant="secondary" disabled={enviando} onClick={onClose}>Cancelar</Button>
+                    {onSoMarcar && semRelatorio.length === lista.length ? (
+                        <Button variant="secondary" disabled={enviando} onClick={() => void onSoMarcar()}>Só marcar como pago (sem e-mail)</Button>
+                    ) : null}
                     <Button disabled={enviando} onClick={() => void enviar()}>{enviando ? 'Enviando e avisando o prestador…' : 'Enviar comprovante e marcar pago'}</Button>
                 </>
             }
@@ -135,12 +140,18 @@ export default function PagamentosComprovanteModal({ open, onClose, itens, onEnv
                         Atenção: {naoAprovados.length === 1 ? `o relatório de ${comp(naoAprovados[0].relatorio)} ainda não foi aprovado (${naoAprovados[0].relatorio.status.replace(/_/g, ' ')})` : `${naoAprovados.length} relatórios ainda não foram aprovados`}. Você pode enviar mesmo assim.
                     </p>
                 ) : null}
+                {semRelatorio.length ? (
+                    <p className="rounded-xl bg-surface-tint px-3 py-2 text-sm">
+                        {semRelatorio.length === lista.length ? 'Sem relatório de repasse vinculado: ' : `${semRelatorio.length} mês(es) sem relatório vinculado (${semRelatorio.map((i) => comp(i.registro)).join(', ')}): `}
+                        o e-mail vai com o comprovante anexado{semRelatorio.length === lista.length ? ' e sem o botão «Ver relatório»' : ', e esses meses ficam sem link de relatório'}.
+                    </p>
+                ) : null}
                 {aviso ? <p className="rounded-xl bg-surface-tint px-3 py-2 text-sm">{aviso}</p> : null}
                 {lote ? (
                     <ul className="rounded-xl bg-surface-tint px-3 py-2 text-sm">
                         {lista.map((i) => (
-                            <li key={i.relatorio.id} className="flex justify-between gap-3">
-                                <span>{comp(i.relatorio)}</span>
+                            <li key={i.registro.id} className="flex justify-between gap-3">
+                                <span>{comp(i.relatorio || i.registro)}</span>
                                 <strong>{formatarValorMonetarioBr(valorAPagar(i))}</strong>
                             </li>
                         ))}

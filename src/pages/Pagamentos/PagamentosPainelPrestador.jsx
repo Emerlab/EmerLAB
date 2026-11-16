@@ -128,9 +128,12 @@ export default function PagamentosPainelPrestador({ prestadorId, prestadorNome, 
             setConfirmaManual(null)
         })
 
+    // meses sem relatório também recebem o e-mail (sem o botão do relatório); ordem cronológica
     const aoPagar = () => {
-        if (itensSelecionados.length) setPagando({ itens: itensSelecionados, legados: legadosSelecionados })
-        else setConfirmaManual(legadosSelecionados)
+        const itens = [...itensSelecionados, ...legadosSelecionados.map((r) => ({ registro: r, relatorio: null }))].sort(
+            (a, b) => a.registro.ano - b.registro.ano || a.registro.mes - b.registro.mes,
+        )
+        setPagando({ itens, legados: legadosSelecionados })
     }
 
     const selecionaveis = regs.filter((r) => !r.pago && (pagavel(r) || manualPagavel(r)))
@@ -286,9 +289,8 @@ export default function PagamentosPainelPrestador({ prestadorId, prestadorNome, 
                     <footer className="pag_painel_rodape">
                         {qtdSel > 0 ? (
                             <p className="pag_painel_dica">
-                                {itensSelecionados.length > 0 ? `${itensSelecionados.length} com relatório: um comprovante e um e-mail.` : ''}
-                                {itensSelecionados.length > 0 && legadosSelecionados.length > 0 ? ' ' : ''}
-                                {legadosSelecionados.length > 0 ? `${legadosSelecionados.length} sem relatório: marcado(s) como pago(s), sem comprovante.` : ''}
+                                Um comprovante e um e-mail para os meses selecionados
+                                {legadosSelecionados.length > 0 ? ` (${legadosSelecionados.length} sem relatório: o e-mail vai sem o botão do relatório).` : '.'}
                             </p>
                         ) : null}
                         <div className="pag_painel_total">
@@ -307,9 +309,9 @@ export default function PagamentosPainelPrestador({ prestadorId, prestadorNome, 
                     open
                     key={pagando.itens.map((i) => i.registro.id).join(',')}
                     itens={pagando.itens}
-                    aviso={pagando.legados.length ? `Depois do envio, ${pagando.legados.length} mês(es) legado/sem relatório (${pagando.legados.map(comp).join(', ')}, ${formatarValorMonetarioBr(pagando.legados.reduce((t, r) => t + Number(r.valor || 0), 0))}) também serão marcados como pagos, sem comprovante. O valor acima considera só os meses com relatório.` : ''}
                     onClose={() => setPagando(null)}
-                    onEnviado={() => void rodar('pg', async () => { for (const r of pagando.legados) await atualizarPagamentoRegistro(r.id, { ...r, pago: true }) })}
+                    onEnviado={() => void rodar('pg', async () => {})}
+                    onSoMarcar={() => rodar('manual', async () => { for (const r of pagando.legados) await atualizarPagamentoRegistro(r.id, { ...r, pago: true }); setPagando(null) })}
                 />
             ) : null}
 
@@ -318,7 +320,7 @@ export default function PagamentosPainelPrestador({ prestadorId, prestadorNome, 
                 onClose={() => setConfirmaManual(null)}
                 busy={Boolean(ocupado)}
                 title="Marcar meses como pagos"
-                description="Meses legado ou sem relatório vinculado não têm comprovante nem e-mail pelo sistema."
+                description="Marca como pago sem enviar comprovante nem e-mail."
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setConfirmaManual(null)}>Cancelar</Button>
