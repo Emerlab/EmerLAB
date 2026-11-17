@@ -58,7 +58,32 @@ export function avaliarValorDocumento(valorDocumento, totalRepasse, totalTutor) 
     return { nivel: 'aviso_diferente', diferenca: (v - centavos(totalRepasse)) / 100 }
 }
 
-const brlCore = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+/** Máximo de NFS-e vinculadas ao mesmo link de repasse. */
+export const MAX_NFSE_POR_LINK = 3
+
+/**
+ * Devolvidos que ainda valem: um documento devolvido deixa de valer quando o prestador já enviou outro
+ * (em revisão ou aprovado) depois dele. Documentos do mesmo lote têm o mesmo `criado_em` e continuam valendo juntos.
+ */
+export function documentosDevolvidosVigentes(docs) {
+    const lista = Array.isArray(docs) ? docs : []
+    const t = (d) => String(d.criado_em || '')
+    const ativos = lista.filter((d) => d.status !== 'devolvido')
+    return lista.filter((d) => d.status === 'devolvido' && !ativos.some((a) => t(a) > t(d)))
+}
+
+/**
+ * Status do relatório depois que o financeiro revisa um documento (vários documentos por link):
+ * ainda há documento em revisão → em revisão; há devolvido vigente → devolvido; senão aprovado.
+ */
+export function statusAposRevisao(docs) {
+    const lista = Array.isArray(docs) ? docs : []
+    if (lista.some((d) => d.status === 'em_revisao')) return 'documento_em_revisao'
+    if (documentosDevolvidosVigentes(lista).length) return 'documento_devolvido'
+    return 'aprovado'
+}
+
+const brlCore =(n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 /** Desconto do RPA (INSS, 11%) sobre o repasse: { pct, desconto, liquido } em números. */
 export function descontoRpaDoRepasse(valorBruto) {

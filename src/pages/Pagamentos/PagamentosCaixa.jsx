@@ -194,7 +194,10 @@ export default function PagamentosCaixa() {
                             {emRevisao.map((d) => {
                                 const rel = dados.rels.get(d.relatorio_id)
                                 const reg = rel ? dados.regs.get(rel.registro_id) : null
-                                const diferenca = Number(d.valor) - Number(rel?.total_repasse || 0)
+                                // Até 3 NFS-e por link: com mais de uma em revisão, o valor conferido é a soma delas.
+                                const irmaos = emRevisao.filter((x) => x.relatorio_id === d.relatorio_id)
+                                const valorConferido = irmaos.length > 1 ? irmaos.reduce((t, x) => t + Number(x.valor || 0), 0) : Number(d.valor)
+                                const diferenca = valorConferido - Number(rel?.total_repasse || 0)
                                 const confere = rel && Math.round(diferenca * 100) === 0
                                 const antigo = idadeDias(d.criado_em) >= 3
                                 return (
@@ -203,7 +206,7 @@ export default function PagamentosCaixa() {
                                             <div className="min-w-0">
                                                 <p className="truncate text-base font-bold">{reg?.prestador_nome || rel?.nome_a1 || 'Prestador'}</p>
                                                 <p className="text-sm text-ink-soft">
-                                                    {d.tipo === 'boleto' ? `Boleto · vence ${dataBr(d.vencimento)}` : `NF ${d.numero || ''}`}
+                                                    {d.tipo === 'boleto' ? `Boleto · vence ${dataBr(d.vencimento)}` : `NF ${d.numero || ''}${irmaos.length > 1 ? ` (${irmaos.indexOf(d) + 1} de ${irmaos.length})` : ''}`}
                                                     {rel ? ` · competência ${comp(rel)}` : ''}
                                                 </p>
                                             </div>
@@ -214,7 +217,7 @@ export default function PagamentosCaixa() {
                                         </div>
                                         <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-xl border text-sm sm:max-w-md ${confere ? 'border-line' : 'border-status-warn'}`}>
                                             <div className="bg-surface-tint px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Repasse</p><p className="text-base font-bold tabular-nums">{formatarValorMonetarioBr(rel?.total_repasse)}</p></div>
-                                            <div className="bg-surface-tint px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Documento</p><p className={`text-base font-bold tabular-nums ${confere ? '' : 'text-status-warn'}`}>{formatarValorMonetarioBr(d.valor)}</p></div>
+                                            <div className="bg-surface-tint px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{irmaos.length > 1 ? `Soma das ${irmaos.length} NFS-e` : 'Documento'}</p><p className={`text-base font-bold tabular-nums ${confere ? '' : 'text-status-warn'}`}>{formatarValorMonetarioBr(valorConferido)}</p></div>
                                         </div>
                                         <div className="flex flex-wrap gap-3">
                                             <Button variant="secondary" size="sm" disabled={Boolean(ocupado)} onClick={() => void abrirArquivo({ documento_id: d.id })}>Ver documento</Button>

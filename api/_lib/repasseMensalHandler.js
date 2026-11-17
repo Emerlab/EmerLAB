@@ -21,6 +21,9 @@ import {
 import { aplicarRateLimit } from '../../src/lib/api/rateLimit.js'
 import {
     avaliarValorDocumento,
+    documentosDevolvidosVigentes,
+    MAX_NFSE_POR_LINK,
+    statusAposRevisao,
     aplicarVariaveis,
     distribuirHorarios,
     ehCompetenciaNovoModelo,
@@ -132,7 +135,11 @@ async function publicoLer(admin, { token }, ctx) {
         await evento(admin, rel.id, 'visualizado', {}, 'prestador', ctx.ipHash)
         rel.status = 'visualizado'
     }
-    const { data: docs } = await admin.from('repasse_documentos').select('id, tipo, numero, vencimento, valor, status, motivo_devolucao, criado_em').eq('relatorio_id', rel.id).order('criado_em', { ascending: false }).limit(1)
+    const { data: docs } = await admin.from('repasse_documentos').select('id, tipo, numero, vencimento, valor, status, motivo_devolucao, criado_em').eq('relatorio_id', rel.id).order('criado_em', { ascending: false }).limit(20)
+    // Vários documentos por link (até 3 NFS-e): mostra os vigentes; devolvidos já substituídos ficam de fora.
+    const vigentes = (docs || []).filter((d) => d.status !== 'devolvido')
+    const devolvidos = documentosDevolvidosVigentes(docs || [])
+    const documentos = [...vigentes, ...devolvidos].sort((a, b) => String(a.criado_em || '').localeCompare(String(b.criado_em || '')))
     const { data: comps } = await admin.from('repasse_comprovantes').select('id, forma, valor, data_pagamento, storage_path').eq('relatorio_id', rel.id).order('enviado_em', { ascending: false }).limit(1)
     const comp = comps?.[0]
     return {
@@ -153,6 +160,8 @@ async function publicoLer(admin, { token }, ctx) {
             abaNome: rel.aba_nome,
             dados: rel.dados,
             documento: docs?.[0] || null,
+            documentos,
+            maxNfse: MAX_NFSE_POR_LINK,
             comprovante: comp ? { forma: comp.forma, valor: Number(comp.valor), data: comp.data_pagamento } : null,
         },
         config: { whatsapp: config.whatsapp_financeiro },
@@ -185,48 +194,71 @@ async function publicoUploadUrl(admin, { token, nome, tamanho }) {
     return { path, uploadToken: data.token }
 }
 
-async function publicoDocumento(admin, { token, path, numero, vencimento, valor }, ctx) {
+async function publicoDocumento(admin, { token, path, numero, vencimento, valor, documentos }, ctx) {
     const rel = await resolverToken(admin, token)
     const registro = await carregarRegistro(admin, rel.registro_id)
     const tipo = tipoDoRegistro(registro)
     if (tipo === 'rpa') throw new ErroApi(400, 'Este repasse não exige documento.')
     const prefixo = `${rel.ano}-${String(rel.mes).padStart(2, '0')}/${rel.id}/documento/`
-    if (!String(path || '').startsWith(prefixo)) throw new ErroApi(400, 'Arquivo inválido.')
-    const v = Number(valor)
-    const aval = avaliarValorDocumento(v, rel.total_repasse, rel.total_tutor)
-    if (aval.nivel === 'erro_invalido') throw new ErroApi(400, 'Informe o valor do documento.')
-    if (aval.nivel === 'erro_tutor') throw new ErroApi(422, 'Esse é o valor pago pelo tutor, não o repasse. Confira o valor.')
-    if (!String(numero || '').trim()) throw new ErroApi(400, tipo === 'nota' ? 'Informe o número da nota.' : 'Informe a linha digitável.')
+    // Uma ou várias NFS-e no mesmo envio (`documentos`); o formato antigo (path/numero/valor) segue valendo.
+    const lista = Array.isArray(documentos) ? documentos : [{ path, numero, valor }]
+    if (!lista.length) throw new ErroApi(400, 'Anexe ao menos um documento.')
+    if (tipo === 'boleto' && lista.length > 1) throw new ErroApi(400, 'Envie um boleto por vez.')
+    if (lista.length > MAX_NFSE_POR_LINK) throw new ErroApi(400, `Cada repasse aceita até ${MAX_NFSE_POR_LINK} notas fiscais.`)
+    const itens = lista.map((d) => {
+        if (!String(d?.path || '').startsWith(prefixo)) throw new ErroApi(400, 'Arquivo inválido.')
+        const v = Number(d.valor)
+        if (avaliarValorDocumento(v, rel.total_repasse, rel.total_tutor).nivel === 'erro_invalido') throw new ErroApi(400, 'Informe o valor do documento.')
+        if (!String(d.numero || '').trim()) throw new ErroApi(400, tipo === 'nota' ? 'Informe o número da nota.' : 'Informe a linha digitável.')
+        return { path: d.path, numero: String(d.numero).trim().slice(0, 120), valor: arredondar(v) }
+    })
     if (tipo === 'boleto' && !vencimento) throw new ErroApi(400, 'Informe o vencimento do boleto.')
+
     // Envio repetido (clique duplo, reenvio por falha de rede): mesmo tipo, número e valor já em revisão ou aprovado
-    // não vira um segundo documento. Responde como sucesso (o prestador não precisa fazer nada) e descarta o arquivo novo.
-    const numeroLimpo = String(numero).trim().slice(0, 120)
-    const { data: jaExiste } = await admin
+    // não vira outro documento. O arquivo repetido é descartado; se nada sobrar, responde como sucesso.
+    const { data: ativos } = await admin
         .from('repasse_documentos')
-        .select('id, status')
+        .select('id, numero, valor, status')
         .eq('relatorio_id', rel.id)
         .eq('tipo', tipo)
-        .eq('numero', numeroLimpo)
-        .eq('valor', arredondar(v))
         .in('status', ['em_revisao', 'aprovado'])
-        .limit(1)
-    if (jaExiste?.length) {
+    const existentes = ativos || []
+    const novos = []
+    const repetidos = []
+    for (const it of itens) {
+        const igual = (x) => String(x.numero) === it.numero && arredondar(Number(x.valor)) === it.valor
+        if (existentes.some(igual) || novos.some(igual)) repetidos.push(it)
+        else novos.push(it)
+    }
+    for (const it of repetidos) {
         try {
-            await admin.storage.from(BUCKET).remove([path])
+            await admin.storage.from(BUCKET).remove([it.path])
         } catch {
             // arquivo órfão é inofensivo; a limpeza diária só olha documentos registrados
         }
-        return { status: jaExiste[0].status === 'aprovado' ? 'aprovado' : 'documento_em_revisao', alerta: aval.nivel, duplicado: true }
     }
-    const { error } = await admin.from('repasse_documentos').insert({
-        relatorio_id: rel.id, tipo, storage_path: path, numero: numeroLimpo,
-        vencimento: tipo === 'boleto' ? vencimento : null, valor: arredondar(v), status: 'em_revisao',
-    })
+    // Várias NFS-e somam o repasse: o valor é avaliado pelo total de tudo que está vinculado ao link.
+    const totalAtivos = existentes.reduce((s, d) => s + Number(d.valor || 0), 0)
+    const aval = avaliarValorDocumento(arredondar(totalAtivos + novos.reduce((s, d) => s + d.valor, 0)), rel.total_repasse, rel.total_tutor)
+    if (!novos.length) {
+        const emRevisao = existentes.some((d) => d.status === 'em_revisao')
+        return { status: emRevisao ? 'documento_em_revisao' : 'aprovado', alerta: aval.nivel, duplicado: true }
+    }
+    if (aval.nivel === 'erro_tutor') throw new ErroApi(422, 'Esse é o valor pago pelo tutor, não o repasse. Confira o valor.')
+    if (tipo === 'nota' && existentes.length + novos.length > MAX_NFSE_POR_LINK) {
+        throw new ErroApi(400, `Cada repasse aceita até ${MAX_NFSE_POR_LINK} notas fiscais. Já há ${existentes.length} vinculada(s).`)
+    }
+    const { error } = await admin.from('repasse_documentos').insert(
+        novos.map((d) => ({
+            relatorio_id: rel.id, tipo, storage_path: d.path, numero: d.numero,
+            vencimento: tipo === 'boleto' ? vencimento : null, valor: d.valor, status: 'em_revisao',
+        })),
+    )
     if (error) throw new ErroApi(500, 'Não foi possível registrar o documento.')
     const agora = new Date().toISOString()
     await admin.from('repasse_relatorios').update({ status: 'documento_em_revisao', respondido_em: agora, atualizado_em: agora }).eq('id', rel.id)
-    await evento(admin, rel.id, 'documento_enviado', { tipo, valor: arredondar(v), alerta: aval.nivel }, 'prestador', ctx.ipHash)
-    return { status: 'documento_em_revisao', alerta: aval.nivel }
+    await evento(admin, rel.id, 'documento_enviado', { tipo, quantidade: novos.length, valor: arredondar(novos.reduce((s, d) => s + d.valor, 0)), alerta: aval.nivel }, 'prestador', ctx.ipHash)
+    return { status: 'documento_em_revisao', alerta: aval.nivel, quantidade: novos.length }
 }
 
 async function publicoReprovar(admin, { token, observacao, canal }, ctx) {
@@ -498,9 +530,16 @@ async function revisarDocumento(admin, { documento_id, acao, motivo }, ctx) {
     const autor = ctx.user.email || ctx.user.id
     if (acao === 'aprovar') {
         await admin.from('repasse_documentos').update({ status: 'aprovado', revisado_por: ctx.user.id, revisado_em: agora }).eq('id', doc.id)
+        // Com várias NFS-e no link, o relatório só vira «aprovado» quando todas foram revisadas.
+        const { data: todos } = await admin.from('repasse_documentos').select('id, status, criado_em').eq('relatorio_id', rel.id)
+        const novoStatus = statusAposRevisao(todos || [])
+        await evento(admin, rel.id, 'documento_aprovado', {}, autor)
+        if (novoStatus !== 'aprovado') {
+            await admin.from('repasse_relatorios').update({ status: novoStatus, atualizado_em: agora }).eq('id', rel.id)
+            return { status: novoStatus }
+        }
         await admin.from('repasse_relatorios').update({ status: 'aprovado', respondido_em: agora, atualizado_em: agora }).eq('id', rel.id)
         await admin.from('pagamentos_registros').update({ resposta: true }).eq('id', rel.registro_id)
-        await evento(admin, rel.id, 'documento_aprovado', {}, autor)
         return { status: 'aprovado' }
     }
     if (acao === 'devolver') {

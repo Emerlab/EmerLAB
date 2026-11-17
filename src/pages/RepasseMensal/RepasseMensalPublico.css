@@ -697,3 +697,15 @@
     font-weight: 500;
     opacity: 0.8;
 }
+
+.rm_form_nota {
+    border: 1px solid var(--borda, #d9e2ec);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 0 0 12px;
+    min-width: 0;
+}
+.rm_form_nota legend {
+    padding: 0 6px;
+    font-weight: 600;
+}
