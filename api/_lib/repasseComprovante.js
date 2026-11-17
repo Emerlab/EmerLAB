@@ -53,6 +53,10 @@ export async function carregarConfig(admin) {
     }
 }
 
+/** Aceita um ou mais e-mails separados por vírgula, ponto e vírgula ou espaço (o financeiro pode ter 2). Sem repetidos. */
+export const listaDeEmails = (valor) =>
+    [...new Set(String(valor || '').toLowerCase().split(/[,;\s]+/).map((e) => e.trim()).filter((e) => e.includes('@')))]
+
 export const remetente = (config) => `${config.remetente_nome} <noreply@emerlab.com.br>`
 
 export async function evento(admin, relatorioId, tipo, dados = {}, autor = 'sistema', ipHash = null) {
@@ -64,15 +68,25 @@ export async function evento(admin, relatorioId, tipo, dados = {}, autor = 'sist
  *   1. `pagamentos_registros.email_financeiro` (ajuste pontual de um mês, legado);
  *   2. `prestadores.email_financeiro` (e-mail financeiro alternativo do cadastro, vale para todos os meses);
  *   3. `prestadores.email` (e-mail do cadastro).
+ * `prestadores.email_financeiro` pode guardar 2 e-mails (o relatório vai para os dois).
  * Enquanto a coluna `prestadores.email_financeiro` não existir no banco, cai direto no e-mail do cadastro.
  */
-export async function emailDoPrestador(admin, prestadorId, emailFinanceiro) {
-    const alt = String(emailFinanceiro || '').trim().toLowerCase()
-    if (alt) return alt
-    if (prestadorId == null) return ''
+export async function emailsDoPrestador(admin, prestadorId, emailFinanceiro) {
+    const alt = listaDeEmails(emailFinanceiro)
+    if (alt.length) return alt
+    if (prestadorId == null) return []
     let { data, error } = await admin.from('prestadores').select('email, email_financeiro').eq('id', prestadorId).maybeSingle()
     if (error) ({ data } = await admin.from('prestadores').select('email').eq('id', prestadorId).maybeSingle())
-    return String(data?.email_financeiro || '').trim().toLowerCase() || String(data?.email || '').trim().toLowerCase()
+    const fin = listaDeEmails(data?.email_financeiro)
+    return fin.length ? fin : listaDeEmails(data?.email).slice(0, 1)
+}
+
+/**
+ * Destino para o Resend/eventos: '' (sem e-mail), string (1 endereço, como sempre foi) ou array (2 endereços).
+ */
+export async function emailDoPrestador(admin, prestadorId, emailFinanceiro) {
+    const lista = await emailsDoPrestador(admin, prestadorId, emailFinanceiro)
+    return lista.length > 1 ? lista : lista[0] || ''
 }
 
 export const tipoDoRegistro = (registro) => {

@@ -139,6 +139,14 @@ export const normalizarCrmvParaSalvar = (valor) => {
     return v || null
 }
 
+/** O e-mail financeiro pode guardar até 2 endereços no mesmo campo (separados por vírgula). */
+export const separarEmailsFinanceiros = (valor) => {
+    const lista = [...new Set(String(valor || '').toLowerCase().split(/[,;\s]+/).filter((e) => e.includes('@')))]
+    return [lista[0] || '', lista[1] || '']
+}
+
+export const juntarEmailsFinanceiros = (a, b) => [...new Set([a, b].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean))].join(', ')
+
 export const normalizarEmailParaSalvar = (valor) => {
     const v = String(valor || '').trim().toLowerCase()
     return v || null

@@ -173,7 +173,10 @@ export async function listarMensagens(waId, { pagina = 1, tamanho = 50 } = {}) {
         v1Url(`getMessages/${encodeURIComponent(waId)}`, { pageSize: tamanho, pageNumber: pagina, channelPhoneNumber: canalWa(waId, watiChannel) }),
     )
     const items = dados?.messages?.items || dados?.messages || []
-    const r = { mensagens: Array.isArray(items) ? items : [], temMais: Boolean(dados?.link?.nextPage) }
+    const lista = Array.isArray(items) ? items : []
+    // A WATI nem sempre preenche link.nextPage: página cheia também indica que pode haver mensagens mais antigas
+    // (sem isso o botão «Carregar mensagens anteriores» some e o histórico parece cortado).
+    const r = { mensagens: lista, temMais: Boolean(dados?.link?.nextPage) || lista.length >= tamanho }
     cacheSet(key, r, 3000)
     return r
 }
