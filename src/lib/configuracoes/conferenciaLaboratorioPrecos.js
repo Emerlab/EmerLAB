@@ -1,5 +1,5 @@
 import { carregarPortesDb, mapaLetraPorPorteId } from '../prestadorProcedimentos.js'
-import { resolverVeterinarioIdsParaPrestador } from '../prestadorNomeAlternativo.js'
+import { negociacoesVetDoPrestador } from '../negociacaoVinculo.js'
 import { normalizarNomeExame } from './conferenciaLaboratorioExcel.js'
 import { supabase } from '../supabase.js'
 
@@ -70,25 +70,14 @@ export async function carregarPrecosNegociacaoLaboratorio(laboratorioId) {
         return { ...vazio, aviso: 'Laboratório inválido.' }
     }
 
-    const vetIds = await resolverVeterinarioIdsParaPrestador(pid)
-    if (!vetIds.length) {
-        return { ...vazio, aviso: 'Nenhuma negociação encontrada para este laboratório.' }
-    }
-
     const { data: negociacoes, error } = await buscarPaginado(() =>
-        supabase
-            .from('negociacoes_vet')
-            .select('procedimento_id, porte_id, valor, nome_alternativo')
-            .in('veterinario_id', vetIds),
+        negociacoesVetDoPrestador(pid, 'procedimento_id, porte_id, valor, nome_alternativo'),
     )
     if (error) {
         // Coluna nome_alternativo pode não existir em ambientes antigos
         if (/nome_alternativo|column/i.test(error.message || '')) {
             const retry = await buscarPaginado(() =>
-                supabase
-                    .from('negociacoes_vet')
-                    .select('procedimento_id, porte_id, valor')
-                    .in('veterinario_id', vetIds),
+                negociacoesVetDoPrestador(pid, 'procedimento_id, porte_id, valor'),
             )
             if (retry.error) throw new Error(retry.error.message)
             return montarCatalogoPrecos(retry.data || [], false)
@@ -96,7 +85,7 @@ export async function carregarPrecosNegociacaoLaboratorio(laboratorioId) {
         throw new Error(error.message)
     }
     if (!(negociacoes || []).length) {
-        return { ...vazio, aviso: 'Negociações vazias para este laboratório.' }
+        return { ...vazio, aviso: 'Nenhuma negociação encontrada para este laboratório.' }
     }
 
     return montarCatalogoPrecos(negociacoes || [], true)
