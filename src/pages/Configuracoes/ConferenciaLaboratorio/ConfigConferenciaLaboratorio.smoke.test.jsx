@@ -42,8 +42,8 @@ describe('tela da Conferência (fumaça de renderização)', () => {
         const hon = []
         const mel = []
         for (let i = 0; i < 400; i += 1) {
-            hon.push(L({ id: `h${i}`, pet: `Pet${i}`, prontuario: String(i) }))
-            mel.push(L({ id: `m${i}`, pet: `Pet${i}`, prontuario: String(i), valor: i % 3 ? 80 : 90 }))
+            hon.push(L({ id: `h${i}`, tutor: `Tutor ${i}`, pet: `Pet${i}`, prontuario: String(i) }))
+            mel.push(L({ id: `m${i}`, tutor: `Tutor ${i}`, pet: `Pet${i}`, prontuario: String(i), valor: i % 3 ? 80 : 90 }))
         }
         const { resultados } = runConferencia({ honorarios: hon, mellislab: mel })
         const html = renderToString(
@@ -61,6 +61,6 @@ describe('tela da Conferência (fumaça de renderização)', () => {
             />,
         )
         expect(html.replace(/<!-- -->/g, '')).toContain('Mostrando 150 de 400 linhas')
-        expect((html.match(/conf_lab_par /g) || []).length).toBe(150)
+        expect((html.match(/conf_lab_lin /g) || []).length).toBe(150)
     })
 })

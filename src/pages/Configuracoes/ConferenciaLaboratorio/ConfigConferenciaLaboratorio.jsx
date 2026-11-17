@@ -56,7 +56,6 @@ import {
     mapaColunasCompativel,
     mapaColunasParaNomes,
     regraValorAceitoDe,
-    resumoDeAprendizado,
 } from '../../../lib/configuracoes/conferencia/memoria.js'
 import { aplicarValoresBase, examesPendentesVinculo } from '../../../lib/configuracoes/conferencia/lookupBase.js'
 import { exportarConferenciaHonorariosExcel } from '../../../lib/configuracoes/conferencia/export.js'
@@ -68,6 +67,13 @@ import {
     salvarSessaoLocal,
     sessaoTemConteudo,
 } from '../../../lib/configuracoes/conferencia/sessaoLocal.js'
+import {
+    ABAS_RESULTADO,
+    avisoDePeriodo,
+    contarAbas,
+    linhaPertenceAba,
+    resumoDePares,
+} from '../../../lib/configuracoes/conferencia/visaoResultado.js'
 import {
     formatarDataConferencia,
     formatarValorConferencia,
@@ -97,16 +103,6 @@ const ROTULO_CAMPO = {
     valor: 'Valor',
 }
 
-const FILTROS_RAPIDOS = [
-    { id: 'precisam', label: 'Precisam de você' },
-    { id: 'memoria', label: 'Resolvidas pela memória' },
-    { id: 'todos', label: 'Todos' },
-    { id: 'divergencias', label: 'Somente divergências' },
-    { id: 'valores', label: 'Somente valores divergentes' },
-    { id: 'orfaos', label: 'Somente órfãos' },
-    { id: 'revisao', label: 'Somente revisão manual' },
-    { id: 'ok', label: 'Somente OK' },
-]
 
 function UploadZone({ titulo, dica, arquivo, nomeArquivo, onFile, disabled }) {
     const [arrastando, setArrastando] = useState(false)
@@ -288,15 +284,8 @@ const ACOES_MASSA = [
 
 function filtrarResultados(resultados, filtro, busca) {
     let list = resultados || []
-    if (filtro === 'precisam') list = list.filter((r) => !statusEhOk(r.status) && !r.revisao?.ignorar)
-    if (filtro === 'memoria') list = list.filter((r) => Boolean(r.aprendido))
+    if (filtro !== 'todos' && filtro !== 'divergencias') list = list.filter((r) => linhaPertenceAba(r, filtro))
     if (filtro === 'divergencias') list = list.filter((r) => statusEhDivergencia(r.status) && !r.revisao?.ignorar)
-    if (filtro === 'valores') list = list.filter((r) => r.status === 'VALOR_DIVERGENTE')
-    if (filtro === 'orfaos') {
-        list = list.filter((r) => r.status === 'ORFAO_MELLISLAB' || r.status === 'ORFAO_HONORARIOS')
-    }
-    if (filtro === 'revisao') list = list.filter((r) => r.status === 'REVISAO_MANUAL')
-    if (filtro === 'ok') list = list.filter((r) => statusEhOk(r.status))
     const t = String(busca || '')
         .trim()
         .toLowerCase()
@@ -520,6 +509,11 @@ const ConfigConferenciaLaboratorio = () => {
             return ordem.dir === 'asc' ? c : -c
         })
     }, [resultados, filtro, busca, ordem])
+
+    const contagemAbas = useMemo(() => contarAbas(resultados), [resultados])
+    const paresInfo = useMemo(() => resumoDePares(resultados), [resultados])
+    const avisoPeriodo = useMemo(() => avisoDePeriodo(resultados), [resultados])
+    const [ocultarAvisoPeriodo, setOcultarAvisoPeriodo] = useState(false)
 
     const alternarOrdem = useCallback((chave) => {
         setOrdem((prev) => {
@@ -1025,6 +1019,7 @@ const ConfigConferenciaLaboratorio = () => {
                     : 'Comparação concluída. O valor oficial é o de Valores de Base.',
             )
             guardarImportacoes()
+            setOcultarAvisoPeriodo(false)
             setFiltro(memoria.resultados.some((r) => !statusEhOk(r.status) && !r.revisao?.ignorar) ? 'precisam' : 'todos')
         } catch (e) {
             setErro(e?.message || String(e))
@@ -1192,6 +1187,17 @@ const ConfigConferenciaLaboratorio = () => {
             const next = new Set(prev)
             if (next.has(id)) next.delete(id)
             else next.add(id)
+            return next
+        })
+    }, [])
+
+    const alternarVarios = useCallback((linhas, marcar) => {
+        setSelecionados((prev) => {
+            const next = new Set(prev)
+            for (const r of linhas) {
+                if (marcar) next.add(r.id)
+                else next.delete(r.id)
+            }
             return next
         })
     }, [])
@@ -1777,84 +1783,108 @@ const ConfigConferenciaLaboratorio = () => {
             {passo === 'resultado' && resumo ? (
                 <section className="conf_lab_card">
                     <h2>Resultado da conferência</h2>
-                    {(() => {
-                        const ap = resumoDeAprendizado(resultados)
-                        return (
-                            <div className="conf_lab_aprendizado" role="status">
-                                <div className="conf_lab_aprendizado_barra" aria-hidden="true">
-                                    <span style={{ width: `${ap.percentualSozinhas}%` }} />
-                                </div>
+
+                    {avisoPeriodo && !ocultarAvisoPeriodo ? (
+                        <div className="conf_lab_alerta_periodo" role="alert">
+                            <div>
+                                <strong>
+                                    Só {avisoPeriodo.pares} de {avisoPeriodo.totalLinhas} linhas encontraram par
+                                </strong>
                                 <p>
-                                    <strong>{ap.sozinhas}</strong> de {ap.total} linhas conferidas sozinhas ({ap.percentualSozinhas}%) ·{' '}
-                                    <strong>{ap.precisamDeVoce}</strong> precisam de você
-                                    {ap.resolvidasPelaMemoria ? (
-                                        <>
-                                            {' '}
-                                            · <strong>{ap.resolvidasPelaMemoria}</strong> resolvidas pela memória
-                                        </>
-                                    ) : null}
+                                    {avisoPeriodo.faixaPlano
+                                        ? `Plano: ${formatarDataConferencia(avisoPeriodo.faixaPlano.de)} a ${formatarDataConferencia(avisoPeriodo.faixaPlano.ate)}`
+                                        : 'Plano: sem datas'}
+                                    {' · '}
+                                    {avisoPeriodo.faixaLab
+                                        ? `Laboratório: ${formatarDataConferencia(avisoPeriodo.faixaLab.de)} a ${formatarDataConferencia(avisoPeriodo.faixaLab.ate)}`
+                                        : 'Laboratório: sem datas'}
+                                    .{' '}
+                                    {avisoPeriodo.semSobreposicao
+                                        ? 'Os períodos não se cruzam: provavelmente são arquivos de meses diferentes.'
+                                        : 'Confira se os dois relatórios são do mesmo período.'}
                                 </p>
                             </div>
-                        )
-                    })()}
-                    <div className="conf_lab_dash">
-                        <DashCard
-                            label="Total valor de base"
-                            valor={formatarValorConferencia(resumo.totalHonorarios)}
-                        />
-                        <DashCard
-                            label="Total laboratório"
-                            valor={formatarValorConferencia(resumo.totalMellis)}
-                        />
-                        <DashCard label="Itens conferidos" valor={resumo.itensConferidos} />
-                        <DashCard label="Itens OK" valor={resumo.itensOk} destaque="ok" />
-                        <DashCard
-                            label="Valores divergentes"
-                            valor={resumo.valoresDivergentes}
-                            destaque="warn"
-                        />
-                        <DashCard
-                            label="Datas divergentes"
-                            valor={resumo.datasDivergentes}
-                            destaque="warn"
-                        />
-                        <DashCard label="Órfãos Laboratório" valor={resumo.orfaosMellis} />
-                        <DashCard label="Órfãos Plano" valor={resumo.orfaosHonorarios} />
-                        {resumo.valoresAceitos ? (
-                            <DashCard label="Valores aceitos" valor={resumo.valoresAceitos} />
-                        ) : null}
-                        <DashCard
-                            label="Revisões manuais"
-                            valor={resumo.revisoesManuais}
-                            destaque="rev"
-                        />
-                        <DashCard
-                            label="Diferença financeira"
-                            valor={`${formatarValorConferencia(resumo.diferencaFinanceira)} (${resumo.diferencaFinanceira >= 0 ? 'a mais' : 'a menos'})`}
-                            destaque="warn"
-                        />
-                    </div>
-                    <p className="conf_lab_muted">
-                        Cobrado a mais: {formatarValorConferencia(resumo.valoresCobradosAMais)} · a
-                        menos: {formatarValorConferencia(resumo.valoresCobradosAMenos)}
-                    </p>
+                            <div className="conf_lab_alerta_acoes">
+                                <button
+                                    type="button"
+                                    className="credenciamento_main_action_btn secondary"
+                                    onClick={() => setPasso('preview')}
+                                >
+                                    Trocar arquivo
+                                </button>
+                                <button
+                                    type="button"
+                                    className="credenciamento_main_action_btn secondary"
+                                    onClick={() => setOcultarAvisoPeriodo(true)}
+                                >
+                                    Ignorar aviso
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
 
-                    <div className="conf_lab_filtros">
-                        {FILTROS_RAPIDOS.map((f) => (
+                    <div className="conf_lab_kpis">
+                        <div className="conf_lab_kpi">
+                            <span>Pares encontrados</span>
+                            <strong>{paresInfo.pares}</strong>
+                            <small>
+                                {paresInfo.paresOk} conferem · {paresInfo.paresComDiferenca} com diferença
+                            </small>
+                        </div>
+                        <div className="conf_lab_kpi">
+                            <span>Sem par</span>
+                            <strong>{paresInfo.orfaosLab + paresInfo.orfaosPlano}</strong>
+                            <small>
+                                {paresInfo.orfaosLab} só no laboratório · {paresInfo.orfaosPlano} só no plano
+                            </small>
+                        </div>
+                        <div className="conf_lab_kpi is-rev">
+                            <span>Revisão manual</span>
+                            <strong>{resumo.revisoesManuais}</strong>
+                            <small>
+                                {contagemAbas.memoria
+                                    ? `${contagemAbas.memoria} resolvida(s) pela memória`
+                                    : 'precisam da sua decisão'}
+                            </small>
+                        </div>
+                        <div
+                            className="conf_lab_kpi is-warn"
+                            title="Total do laboratório menos total do plano, somando também as linhas sem par."
+                        >
+                            <span>Diferença financeira</span>
+                            <strong>
+                                {formatarValorConferencia(Math.abs(resumo.diferencaFinanceira))}{' '}
+                                <em>{resumo.diferencaFinanceira >= 0 ? 'a mais' : 'a menos'}</em>
+                            </strong>
+                            <small>
+                                Base {formatarValorConferencia(resumo.totalHonorarios)} · Lab{' '}
+                                {formatarValorConferencia(resumo.totalMellis)}
+                            </small>
+                            <small>
+                                Nos pares: a mais {formatarValorConferencia(resumo.valoresCobradosAMais)} · a menos{' '}
+                                {formatarValorConferencia(resumo.valoresCobradosAMenos)}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div className="conf_lab_abas" role="tablist" aria-label="Tipo de problema">
+                        {ABAS_RESULTADO.filter((a) => a.id === 'todos' || contagemAbas[a.id] > 0 || filtro === a.id).map((a) => (
                             <button
-                                key={f.id}
+                                key={a.id}
                                 type="button"
-                                className={`conf_lab_chip${filtro === f.id ? ' is-active' : ''}`}
-                                onClick={() => setFiltro(f.id)}
+                                role="tab"
+                                aria-selected={filtro === a.id}
+                                className={`conf_lab_aba${filtro === a.id ? ' is-active' : ''}`}
+                                onClick={() => setFiltro(a.id)}
                             >
-                                {f.label}
+                                {a.rotulo} <span>{contagemAbas[a.id]}</span>
                             </button>
                         ))}
                         <input
                             type="search"
                             value={busca}
                             onChange={(e) => setBusca(e.target.value)}
-                            placeholder="Busca textual…"
+                            placeholder="Buscar tutor, animal ou exame…"
                             className="conf_lab_busca"
                         />
                     </div>
@@ -1893,6 +1923,7 @@ const ConfigConferenciaLaboratorio = () => {
                         onOrdenar={alternarOrdem}
                         onToggle={alternarSelecao}
                         onToggleTodos={alternarTodosVisiveis}
+                        onToggleVarios={alternarVarios}
                         onAbrir={setItemAberto}
                         todosMarcados={todosVisiveisMarcados}
                         algunsMarcados={algunsVisiveisMarcados}
