@@ -9,7 +9,7 @@ import {
 } from '../pdf/observacoesModeloPdf.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 
-const ICON_CAB_SIZE_PT = 10
+const ICON_CAB_SIZE_PT = 14
 const ICON_CAB_GAP_PT = 4
 const ICON_RASTER_PX = 64
 
@@ -22,22 +22,29 @@ const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
 const SECTION_GAP = 16
-const CARD_RADIUS = 8
-const TITLE_BAR_HEIGHT = 32
-const TABLE_HEADER_HEIGHT = 26
-const ROW_BASE_HEIGHT = 26
-const LINE_LEADING = 11
-const FONT_SIZE_BODY = 9
-const FONT_SIZE_HEADER = 9
-const FONT_SIZE_TITLE_PREFIX = 10
-const FONT_SIZE_TITLE_CAT = 10
+const CARD_RADIUS = 14
+const TITLE_BAR_HEIGHT = 44
+const TABLE_HEADER_HEIGHT = 36
+const ROW_BASE_HEIGHT = 34
+const ROW_DIVIDER_INSET = 14
+const CARD_PADDING_BOTTOM = 12
+// Grupo com limite mesclado: só é partido entre páginas se couberem ao menos N linhas na atual
+// e sobrarem ao menos M na seguinte (evita linhas órfãs).
+const MIN_LINHAS_GRUPO_PARTIDO = 5
+const MIN_LINHAS_GRUPO_PARTIDO_RESTO = 2
+const LINE_LEADING = 12
+const FONT_SIZE_BODY = 10
+const FONT_SIZE_HEADER = 11
+const FONT_SIZE_TITLE_PREFIX = 15
+const FONT_SIZE_TITLE_CAT = 15
 const FONT_SIZE_STAMP = 7
 
-const COR_NAVY = rgb(22 / 255, 33 / 255, 62 / 255)
+const COR_NAVY = rgb(0x1e / 255, 0x31 / 255, 0x48 / 255) // #1E3148
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
 const COR_BRANCO = rgb(1, 1, 1)
-const COR_ZEBRA = rgb(247 / 255, 248 / 255, 250 / 255)
-const COR_BORDA = rgb(229 / 255, 230 / 255, 234 / 255)
+// Linhas alternam entre branco e um branco levemente acinzentado (#FCFCFC).
+const COR_ZEBRA = rgb(252 / 255, 252 / 255, 252 / 255)
+const COR_BORDA = rgb(218 / 255, 220 / 255, 225 / 255)
 const COR_STAMP = rgb(0.72, 0.72, 0.72)
 
 const COL_FRAC = [0.44, 0.18, 0.18, 0.2]
@@ -188,8 +195,8 @@ async function carregarSvgComoPngBytes(urlSvg, sizePx = ICON_RASTER_PX) {
 function desenharIconeEstetoscopio(page, iconePng, x, textY) {
     if (!iconePng) return
     const size = ICON_CAB_SIZE_PT
-    // Alinha o centro vertical do ícone ao meio aproximado do texto do cabeçalho.
-    const y = textY - 1
+    // Centro do ícone = centro das maiúsculas do texto do cabeçalho (≈ 0,36 do corpo da fonte).
+    const y = textY + FONT_SIZE_HEADER * 0.36 - size / 2
     page.drawImage(iconePng, {
         x,
         y,
@@ -198,43 +205,60 @@ function desenharIconeEstetoscopio(page, iconePng, x, textY) {
     })
 }
 
+/**
+ * pdf-lib ignora borderRadius em drawRectangle; desenha o retângulo arredondado por caminho SVG
+ * (y do caminho cresce para baixo, a partir de yTop). `soTopo` arredonda só os cantos superiores.
+ */
+function desenharRetanguloArredondado(page, { x, yTop, width, height, raio, color, soTopo = false }) {
+    const r = Math.max(0, Math.min(raio, width / 2, height / 2))
+    const w = width
+    const h = height
+    const d = soTopo
+        ? `M 0 ${h} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h} Z`
+        : `M ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 0 ${h - r} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`
+    page.drawSvgPath(d, { x, y: yTop, color, borderWidth: 0 })
+}
+
 function desenharBarraTituloSecao(page, fonts, x, yTop, innerW, nomeCategoria) {
     const y = yTop - TITLE_BAR_HEIGHT
-    page.drawRectangle({
+    desenharRetanguloArredondado(page, {
         x,
-        y,
+        yTop,
         width: innerW,
         height: TITLE_BAR_HEIGHT,
+        raio: CARD_RADIUS,
         color: COR_NAVY,
-        borderRadius: CARD_RADIUS,
-    })
-    page.drawRectangle({
-        x,
-        y,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT / 2,
-        color: COR_NAVY,
+        soTopo: true,
     })
 
-    const baseY = y + 10
-    const prefix = '| Procedimentos: '
+    const baseY = y + (TITLE_BAR_HEIGHT - FONT_SIZE_TITLE_PREFIX) / 2 + 2
+    const corPrefixo = fonts.light || fonts.regular
+    // Barra vertical fina antes do título, como no layout do Canva.
+    page.drawLine({
+        start: { x: x + 16, y: y + 11 },
+        end: { x: x + 16, y: y + TITLE_BAR_HEIGHT - 11 },
+        thickness: 0.8,
+        color: rgb(0.78, 0.82, 0.88),
+    })
+    const prefix = 'Grupo de '
+    const textoX = x + 28
     page.drawText(prefix, {
-        x: x + 14,
+        x: textoX,
         y: baseY,
         size: FONT_SIZE_TITLE_PREFIX,
-        font: fonts.regular,
+        font: corPrefixo,
         color: COR_BRANCO,
     })
-    const prefixW = fonts.regular.widthOfTextAtSize(prefix, FONT_SIZE_TITLE_PREFIX)
+    const prefixW = corPrefixo.widthOfTextAtSize(prefix, FONT_SIZE_TITLE_PREFIX)
     const catNome = sanitizarTextoPdf(nomeCategoria) || 'Categoria'
     const linhasCat = quebrarTexto(
         catNome,
         fonts.bold,
         FONT_SIZE_TITLE_CAT,
-        innerW - 28 - prefixW,
+        innerW - 28 - prefixW - 14,
     )
     page.drawText(linhasCat[0], {
-        x: x + 14 + prefixW,
+        x: textoX + prefixW,
         y: baseY,
         size: FONT_SIZE_TITLE_CAT,
         font: fonts.bold,
@@ -254,13 +278,19 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
         color: COR_BRANCO,
     })
 
-    const textY = y + 8
+    // Meio das maiúsculas (≈ 0,36 do corpo) no meio da faixa: baseline = meio − 0,36·corpo.
+    const textY = y + TABLE_HEADER_HEIGHT / 2 - FONT_SIZE_HEADER * 0.36
     const labels = ['Procedimento', 'Diferença', 'Carências', 'Limites']
     labels.forEach((label, idx) => {
         const colX = xs[idx]
         const colW = widths[idx]
         if (idx === 0) {
-            const iconX = colX + 6
+            // Ícone + rótulo centralizados sobre a coluna, como no Canva.
+            const grupoW =
+                ICON_CAB_SIZE_PT +
+                ICON_CAB_GAP_PT +
+                fonts.bold.widthOfTextAtSize(label, FONT_SIZE_HEADER)
+            const iconX = colX + Math.max(2, (colW - grupoW) / 2)
             desenharIconeEstetoscopio(page, iconeEstetoscopio, iconX, textY)
             page.drawText(label, {
                 x: iconX + ICON_CAB_SIZE_PT + ICON_CAB_GAP_PT,
@@ -280,20 +310,15 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
         }
     })
 
-    page.drawLine({
-        start: { x: MARGIN_X, y },
-        end: { x: MARGIN_X + innerW, y },
-        thickness: 0.5,
-        color: COR_BORDA,
-    })
-
+    // Sem linha entre o cabeçalho e a primeira linha do grupo.
     return y
 }
 
 function yPrimeiraLinhaBloco(yTop, yBottom, numLinhas, fontSize) {
     const h = yTop - yBottom
     const blockH = (Math.max(1, numLinhas) - 1) * LINE_LEADING + fontSize
-    return yBottom + (h + blockH) / 2 - fontSize
+    // Sobe 0,14·corpo: centraliza pelas maiúsculas, não pela linha de base.
+    return yBottom + (h + blockH) / 2 - fontSize + fontSize * 0.14
 }
 
 function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoesLimite) {
@@ -311,11 +336,22 @@ function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoe
         color: fundo,
     })
 
+    // Divisória no TOPO da linha (desenhada depois do fundo, para a zebra não cobri-la).
+    // A primeira linha do bloco não tem borda superior; a última do grupo fica sem borda inferior.
+    if (!opcoesLimite?.semLinhaSuperior) {
+        page.drawLine({
+            start: { x: MARGIN_X + ROW_DIVIDER_INSET, y: yTop },
+            end: { x: MARGIN_X + layout.innerW - ROW_DIVIDER_INSET, y: yTop },
+            thickness: 0.8,
+            color: COR_BORDA,
+        })
+    }
+
     const linhasNome = quebrarTexto(linha.nome, corpo, FONT_SIZE_BODY, widths[0] - 12)
     const yNome = yPrimeiraLinhaBloco(yTop, yBottom, linhasNome.length, FONT_SIZE_BODY)
     linhasNome.forEach((ln, i) => {
         page.drawText(ln, {
-            x: xs[0] + 10,
+            x: xs[0] + 14,
             y: yNome - i * LINE_LEADING,
             size: FONT_SIZE_BODY,
             font: corpo,
@@ -351,13 +387,6 @@ function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoe
         })
     }
 
-    page.drawLine({
-        start: { x: MARGIN_X, y: yBottom },
-        end: { x: MARGIN_X + layout.innerW, y: yBottom },
-        thickness: 0.4,
-        color: COR_BORDA,
-    })
-
     return { yBottom, h }
 }
 
@@ -376,13 +405,6 @@ function desenharCelulaLimiteGrupoMesclada(page, fonts, layout, yTop, yBottom, t
         height: h,
         color: COR_BRANCO,
     })
-    page.drawLine({
-        start: { x, y: yBottom },
-        end: { x, y: yTop },
-        thickness: 1,
-        color: COR_BORDA,
-    })
-
     const lim = sanitizarTextoPdf(texto) || '—'
     const linhasLim = quebrarTexto(lim, corpo, FONT_SIZE_BODY, w - 10)
     const yLim = yPrimeiraLinhaBloco(yTop, yBottom, linhasLim.length, FONT_SIZE_BODY)
@@ -468,7 +490,21 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             const espacoAposChrome = y - overhead - MARGIN_BOTTOM
             const cabeAqui = hGrupo <= espacoAposChrome
             const cabeEmPaginaNova = hGrupo <= calcularAlturaUtilPagina(height, true)
-            if (!cabeAqui && cabeEmPaginaNova) {
+            // Parte o grupo entre páginas só se sobrar espaço para linhas suficientes aqui
+            // (e restarem linhas na próxima); senão empurra o grupo inteiro para a página nova.
+            let linhasQueCabem = 0
+            {
+                let acc = 0
+                for (const i of idxGrupoPre) {
+                    acc += medirAlturaLinha(linhas[i], fonts, layout.widths[0])
+                    if (acc > espacoAposChrome - CARD_PADDING_BOTTOM) break
+                    linhasQueCabem += 1
+                }
+            }
+            const restantes = idxGrupoPre.length - linhasQueCabem
+            const podePartir =
+                linhasQueCabem >= MIN_LINHAS_GRUPO_PARTIDO && restantes >= MIN_LINHAS_GRUPO_PARTIDO_RESTO
+            if (!cabeAqui && cabeEmPaginaNova && !podePartir) {
                 return {
                     secaoIdx,
                     linhaIdx,
@@ -493,7 +529,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
                 yProbe -= hProbe
                 iProbe += 1
             }
-            yCardBottom = yProbe
+            yCardBottom = yProbe - CARD_PADDING_BOTTOM
         }
 
         // Fundo branco só até o fim do conteúdo deste bloco (gap = cor da folha).
@@ -501,13 +537,13 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         {
             const cardH = topFundo - yCardBottom
             if (cardH > 0) {
-                page.drawRectangle({
+                desenharRetanguloArredondado(page, {
                     x: MARGIN_X,
-                    y: yCardBottom,
+                    yTop: topFundo,
                     width: layout.innerW,
                     height: cardH,
+                    raio: CARD_RADIUS,
                     color: COR_BRANCO,
-                    borderRadius: CARD_RADIUS,
                 })
             }
         }
@@ -516,6 +552,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         }
 
         let yCursor = desenharCabecalhoTabela(page, fonts, layout, corpoTop, iconeEstetoscopio)
+        const yTopoLinhas = yCursor
         desenhouAlgoNestaPagina = true
 
         const idxGrupo = idxGrupoPre
@@ -561,6 +598,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             const { yBottom } = desenharLinhaDados(page, fonts, layout, yCursor, linha, zebra, {
                 desenharCelulaIndividual: !linha.usaLimiteGrupoLinha,
                 texto: linha.limiteIndividual,
+                semLinhaSuperior: yCursor === yTopoLinhas,
             })
 
             if (ehUltimoGrupo && mergeTopY != null) {
@@ -585,7 +623,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         linhaIdx = 0
         grupoMergeAberto = false
         mergeTopY = null
-        y = yCursor - SECTION_GAP
+        y = yCursor - CARD_PADDING_BOTTOM - SECTION_GAP
     }
 
     return { secaoIdx, linhaIdx: 0, zebra, grupoMergeAberto: false, done: true }
