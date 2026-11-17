@@ -29,6 +29,8 @@ import {
     formatarTelefoneEntrada,
     normalizarCrmvParaSalvar,
     normalizarEmailParaSalvar,
+    separarEmailsFinanceiros,
+    juntarEmailsFinanceiros,
     montarEnderecoUmaLinha,
     tipoEspecialidadePrestador,
     filtrarSituacoesSemAguardandoFormulario,
@@ -150,6 +152,7 @@ const estadoVazio = () => ({
     tipo_pix: '',
     tipo_repasse: '',
     email_financeiro: '',
+    email_financeiro_2: '',
     modalidade: '',
     cidade_id: '',
     latitude: '',
@@ -354,7 +357,8 @@ const CredenciamentoCadastroForm = () => {
                     return bruto ? formatarChavePixEntrada(bruto, tipo) : ''
                 })(),
                 tipo_repasse: data.tipo_repasse || '',
-                email_financeiro: data.email_financeiro ? formatarEmailEntrada(data.email_financeiro) : '',
+                email_financeiro: separarEmailsFinanceiros(data.email_financeiro)[0],
+                email_financeiro_2: separarEmailsFinanceiros(data.email_financeiro)[1],
                 modalidade: data.modalidade || '',
                 cidade_id: cidadeIdForm,
                 latitude: data.latitude != null ? String(data.latitude) : '',
@@ -766,10 +770,11 @@ const CredenciamentoCadastroForm = () => {
                 salvouCoordenadasManual = true
             }
 
-            const emailFinanceiroSalvar = normalizarEmailParaSalvar(form.email_financeiro) || null
-            if (emailFinanceiroSalvar && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailFinanceiroSalvar)) {
-                throw new Error('E-mail financeiro inválido.')
+            for (const e of [form.email_financeiro, form.email_financeiro_2]) {
+                const v = normalizarEmailParaSalvar(e)
+                if (v && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(v)) throw new Error('E-mail financeiro inválido.')
             }
+            const emailFinanceiroSalvar = juntarEmailsFinanceiros(form.email_financeiro, form.email_financeiro_2) || null
 
             const payload = {
                 nome: form.nome.trim(),
@@ -1536,6 +1541,21 @@ const CredenciamentoCadastroForm = () => {
                             />
                             <p className="pcad_field_tip">
                                 Vale para todos os meses. Se vazio, os e-mails vão para o e-mail do cadastro.
+                            </p>
+                        </label>
+                        <label className="pcad_field" htmlFor="pcad_email_financeiro_2">
+                            E-mail financeiro 2 (opcional)
+                            <input
+                                id="pcad_email_financeiro_2"
+                                type="email"
+                                className="credenciamento_main_input"
+                                placeholder="Opcional — recebe a mesma mensagem que o e-mail financeiro"
+                                value={form.email_financeiro_2}
+                                onChange={(e) => setCampo('email_financeiro_2', formatarEmailEntrada(e.target.value))}
+                                disabled={somenteLeitura}
+                            />
+                            <p className="pcad_field_tip">
+                                Para o prestador que quer receber o relatório e o comprovante em dois e-mails.
                             </p>
                         </label>
                     </div>
