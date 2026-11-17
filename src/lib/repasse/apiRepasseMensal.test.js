@@ -218,6 +218,35 @@ describe('página pública', () => {
         expect(tabela('repasse_documentos')).toHaveLength(2)
     })
 
+    it('até 3 NFS-e no mesmo link: soma avaliada, 4ª recusada, aprovação só com todas revisadas', async () => {
+        semear({ tipo: 'nota' })
+        const { relId, token } = await criarELink()
+        const doc = (n, valor) => ({ path: `2026-10/${relId}/documento/${n}.pdf`, numero: String(n), valor })
+        const r = await chamar('publico-documento', { token, documentos: [doc(1, 50), doc(2, 50), doc(3, 50)] })
+        expect(r).toMatchObject({ ok: true, status: 'documento_em_revisao', alerta: 'ok', quantidade: 3 })
+        expect(tabela('repasse_documentos')).toHaveLength(3)
+        expect(tabela('repasse_eventos').filter((e) => e.tipo === 'documento_enviado')).toHaveLength(1)
+        const quarta = await chamar('publico-documento', { token, documentos: [doc(4, 10)] })
+        expect(quarta.status).toBe(400)
+        const muitas = await chamar('publico-documento', { token, documentos: [doc(5, 1), doc(6, 1), doc(7, 1), doc(8, 1)] })
+        expect(muitas.status).toBe(400)
+        // financeiro aprova uma a uma; o relatório só vira «aprovado» na última
+        tabela('repasse_documentos').forEach((d, i) => { d.id = `nf${i + 1}` }) // o mock não gera ids
+        const [d1, d2, d3] = ['nf1', 'nf2', 'nf3']
+        expect((await chamar('revisar-documento', { documento_id: d1, acao: 'aprovar' })).status).toBe('documento_em_revisao')
+        expect(tabela('pagamentos_registros')[0].resposta).toBe(false)
+        expect((await chamar('revisar-documento', { documento_id: d2, acao: 'devolver', motivo: 'valor errado' })).status).toBe('documento_devolvido')
+        expect((await chamar('revisar-documento', { documento_id: d3, acao: 'aprovar' })).status).toBe('documento_devolvido')
+        expect(tabela('pagamentos_registros')[0].resposta).toBe(false)
+    })
+
+    it('várias NFS-e somando o valor pago pelo tutor são recusadas', async () => {
+        semear({ tipo: 'nota' })
+        const { relId, token } = await criarELink()
+        const r = await chamar('publico-documento', { token, documentos: [{ path: `2026-10/${relId}/documento/a.pdf`, numero: '1', valor: 5 }, { path: `2026-10/${relId}/documento/b.pdf`, numero: '2', valor: 15 }] })
+        expect(r.status).toBe(422)
+    })
+
     it('rejeita caminho de documento de outro relatório', async () => {
         semear({ tipo: 'nota' })
         const { token } = await criarELink()

@@ -75,10 +75,9 @@ export const publicoReprovar = (token, observacao, canal) =>
     chamar('publico-reprovar', { token, observacao, canal }, { publico: true })
 export const publicoComprovante = (token) => chamar('publico-comprovante', { token }, { publico: true })
 
-/** Sobe NF/boleto (URL assinada) e registra o documento. */
-export async function publicoEnviarDocumento(token, arquivo, { numero, vencimento, valor }) {
-    // Até 3 tentativas do envio do arquivo. Cada uma pede uma URL nova (o token do envio é de uso único) e, se a
-    // rede cair no meio, recomeça sozinha. O registro do documento (abaixo) NÃO é repetido: duplicaria a nota.
+/** Sobe um arquivo por URL assinada (até 3 tentativas) e devolve o caminho no Storage. */
+async function subirArquivoPublico(token, arquivo) {
+    // Cada tentativa pede uma URL nova (o token do envio é de uso único) e, se a rede cair no meio, recomeça sozinha.
     let prep = null
     for (let t = 1; t <= 3; t++) {
         prep = await chamar('publico-upload-url', { token, nome: arquivo.name, tamanho: arquivo.size }, { publico: true, tentativasRede: 2 })
@@ -94,8 +93,22 @@ export async function publicoEnviarDocumento(token, arquivo, { numero, venciment
         if (t === 3 || !rede) throw rede ? erroDeRede() : new Error('Não foi possível enviar o arquivo. Tente novamente.')
         await espera(1000 * t)
     }
-    return chamar('publico-documento', { token, path: prep.path, numero, vencimento, valor }, { publico: true })
+    return prep.path
 }
+
+/**
+ * Sobe NFS-e (até 3) ou um boleto e registra tudo numa só chamada. O registro (abaixo) NÃO é repetido
+ * em caso de falha de rede: duplicaria a nota.
+ */
+export async function publicoEnviarDocumentos(token, itens, { vencimento } = {}) {
+    const documentos = []
+    for (const it of itens) documentos.push({ path: await subirArquivoPublico(token, it.arquivo), numero: it.numero, valor: it.valor })
+    return chamar('publico-documento', { token, documentos, vencimento }, { publico: true })
+}
+
+/** Um documento só (NF ou boleto). */
+export const publicoEnviarDocumento = (token, arquivo, { numero, vencimento, valor }) =>
+    publicoEnviarDocumentos(token, [{ arquivo, numero, valor }], { vencimento })
 
 // ---- internas (JWT) ----
 export const criarRelatorios = (itens) => chamar('criar-relatorios', { itens })
