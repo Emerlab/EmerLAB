@@ -3822,3 +3822,103 @@ body.dark-mode .conf_lab_sugestao.is-on,
 body.dark-mode .conf_lab_sugestao:hover {
     background: #1b3345;
 }
+
+/* ── Memória do laboratório: o que o sistema já sabe, base guardada e resumo de aprendizado ───────────────── */
+.conf_lab_memoria {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--ek-line, #d8e6ef);
+    border-radius: var(--ek-r-card, 14px);
+    background: var(--ek-info-bg, #e8f4fc);
+}
+.conf_lab_memoria_titulo {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ek-brand-deep, #165f8c);
+}
+.conf_lab_memoria_chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.conf_lab_pilula {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.conf_lab_pilula.is-info {
+    background: var(--ek-surface, #fff);
+    color: var(--ek-brand-deep, #165f8c);
+    border: 1px solid var(--ek-line-strong, #bfd7e8);
+}
+.conf_lab_pilula.is-ok {
+    background: var(--ek-ok-bg, #e8f8ef);
+    color: var(--ek-ok, #0a7a4a);
+}
+.conf_lab_base_guardada {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--ek-ok, #0a7a4a);
+    border-radius: var(--ek-r-card, 14px);
+    background: var(--ek-ok-bg, #e8f8ef);
+    color: var(--ek-ink, #142033);
+}
+.conf_lab_base_guardada > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.conf_lab_base_guardada span {
+    font-size: 13px;
+    color: var(--ek-ink-soft, #3d5168);
+    word-break: break-word;
+}
+.conf_lab_aprendizado {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--ek-line, #d8e6ef);
+    border-radius: var(--ek-r-card, 14px);
+    background: var(--ek-surface, #fff);
+}
+.conf_lab_aprendizado p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ek-ink-soft, #3d5168);
+}
+.conf_lab_aprendizado strong {
+    color: var(--ek-ink, #142033);
+}
+.conf_lab_aprendizado_barra {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--ek-line, #e3edf4);
+    overflow: hidden;
+}
+.conf_lab_aprendizado_barra > span {
+    display: block;
+    height: 100%;
+    background: var(--ek-ok, #0a7a4a);
+}
+.conf_lab_regras_sub {
+    margin: 12px 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ek-ink-soft, #3d5168);
+}

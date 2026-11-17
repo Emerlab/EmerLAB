@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { EQUIVALENCIAS_PADRAO } from '../../../lib/configuracoes/conferencia/examSimilarity.js'
+import { formatarValorConferencia } from '../../../lib/configuracoes/conferenciaLaboratorioPrecos.js'
 import ComboExame from './ComboExame.jsx'
 import { useDrawerDialog } from './useDrawerDialog.js'
 
@@ -15,6 +16,10 @@ export default function CadastroRegrasConferencia({
     onRemoverEquivalencia,
     onSalvarPerfil,
     onRemoverPerfil,
+    aliasesPessoa = [],
+    onRemoverAlias,
+    valoresAceitos = [],
+    onRemoverValorAceito,
     nomeLaboratorio = '',
 }) {
     const [nomeA, setNomeA] = useState('')
@@ -79,7 +84,7 @@ export default function CadastroRegrasConferencia({
                                 ? `Laboratório: ${nomeLaboratorio}`
                                 : "Esta conferência (sem laboratório selecionado)"}
                         </p>
-                        <h2 id="conf-lab-regras-title">Equivalências e perfis</h2>
+                        <h2 id="conf-lab-regras-title">Memória do laboratório</h2>
                     </div>
                     <button
                         ref={closeRef}
@@ -90,6 +95,67 @@ export default function CadastroRegrasConferencia({
                         Fechar
                     </button>
                 </header>
+
+                <section>
+                    <h3>O que já foi aprendido</h3>
+                    <p className="conf_lab_muted">
+                        Cada item vale sozinho nas próximas conferências deste laboratório. Remova o que não vale mais.
+                    </p>
+                    <h4 className="conf_lab_regras_sub">Tutores alternativos ({aliasesPessoa.length})</h4>
+                    {aliasesPessoa.length ? (
+                        <ul className="conf_lab_regras_lista">
+                            {aliasesPessoa.map((a, idx) => (
+                                <li key={a.id || `${a.nomePlano}-${a.nomeLab}-${idx}`} className="conf_lab_regras_item">
+                                    <span>
+                                        <strong>{a.nomePlano}</strong> = {a.nomeLab}
+                                    </span>
+                                    {onRemoverAlias ? (
+                                        <span className="conf_lab_regras_item_acoes">
+                                            <button
+                                                type="button"
+                                                className="credenciamento_main_action_btn secondary conf_lab_regras_btn"
+                                                aria-label={`Remover tutor alternativo ${a.nomePlano}`}
+                                                onClick={() => onRemoverAlias(idx)}
+                                            >
+                                                Desfazer
+                                            </button>
+                                        </span>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="conf_lab_muted">Nenhum ainda. Surge quando você confirma «Tutor alternativo» numa divergência.</p>
+                    )}
+                    <h4 className="conf_lab_regras_sub">Valores aceitos ({valoresAceitos.length})</h4>
+                    {valoresAceitos.length ? (
+                        <ul className="conf_lab_regras_lista">
+                            {valoresAceitos.map((v, idx) => (
+                                <li key={v.id || `${v.exame}-${v.valorPlano}-${v.valorLab}-${idx}`} className="conf_lab_regras_item">
+                                    <span>
+                                        <strong>{v.exame}</strong> · plano {formatarValorConferencia(v.valorPlano)} × laboratório{' '}
+                                        {formatarValorConferencia(v.valorLab)}
+                                        {v.justificativa ? ` · ${v.justificativa}` : ''}
+                                    </span>
+                                    {onRemoverValorAceito ? (
+                                        <span className="conf_lab_regras_item_acoes">
+                                            <button
+                                                type="button"
+                                                className="credenciamento_main_action_btn secondary conf_lab_regras_btn"
+                                                aria-label={`Desfazer valor aceito de ${v.exame}`}
+                                                onClick={() => onRemoverValorAceito(idx)}
+                                            >
+                                                Desfazer
+                                            </button>
+                                        </span>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="conf_lab_muted">Nenhum ainda. Surge quando você aceita uma diferença de valor com justificativa.</p>
+                    )}
+                </section>
 
                 <section>
                     <h3>{editando ? 'Editar equivalência de exame' : 'Nova equivalência de exame'}</h3>

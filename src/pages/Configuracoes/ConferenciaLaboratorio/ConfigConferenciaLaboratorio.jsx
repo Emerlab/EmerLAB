@@ -34,18 +34,30 @@ import {
 } from '../../../lib/configuracoes/conferencia/examSimilarity.js'
 import {
     atualizarEquivalenciaExame,
+    carregarMemoriaLaboratorio,
     carregarRegrasLaboratorio,
     listarLaboratorios,
     registrarRevisoes,
+    removerAliasPessoa,
     removerEquivalenciaExame,
     removerPerfilExame,
+    removerValorAceito,
     removerVinculoBase,
     resolverVinculosSalvos,
     salvarAliasPessoa,
     salvarEquivalenciaExame,
+    salvarImportacaoMemoria,
     salvarPerfilExame,
+    salvarValorAceito,
     salvarVinculoBase,
 } from '../../../lib/configuracoes/conferencia/persist.js'
+import {
+    aplicarValoresAceitos,
+    mapaColunasCompativel,
+    mapaColunasParaNomes,
+    regraValorAceitoDe,
+    resumoDeAprendizado,
+} from '../../../lib/configuracoes/conferencia/memoria.js'
 import { aplicarValoresBase, examesPendentesVinculo } from '../../../lib/configuracoes/conferencia/lookupBase.js'
 import { exportarConferenciaHonorariosExcel } from '../../../lib/configuracoes/conferencia/export.js'
 import {
@@ -86,6 +98,8 @@ const ROTULO_CAMPO = {
 }
 
 const FILTROS_RAPIDOS = [
+    { id: 'precisam', label: 'Precisam de você' },
+    { id: 'memoria', label: 'Resolvidas pela memória' },
     { id: 'todos', label: 'Todos' },
     { id: 'divergencias', label: 'Somente divergências' },
     { id: 'valores', label: 'Somente valores divergentes' },
@@ -274,6 +288,8 @@ const ACOES_MASSA = [
 
 function filtrarResultados(resultados, filtro, busca) {
     let list = resultados || []
+    if (filtro === 'precisam') list = list.filter((r) => !statusEhOk(r.status) && !r.revisao?.ignorar)
+    if (filtro === 'memoria') list = list.filter((r) => Boolean(r.aprendido))
     if (filtro === 'divergencias') list = list.filter((r) => statusEhDivergencia(r.status) && !r.revisao?.ignorar)
     if (filtro === 'valores') list = list.filter((r) => r.status === 'VALOR_DIVERGENTE')
     if (filtro === 'orfaos') {
@@ -396,6 +412,10 @@ const ConfigConferenciaLaboratorio = () => {
     const [periodoYm, setPeriodoYm] = useState(mesAtualYm)
     const [vinculosSalvos, setVinculosSalvos] = useState([])
     const [regrasInfo, setRegrasInfo] = useState({ carregando: false, migracaoPendente: false, motivo: '' })
+    // Memória extra do laboratório: diferenças de valor já aceitas e o que foi lembrado de cada arquivo importado
+    const [valoresAceitos, setValoresAceitos] = useState([])
+    const [memoriaImport, setMemoriaImport] = useState({})
+    const [baseGuardadaEmUso, setBaseGuardadaEmUso] = useState(false)
 
     const [arquivoHonorarios, setArquivoHonorarios] = useState(null)
     const [arquivoMellis, setArquivoMellis] = useState(null)
@@ -552,6 +572,11 @@ const ConfigConferenciaLaboratorio = () => {
             setPerfis((prev) => [...r.perfis, ...prev.filter((p) => !p.id && !r.perfis.some((q) => q.nome === p.nome))])
             setVinculosSalvos(r.vinculos)
         })
+        carregarMemoriaLaboratorio(laboratorioId).then((m) => {
+            if (!vivo || !m.ok) return
+            setValoresAceitos(m.valoresAceitos)
+            setMemoriaImport(m.importacoes)
+        })
         return () => {
             vivo = false
         }
@@ -577,6 +602,9 @@ const ConfigConferenciaLaboratorio = () => {
         setPerfis([])
         setVinculosSalvos([])
         setVinculosBase({})
+        setValoresAceitos([])
+        setMemoriaImport({})
+        setBaseGuardadaEmUso(false)
         setRegrasInfo({ carregando: false, migracaoPendente: false, motivo: '' })
     }
 
@@ -822,7 +850,19 @@ const ConfigConferenciaLaboratorio = () => {
         setErro('')
         setProcessando(true)
         try {
-            const parsed = await parseArquivo(file, mapa, origem)
+            let parsed = await parseArquivo(file, mapa, origem)
+            // Colunas já mapeadas para este laboratório: reaproveita se o arquivo novo tem as mesmas colunas
+            const lembrado = Object.keys(mapa || {}).length
+                ? null
+                : mapaColunasCompativel(memoriaImport[origem]?.mapaColunas, parsed.headers)
+            if (lembrado) {
+                parsed = await parseArquivo(file, lembrado, origem)
+                if (origem === 'valores_base') setMapColsBase(lembrado)
+                else if (origem === 'honorarios') setMapColsHonorarios(lembrado)
+                else setMapColsMellis(lembrado)
+                setFeedback('Colunas reconhecidas pela memória deste laboratório.')
+            }
+            if (origem === 'valores_base') setBaseGuardadaEmUso(false)
             const falt = aplicarParse(parsed, origem)
             if (parsed.erro && falt.length) setErro(parsed.erro)
             else setPasso('preview')
@@ -896,6 +936,47 @@ const ConfigConferenciaLaboratorio = () => {
         }).then(avisarFalhaRegra)
     }
 
+    /** Guarda, por laboratório, as colunas mapeadas de cada arquivo (e a Valores de Base) para os próximos meses. */
+    const guardarImportacoes = () => {
+        if (!laboratorioId) return
+        const itens = [
+            { origem: 'valores_base', arquivo: arquivoBase, headers: headersBase, mapa: mapColsBase, linhas: linhasBase },
+            { origem: 'honorarios', arquivo: arquivoHonorarios, headers: headersHonorarios, mapa: mapColsHonorarios },
+            { origem: 'mellislab', arquivo: arquivoMellis, headers: headersMellis, mapa: mapColsMellis },
+        ]
+        for (const it of itens) {
+            const nomes = mapaColunasParaNomes(it.mapa, it.headers)
+            // sem arquivo novo nesta sessão (restaurada/base guardada), mantém o que já estava guardado
+            if (!it.arquivo || !Object.keys(nomes).length) continue
+            const nomeArquivo = it.arquivo.name
+            const linhas = it.origem === 'valores_base' && (it.linhas?.length || 0) <= 5000 ? it.linhas : null
+            void salvarImportacaoMemoria({ laboratorioId, origem: it.origem, nomeArquivo, mapaColunas: nomes, linhas }).then((r) => {
+                if (!r.ok && !r.migracaoPendente) setAviso(`Memória de importação não gravada: ${r.motivo}`)
+            })
+            setMemoriaImport((prev) => ({
+                ...prev,
+                [it.origem]: { nomeArquivo, mapaColunas: nomes, linhas: linhas ?? prev[it.origem]?.linhas ?? null, atualizadoEm: new Date().toISOString() },
+            }))
+        }
+    }
+
+    /** Usa a planilha Valores de Base guardada na última conferência deste laboratório (sem novo envio). */
+    const usarBaseGuardada = () => {
+        const g = memoriaImport.valores_base
+        if (!g?.linhas?.length) return
+        if (resultados.length && !window.confirm('Usar a base guardada descarta o resultado atual. Continuar?')) return
+        descartarResultados()
+        setArquivoBase(null)
+        setLinhasBase(g.linhas)
+        setHeadersBase([])
+        setFaltBase([])
+        setVinculosBase({})
+        setNomesArquivosSalvos((prev) => ({ ...prev, base: g.nomeArquivo || 'Valores de Base guardada' }))
+        setBaseGuardadaEmUso(true)
+        setFeedback(`Valores de Base guardada em uso: ${g.nomeArquivo || 'último envio'} (${g.linhas.length} itens).`)
+        if (arquivoHonorarios || linhasHonorarios.length) setPasso('preview')
+    }
+
     // ── Comparação ─────────────────────────────────────────────────────────────
     const executarComparacao = async () => {
         if (!podeComparar) {
@@ -931,13 +1012,20 @@ const ConfigConferenciaLaboratorio = () => {
                 aliasesPessoa,
                 perfis,
             })
-            setResultados(out.resultados)
-            setResumo(out.resumo)
+            const memoria = aplicarValoresAceitos(out.resultados, valoresAceitos)
+            setResultados(memoria.resultados)
+            setResumo(memoria.aplicadas ? resumirConferencia(memoria.resultados) : out.resumo)
             setRevisoes([])
             setSelecionados(new Set())
             setItemAberto(null)
             setPasso('resultado')
-            setFeedback('Comparação concluída. O valor oficial é o de Valores de Base.')
+            setFeedback(
+                memoria.aplicadas
+                    ? `Comparação concluída. ${memoria.aplicadas} linha(s) resolvida(s) pela memória (diferenças de valor já aceitas). O valor oficial é o de Valores de Base.`
+                    : 'Comparação concluída. O valor oficial é o de Valores de Base.',
+            )
+            guardarImportacoes()
+            setFiltro(memoria.resultados.some((r) => !statusEhOk(r.status) && !r.revisao?.ignorar) ? 'precisam' : 'todos')
         } catch (e) {
             setErro(e?.message || String(e))
         } finally {
@@ -1063,6 +1151,16 @@ const ConfigConferenciaLaboratorio = () => {
             revisao.statusFinal = proximoResultados.find((r) => r.revisao === revisao)?.status || ''
         }
 
+        if (acao === 'aceitar_valor') {
+            const regra = regraValorAceitoDe(item)
+            if (regra && laboratorioId) {
+                const nova = { exame: regra.exame, valorPlano: regra.valorPlano, valorLab: regra.valorLab, justificativa: revisao.justificativa }
+                void salvarValorAceito({ laboratorioId, ...nova }).then((r) => {
+                    avisarFalhaRegra(r)
+                    setValoresAceitos((prev) => [{ ...nova, id: r.ok ? r.id : undefined }, ...prev.filter((v) => !(v.exame === nova.exame && v.valorPlano === nova.valorPlano && v.valorLab === nova.valorLab))])
+                })
+            }
+        }
         setRevisoes((prev) => [...prev, revisao])
         setResultados(proximoResultados)
         setResumo(resumirConferencia(proximoResultados))
@@ -1220,6 +1318,24 @@ const ConfigConferenciaLaboratorio = () => {
         setEquivalencias((prev) => prev.filter((_, j) => j !== i))
         if (atual.id) avisarFalhaRegra(await removerEquivalenciaExame(atual.id))
         setFeedback('Equivalência removida.')
+    }
+
+    const removerAlias = async (idx) => {
+        const i = Number(idx)
+        const atual = aliasesPessoa[i]
+        if (!atual) return
+        setAliasesPessoa((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerAliasPessoa(atual.id))
+        setFeedback('Tutor alternativo removido.')
+    }
+
+    const removerValorAceitoMemoria = async (idx) => {
+        const i = Number(idx)
+        const atual = valoresAceitos[i]
+        if (!atual) return
+        setValoresAceitos((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerValorAceito(atual.id))
+        setFeedback('Valor aceito desfeito: volta a aparecer como divergência na próxima comparação.')
     }
 
     const salvarPerfil = async (dados) => {
@@ -1450,6 +1566,47 @@ const ConfigConferenciaLaboratorio = () => {
                         </p>
                     </div>
 
+                    {laboratorioId && !regrasInfo.carregando && !regrasInfo.motivo && !regrasInfo.migracaoPendente ? (
+                        <div className="conf_lab_memoria" role="status">
+                            <p className="conf_lab_memoria_titulo">O que o sistema já sabe sobre {laboratorioNome || 'este laboratório'}</p>
+                            <div className="conf_lab_memoria_chips">
+                                <span className="conf_lab_pilula is-info">{equivalencias.length} exame(s) equivalente(s)</span>
+                                <span className="conf_lab_pilula is-info">{aliasesPessoa.length} tutor(es) alternativo(s)</span>
+                                <span className="conf_lab_pilula is-info">{perfis.length} perfil(is)</span>
+                                <span className="conf_lab_pilula is-info">{valoresAceitos.length} valor(es) aceito(s)</span>
+                                {memoriaImport.valores_base?.linhas?.length ? (
+                                    <span className="conf_lab_pilula is-ok">Base guardada · {memoriaImport.valores_base.linhas.length} itens</span>
+                                ) : null}
+                            </div>
+                            <p className="conf_lab_muted">Isso é aplicado sozinho na comparação. Só pedimos a sua decisão para o que for novo.</p>
+                        </div>
+                    ) : null}
+
+                    {memoriaImport.valores_base?.linhas?.length && !arquivoBase && !baseGuardadaEmUso ? (
+                        <div className="conf_lab_base_guardada">
+                            <div>
+                                <strong>Valores de Base guardada</strong>
+                                <span>
+                                    {memoriaImport.valores_base.nomeArquivo || 'último envio'} · {memoriaImport.valores_base.linhas.length} itens
+                                    {memoriaImport.valores_base.atualizadoEm
+                                        ? ` · enviada em ${new Date(memoriaImport.valores_base.atualizadoEm).toLocaleDateString('pt-BR')}`
+                                        : ''}
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                className="credenciamento_main_action_btn"
+                                disabled={processando || !podeEditar}
+                                onClick={usarBaseGuardada}
+                            >
+                                Usar esta base
+                            </button>
+                        </div>
+                    ) : null}
+                    {baseGuardadaEmUso ? (
+                        <p className="conf_lab_muted">Usando a Valores de Base guardada. Para trocar, envie outro arquivo abaixo.</p>
+                    ) : null}
+
                     <div className="conf_lab_uploads conf_lab_uploads_tres !grid !grid-cols-1 gap-4 md:!grid-cols-3">
                         <UploadZone
                             titulo="Valores de Base"
@@ -1593,7 +1750,7 @@ const ConfigConferenciaLaboratorio = () => {
                             disabled={processando || !podeEditar}
                             onClick={() => setRegrasAberto(true)}
                         >
-                            Equivalências e perfis
+                            Memória do laboratório
                         </button>
                         <button
                             type="button"
@@ -1620,6 +1777,26 @@ const ConfigConferenciaLaboratorio = () => {
             {passo === 'resultado' && resumo ? (
                 <section className="conf_lab_card">
                     <h2>Resultado da conferência</h2>
+                    {(() => {
+                        const ap = resumoDeAprendizado(resultados)
+                        return (
+                            <div className="conf_lab_aprendizado" role="status">
+                                <div className="conf_lab_aprendizado_barra" aria-hidden="true">
+                                    <span style={{ width: `${ap.percentualSozinhas}%` }} />
+                                </div>
+                                <p>
+                                    <strong>{ap.sozinhas}</strong> de {ap.total} linhas conferidas sozinhas ({ap.percentualSozinhas}%) ·{' '}
+                                    <strong>{ap.precisamDeVoce}</strong> precisam de você
+                                    {ap.resolvidasPelaMemoria ? (
+                                        <>
+                                            {' '}
+                                            · <strong>{ap.resolvidasPelaMemoria}</strong> resolvidas pela memória
+                                        </>
+                                    ) : null}
+                                </p>
+                            </div>
+                        )
+                    })()}
                     <div className="conf_lab_dash">
                         <DashCard
                             label="Total valor de base"
@@ -1766,7 +1943,7 @@ const ConfigConferenciaLaboratorio = () => {
                             className="credenciamento_main_action_btn secondary"
                             onClick={() => setRegrasAberto(true)}
                         >
-                            Equivalências e perfis
+                            Memória do laboratório
                         </button>
                         <button
                             type="button"
@@ -1809,6 +1986,10 @@ const ConfigConferenciaLaboratorio = () => {
                 onRemoverEquivalencia={(idx) => void removerEquivalencia(idx)}
                 onSalvarPerfil={(dados) => void salvarPerfil(dados)}
                 onRemoverPerfil={(idx) => void removerPerfil(idx)}
+                aliasesPessoa={aliasesPessoa}
+                onRemoverAlias={(idx) => void removerAlias(idx)}
+                valoresAceitos={valoresAceitos}
+                onRemoverValorAceito={(idx) => void removerValorAceitoMemoria(idx)}
             />
         </main>
     )

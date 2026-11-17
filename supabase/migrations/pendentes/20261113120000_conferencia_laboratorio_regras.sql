@@ -4,7 +4,12 @@
 --   * lab_pessoa_alias       : tutor alternativo conhecido (por laboratório)
 --   * lab_exame_perfil(+item): pacotes/perfis de exames (por laboratório)
 --   * lab_vinculo_base       : exame do plano -> código na Valores de Base (por laboratório)
+--   * lab_valor_aceito      : diferença de valor já aceita (exame + valor do plano + valor do laboratório), por laboratório
+--   * lab_importacao_memoria: colunas mapeadas por arquivo e a planilha Valores de Base guardada, por laboratório
 --   * lab_conferencia_revisao: trilha de auditoria das decisões manuais
+--
+-- Compatível com o banco atual: os nomes abaixo NÃO colidem com lab_conferencia_sessao, lab_exame_mapeamento e
+-- lab_pessoa_mapeamento (já existentes, não são tocadas). Tudo é "create ... if not exists".
 -- Leitura: quem vê a Conferência. Escrita: quem edita a Conferência (mesmo padrão do RLS por permissão).
 -- Aplicar manualmente (supabase db push / SQL editor) após revisão.
 -- Reversão: supabase/migrations/pendentes/20261113120000_conferencia_laboratorio_regras.rollback.sql
@@ -70,6 +75,31 @@ create table if not exists public.lab_vinculo_base (
   unique (laboratorio_id, exame_normalizado)
 );
 
+create table if not exists public.lab_valor_aceito (
+  id uuid primary key default gen_random_uuid(),
+  laboratorio_id bigint not null references public.prestadores (id) on delete cascade,
+  exame_normalizado text not null,
+  exame text not null,
+  valor_plano numeric(12, 2) not null,
+  valor_lab numeric(12, 2) not null,
+  justificativa text,
+  criado_por uuid,
+  criado_em timestamptz not null default now(),
+  unique (laboratorio_id, exame_normalizado, valor_plano, valor_lab)
+);
+
+create table if not exists public.lab_importacao_memoria (
+  id uuid primary key default gen_random_uuid(),
+  laboratorio_id bigint not null references public.prestadores (id) on delete cascade,
+  origem text not null check (origem in ('valores_base', 'honorarios', 'mellislab')),
+  nome_arquivo text,
+  mapa_colunas jsonb not null default '{}'::jsonb,
+  linhas jsonb,
+  atualizado_por uuid,
+  atualizado_em timestamptz not null default now(),
+  unique (laboratorio_id, origem)
+);
+
 create table if not exists public.lab_conferencia_revisao (
   id uuid primary key default gen_random_uuid(),
   laboratorio_id bigint not null references public.prestadores (id) on delete cascade,
@@ -90,6 +120,8 @@ create index if not exists lab_pessoa_alias_lab_idx on public.lab_pessoa_alias (
 create index if not exists lab_exame_perfil_lab_idx on public.lab_exame_perfil (laboratorio_id) where ativo;
 create index if not exists lab_exame_perfil_item_perfil_idx on public.lab_exame_perfil_item (perfil_id);
 create index if not exists lab_vinculo_base_lab_idx on public.lab_vinculo_base (laboratorio_id);
+create index if not exists lab_valor_aceito_lab_idx on public.lab_valor_aceito (laboratorio_id);
+create index if not exists lab_importacao_memoria_lab_idx on public.lab_importacao_memoria (laboratorio_id);
 create index if not exists lab_conferencia_revisao_lab_idx on public.lab_conferencia_revisao (laboratorio_id, criado_em desc);
 
 do $$
@@ -98,7 +130,8 @@ declare
 begin
   foreach t in array array[
     'lab_exame_equivalencia', 'lab_pessoa_alias', 'lab_exame_perfil',
-    'lab_exame_perfil_item', 'lab_vinculo_base', 'lab_conferencia_revisao'
+    'lab_exame_perfil_item', 'lab_vinculo_base', 'lab_valor_aceito', 'lab_importacao_memoria',
+    'lab_conferencia_revisao'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists %I on public.%I', t || '_leitura', t);

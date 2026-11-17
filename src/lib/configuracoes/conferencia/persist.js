@@ -320,3 +320,111 @@ export function resolverVinculosSalvos(vinculosSalvos, linhasBase, vinculosAtuai
     }
     return out
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Memória extra: valores aceitos e importação (colunas + Valores de Base guardada). Funções separadas de
+// `carregarRegrasLaboratorio` para que a falta destas tabelas nunca derrube o carregamento das demais regras.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** @returns {Promise<{ ok: boolean, migracaoPendente?: boolean, valoresAceitos: Array, importacoes: object }>} */
+export async function carregarMemoriaLaboratorio(laboratorioId) {
+    const id = idLab(laboratorioId)
+    const vazio = { valoresAceitos: [], importacoes: {} }
+    if (!id) return { ok: false, ...vazio }
+    try {
+        const [va, im] = await Promise.all([
+            supabase
+                .from('lab_valor_aceito')
+                .select('id, exame, valor_plano, valor_lab, justificativa, criado_em')
+                .eq('laboratorio_id', id)
+                .order('criado_em', { ascending: false }),
+            supabase
+                .from('lab_importacao_memoria')
+                .select('origem, nome_arquivo, mapa_colunas, linhas, atualizado_em')
+                .eq('laboratorio_id', id),
+        ])
+        const erro = va.error || im.error
+        if (erro) return { ok: false, migracaoPendente: erroTabelaAusente(erro), motivo: motivoErro(erro), ...vazio }
+        const importacoes = {}
+        for (const r of im.data || []) {
+            importacoes[r.origem] = {
+                nomeArquivo: r.nome_arquivo || '',
+                mapaColunas: r.mapa_colunas || {},
+                linhas: Array.isArray(r.linhas) ? r.linhas : null,
+                atualizadoEm: r.atualizado_em,
+            }
+        }
+        return {
+            ok: true,
+            valoresAceitos: (va.data || []).map((r) => ({
+                id: r.id,
+                exame: r.exame,
+                valorPlano: Number(r.valor_plano),
+                valorLab: Number(r.valor_lab),
+                justificativa: r.justificativa || '',
+                criadoEm: r.criado_em,
+            })),
+            importacoes,
+        }
+    } catch (e) {
+        return { ok: false, motivo: e?.message || String(e), ...vazio }
+    }
+}
+
+export async function salvarValorAceito({ laboratorioId, exame, valorPlano, valorLab, justificativa }) {
+    const id = idLab(laboratorioId)
+    const plano = Number(valorPlano)
+    const lab = Number(valorLab)
+    if (!id || !String(exame || '').trim() || !Number.isFinite(plano) || !Number.isFinite(lab)) {
+        return { ok: false, motivo: 'Dados incompletos.' }
+    }
+    const r = await executar(
+        supabase
+            .from('lab_valor_aceito')
+            .upsert(
+                {
+                    laboratorio_id: id,
+                    exame_normalizado: normalizarTextoBusca(exame),
+                    exame: String(exame).trim(),
+                    valor_plano: Math.round(plano * 100) / 100,
+                    valor_lab: Math.round(lab * 100) / 100,
+                    justificativa: String(justificativa || '').trim() || null,
+                    criado_por: await uidAtual(),
+                },
+                { onConflict: 'laboratorio_id,exame_normalizado,valor_plano,valor_lab' },
+            )
+            .select('id')
+            .single(),
+    )
+    return r.ok ? { ok: true, id: r.data?.id } : r
+}
+
+export async function removerValorAceito(id) {
+    if (!id) return { ok: true }
+    return executar(supabase.from('lab_valor_aceito').delete().eq('id', id))
+}
+
+/** Guarda as colunas mapeadas (e, para Valores de Base, as linhas) do último arquivo enviado deste laboratório. */
+export async function salvarImportacaoMemoria({ laboratorioId, origem, nomeArquivo, mapaColunas, linhas = null }) {
+    const id = idLab(laboratorioId)
+    if (!id || !['valores_base', 'honorarios', 'mellislab'].includes(origem)) return { ok: false, motivo: 'Dados incompletos.' }
+    return executar(
+        supabase.from('lab_importacao_memoria').upsert(
+            {
+                laboratorio_id: id,
+                origem,
+                nome_arquivo: nomeArquivo || null,
+                mapa_colunas: mapaColunas || {},
+                linhas: origem === 'valores_base' ? linhas : null,
+                atualizado_por: await uidAtual(),
+                atualizado_em: new Date().toISOString(),
+            },
+            { onConflict: 'laboratorio_id,origem' },
+        ),
+    )
+}
+
+export async function removerAliasPessoa(id) {
+    if (!id) return { ok: true }
+    return executar(supabase.from('lab_pessoa_alias').update({ ativo: false }).eq('id', id))
+}
