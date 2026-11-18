@@ -693,3 +693,144 @@ body.dark-mode .planos_impressao_table_wrap {
         font-size: 0.75rem;
     }
 }
+
+/* Painel de download rápido (zip por cidade) */
+.planos_impressao_zip {
+    max-width: 960px;
+    margin: 0 auto 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #d5dbe2;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.planos_impressao_zip_titulo {
+    margin: 0 0 0.6rem;
+    font-size: 1rem;
+}
+
+.planos_impressao_zip_info {
+    margin: 0.4rem 0;
+    font-size: 0.8125rem;
+    color: #555;
+}
+
+.planos_impressao_zip_msg {
+    text-align: left;
+    margin: 0.5rem 0 0;
+}
+
+.planos_impressao_zip_lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.planos_impressao_zip_linha {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.85rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #eceff3;
+    font-size: 0.875rem;
+}
+
+.planos_impressao_zip_plano {
+    font-weight: 600;
+    min-width: 8rem;
+}
+
+.planos_impressao_zip_preset {
+    color: #444;
+}
+
+.planos_impressao_zip_preset.is-sem-preset {
+    color: #b00020;
+}
+
+.planos_impressao_zip_selo {
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: #fff3cd;
+    color: #7a5800;
+    font-size: 0.75rem;
+}
+
+.planos_impressao_zip_rodape {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+    margin-top: 0.7rem;
+}
+
+.planos_impressao_zip_ultimo {
+    font-size: 0.8125rem;
+    color: #555;
+}
+
+.planos_impressao_zip_acao {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+
+.planos_impressao_zip_motivo {
+    font-size: 0.8125rem;
+    color: #9a6700;
+}
+
+body.dark-mode .planos_impressao_zip {
+    background: var(--surface, #1b2430);
+    border-color: #34404e;
+}
+
+body.dark-mode .planos_impressao_zip_info,
+body.dark-mode .planos_impressao_zip_ultimo,
+body.dark-mode .planos_impressao_zip_preset {
+    color: #a0aab4;
+}
+
+body.dark-mode .planos_impressao_zip_linha {
+    border-bottom-color: #2c3744;
+}
+
+body.dark-mode .planos_impressao_zip_preset.is-sem-preset {
+    color: #f0a0a8;
+}
+
+body.dark-mode .planos_impressao_zip_selo {
+    background: #4a3d12;
+    color: #e6c35c;
+}
+
+body.dark-mode .planos_impressao_zip_motivo {
+    color: #e6c35c;
+}
+
+@media (max-width: 1023px) {
+    .planos_impressao_zip {
+        margin: 0 0 0.85rem;
+        padding: 0.7rem 0.75rem;
+    }
+
+    .planos_impressao_zip_linha {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .planos_impressao_zip_rodape,
+    .planos_impressao_zip_acao {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .planos_impressao_zip_acao .ek-btn,
+    .planos_impressao_zip_revisar {
+        width: 100%;
+    }
+}

@@ -2,6 +2,22 @@ import { PDFDocument, rgb } from 'pdf-lib'
 import { blobDePdfLib } from '../pdf/serializarPdf.js'
 import { embedMontserratNoPdf } from '../impressaoPlanos/montserratPdfFonts.js'
 import { formatarCarimboDataHora } from '../pdf/formatarCarimboEmissao.js'
+import {
+    CARD_PADDING_BOTTOM,
+    CARD_RADIUS,
+    COR_BRANCO,
+    COR_NAVY,
+    COR_ZEBRA,
+    FONT_SIZE_BODY,
+    FONT_SIZE_HEADER,
+    TABLE_HEADER_HEIGHT,
+    TITLE_BAR_HEIGHT,
+    desenharBarraTitulo,
+    desenharDivisoria,
+    desenharRetanguloArredondado,
+    yBaselineCentro,
+    yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
+} from '../pdf/estiloTabelaPdf.js'
 import { nomeGrupoBeneficioVisivel } from '../credenciamento/prestadorBeneficios.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 import urlDescontosPdf from '../../assets/honorarios/Descontos.pdf?url'
@@ -14,15 +30,15 @@ const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
 const SECTION_GAP = 16
-const CARD_RADIUS = 8
-const TITLE_BAR_HEIGHT = 32
-const TABLE_HEADER_HEIGHT = 26
+// Linhas de Descontos têm título + subtítulo: mantêm altura própria (36) em vez da base compartilhada (34).
 const ROW_BASE_HEIGHT = 36
-const LINE_LEADING = 11
-const FONT_SIZE_BODY = 9
+const ROW_TEXT_INSET = 14
+const LINE_LEADING = 12
+const SUB_LEADING = 10
+const TITULO_SUB_GAP = 14
+/** Largura útil de quebra da coluna Serviço: usada na medição e no desenho. */
+const ROW_TEXT_WIDTH_PAD = ROW_TEXT_INSET + 6
 const FONT_SIZE_SUB = 7.5
-const FONT_SIZE_HEADER = 9
-const FONT_SIZE_TITLE = 10
 const FONT_SIZE_INFO = 10
 const FONT_SIZE_STAMP = 7
 const GAP_CARIMBO = 12
@@ -31,12 +47,8 @@ const INFO_SEP_GAP = 14
 const INFO_TITLE_GAP = 12
 const INFO_MIN_BODY = 48
 
-const COR_NAVY = rgb(22 / 255, 33 / 255, 62 / 255)
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
 const COR_TEXTO_SUB = rgb(120 / 255, 125 / 255, 135 / 255)
-const COR_BRANCO = rgb(1, 1, 1)
-const COR_ZEBRA = rgb(247 / 255, 248 / 255, 250 / 255)
-const COR_BORDA = rgb(229 / 255, 230 / 255, 234 / 255)
 const COR_SEP = rgb(170 / 255, 200 / 255, 220 / 255)
 const COR_STAMP = rgb(0.72, 0.72, 0.72)
 
@@ -192,49 +204,18 @@ function montarLinhasImpressao(itens = []) {
 
 function medirAlturaLinha(linha, fonts, colServicoW) {
     const corpo = fontCorpo(fonts)
-    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, colServicoW - 12)
-    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, colServicoW - 12)
+    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, colServicoW - ROW_TEXT_WIDTH_PAD)
+    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, colServicoW - ROW_TEXT_WIDTH_PAD)
     const hTexto =
         Math.max(1, linhasTitulo.length) * LINE_LEADING +
-        Math.max(1, linhasSub.length) * (LINE_LEADING - 1) +
+        Math.max(1, linhasSub.length) * SUB_LEADING +
         10
     return Math.max(ROW_BASE_HEIGHT, hTexto)
 }
 
 /** Barra navy: «| Grupo de» + «Descontos» em negrito */
 function desenharBarraTituloGrupo(page, fonts, x, yTop, innerW) {
-    const y = yTop - TITLE_BAR_HEIGHT
-    page.drawRectangle({
-        x,
-        y,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT,
-        color: COR_NAVY,
-        borderRadius: CARD_RADIUS,
-    })
-    page.drawRectangle({
-        x,
-        y,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT / 2,
-        color: COR_NAVY,
-    })
-    const prefix = '| Grupo de '
-    page.drawText(prefix, {
-        x: x + 14,
-        y: y + 10,
-        size: FONT_SIZE_TITLE,
-        font: fonts.regular,
-        color: COR_BRANCO,
-    })
-    const prefixW = fonts.regular.widthOfTextAtSize(prefix, FONT_SIZE_TITLE)
-    page.drawText('Descontos', {
-        x: x + 14 + prefixW,
-        y: y + 10,
-        size: FONT_SIZE_TITLE,
-        font: fonts.bold,
-        color: COR_BRANCO,
-    })
+    desenharBarraTitulo(page, fonts, { x, yTop, innerW, prefixo: 'Grupo de ', destaque: 'Descontos' })
 }
 
 function medirBlocoInformacoes(texto, fonts, innerW) {
@@ -244,17 +225,17 @@ function medirBlocoInformacoes(texto, fonts, innerW) {
     return INFO_SEP_GAP + 1 + INFO_TITLE_GAP + FONT_SIZE_INFO + INFO_TITLE_GAP + hTexto + OBS_PADDING
 }
 
-/** Fundo branco contínuo do card (linhas + Informações). */
+/** Fundo branco contínuo do card (linhas + Informações), com cantos arredondados. */
 function desenharFundoCardBranco(page, yTop, yBottom, innerW) {
     const h = yTop - yBottom
     if (h <= 0) return
-    page.drawRectangle({
+    desenharRetanguloArredondado(page, {
         x: MARGIN_X,
-        y: yBottom,
+        yTop,
         width: innerW,
         height: h,
+        raio: CARD_RADIUS,
         color: COR_BRANCO,
-        borderRadius: CARD_RADIUS,
     })
 }
 
@@ -311,18 +292,19 @@ function desenharInformacoes(page, fonts, layout, yTop, texto) {
 function desenharCabecalho(page, fonts, layout, yTop, icone) {
     const { xs, widths } = layout
     const y = yTop - TABLE_HEADER_HEIGHT
-    // Sem retângulo próprio: fundo já é o card branco
-    const textY = y + 8
+    // Sem retângulo próprio (fundo é o card branco) e sem linha entre cabeçalho e 1ª linha.
+    const yMeio = y + TABLE_HEADER_HEIGHT / 2
+    const textY = yBaselineCentro(yMeio, FONT_SIZE_HEADER)
     if (icone) {
         page.drawImage(icone, {
-            x: xs[0] + 6,
-            y: textY - 1,
+            x: xs[0] + ROW_TEXT_INSET,
+            y: yMeio - ICON_CAB_SIZE_PT / 2,
             width: ICON_CAB_SIZE_PT,
             height: ICON_CAB_SIZE_PT,
         })
     }
     page.drawText('Serviço', {
-        x: xs[0] + 6 + ICON_CAB_SIZE_PT + ICON_CAB_GAP_PT,
+        x: xs[0] + ROW_TEXT_INSET + ICON_CAB_SIZE_PT + ICON_CAB_GAP_PT,
         y: textY,
         size: FONT_SIZE_HEADER,
         font: fonts.bold,
@@ -335,16 +317,10 @@ function desenharCabecalho(page, fonts, layout, yTop, icone) {
         font: fonts.bold,
         color: COR_NAVY,
     })
-    page.drawLine({
-        start: { x: MARGIN_X, y },
-        end: { x: MARGIN_X + layout.innerW, y },
-        thickness: 0.5,
-        color: COR_BORDA,
-    })
     return y
 }
 
-function desenharLinha(page, fonts, layout, yTop, linha, zebra) {
+function desenharLinha(page, fonts, layout, yTop, linha, zebra, primeiraDoBloco) {
     const { xs, widths, innerW } = layout
     const corpo = fontCorpo(fonts)
     const h = medirAlturaLinha(linha, fonts, widths[0])
@@ -359,26 +335,34 @@ function desenharLinha(page, fonts, layout, yTop, linha, zebra) {
         })
     }
 
-    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, widths[0] - 12)
-    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, widths[0] - 12)
+    // Divisória no TOPO da linha (depois do fundo, para a zebra não cobri-la); a 1ª do bloco não tem.
+    if (!primeiraDoBloco) {
+        desenharDivisoria(page, { x: MARGIN_X, innerW, y: yTop })
+    }
+
+    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, widths[0] - ROW_TEXT_WIDTH_PAD)
+    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, widths[0] - ROW_TEXT_WIDTH_PAD)
     const tituloDraw = linhasTitulo.length ? linhasTitulo : ['—']
     const subDraw = linhasSub.length ? linhasSub : ['—']
 
-    let yTxt = yTop - 12
+    // Bloco título + subtítulo centralizado na vertical (distância entre a 1ª e a última linha de base).
+    const span =
+        (tituloDraw.length - 1) * LINE_LEADING + TITULO_SUB_GAP + (subDraw.length - 1) * SUB_LEADING
+    let yTxt = yBottom + (h + span + FONT_SIZE_BODY) / 2 - FONT_SIZE_BODY + FONT_SIZE_BODY * 0.14
     tituloDraw.forEach((ln, i) => {
         page.drawText(ln, {
-            x: xs[0] + 10,
+            x: xs[0] + ROW_TEXT_INSET,
             y: yTxt - i * LINE_LEADING,
             size: FONT_SIZE_BODY,
             font: corpo,
             color: COR_TEXTO,
         })
     })
-    yTxt -= tituloDraw.length * LINE_LEADING + 2
+    yTxt -= (tituloDraw.length - 1) * LINE_LEADING + TITULO_SUB_GAP
     subDraw.forEach((ln, i) => {
         page.drawText(ln, {
-            x: xs[0] + 10,
-            y: yTxt - i * (LINE_LEADING - 1),
+            x: xs[0] + ROW_TEXT_INSET,
+            y: yTxt - i * SUB_LEADING,
             size: FONT_SIZE_SUB,
             font: fonts.regular,
             color: COR_TEXTO_SUB,
@@ -388,17 +372,10 @@ function desenharLinha(page, fonts, layout, yTop, linha, zebra) {
     const pct = linha.percentual
     page.drawText(pct, {
         x: textoCentralizado(xs[1], widths[1], pct, corpo, FONT_SIZE_BODY),
-        y: yBottom + h / 2 - FONT_SIZE_BODY / 2,
+        y: yPrimeiraLinhaBlocoBase(yTop, yBottom, 1, FONT_SIZE_BODY, LINE_LEADING),
         size: FONT_SIZE_BODY,
         font: corpo,
         color: COR_TEXTO,
-    })
-
-    page.drawLine({
-        start: { x: MARGIN_X, y: yBottom },
-        end: { x: MARGIN_X + innerW, y: yBottom },
-        thickness: 0.4,
-        color: COR_BORDA,
     })
     return yBottom
 }
@@ -494,7 +471,7 @@ export async function gerarImpressaoDescontosPdf(opts) {
             const h = medirAlturaLinha(linhas[i], fonts, layout.widths[0])
             const restanteApos = linhas.length - 1 - i
             const incluiInfoAqui = restanteApos === 0
-            const reserva = incluiInfoAqui ? hInfo : 0
+            const reserva = incluiInfoAqui ? hInfo : CARD_PADDING_BOTTOM
             if (yProbe - h < yFloor + reserva) break
             lote.push(linhas[i])
             yProbe -= h
@@ -516,15 +493,15 @@ export async function gerarImpressaoDescontosPdf(opts) {
             }
             return y
         })()
-        const yCardBottom = fechaComInfo ? yAposLinhas - hInfo : yAposLinhas
+        const yCardBottom = fechaComInfo ? yAposLinhas - hInfo : yAposLinhas - CARD_PADDING_BOTTOM
 
         // Fundo branco único (tabela + Informações, se fechar nesta página)
         desenharFundoCardBranco(page, cardTop, Math.max(yCardBottom, yFloor), layout.innerW)
         desenharBarraTituloGrupo(page, fonts, MARGIN_X, cardTop, layout.innerW)
 
         let yCursor = desenharCabecalho(page, fonts, layout, corpoTop, icone)
-        for (const linha of lote) {
-            yCursor = desenharLinha(page, fonts, layout, yCursor, linha, zebra)
+        for (const [idx, linha] of lote.entries()) {
+            yCursor = desenharLinha(page, fonts, layout, yCursor, linha, zebra, idx === 0)
             zebra += 1
         }
         linhaIdx = i

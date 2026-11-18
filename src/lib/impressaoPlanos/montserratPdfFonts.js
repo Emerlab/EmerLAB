@@ -1,4 +1,5 @@
 import { StandardFonts } from 'pdf-lib'
+import fontkit from '@pdf-lib/fontkit'
 
 const FONT_URLS = {
     light: 'https://cdn.jsdelivr.net/fontsource/fonts/montserrat@5.2.8/latin-300-normal.ttf',
@@ -26,6 +27,8 @@ async function fetchFontBytes(url) {
  */
 export async function embedMontserratNoPdf(pdfDoc) {
     try {
+        // Sem fontkit o pdf-lib não embute TTF e caía silenciosamente em Helvetica.
+        pdfDoc.registerFontkit(fontkit)
         const [light, reg, bold, medium, italic] = await Promise.all([
             fetchFontBytes(FONT_URLS.light),
             fetchFontBytes(FONT_URLS.regular),
@@ -40,7 +43,8 @@ export async function embedMontserratNoPdf(pdfDoc) {
             medium: await pdfDoc.embedFont(medium, { subset: true }),
             italic: await pdfDoc.embedFont(italic, { subset: true }),
         }
-    } catch {
+    } catch (e) {
+        console.warn('Montserrat não carregada; usando Helvetica.', e)
         const regular = await pdfDoc.embedFont(StandardFonts.Helvetica)
         const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
         return {

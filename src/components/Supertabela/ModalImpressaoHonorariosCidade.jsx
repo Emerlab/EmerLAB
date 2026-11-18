@@ -3,7 +3,7 @@ import {
     downloadImpressaoHonorariosPdf,
     gerarImpressaoHonorariosPdf,
 } from '../../lib/impressaoHonorarios/gerarImpressaoHonorariosPdf.js'
-import { resolverMensagensObservacoesPorSecoes } from '../../lib/impressaoHonorarios/honorariosObservacoes.js'
+import { resolverObservacoesHonorariosPorSecoes } from '../../lib/impressaoHonorarios/honorariosObservacoes.js'
 import './ModalImpressaoHonorariosCidade.css'
 
 function formatarValorCelula(valor) {
@@ -189,11 +189,12 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
                     checked: l.checked,
                 })),
             }))
-            const observacoes = await resolverMensagensObservacoesPorSecoes(secoesPdf)
+            const { porGrupo, gerais } = await resolverObservacoesHonorariosPorSecoes(secoesPdf)
             const blob = await gerarImpressaoHonorariosPdf({
                 cidadeNome,
                 secoes: secoesPdf,
-                observacoes,
+                observacoes: gerais,
+                observacoesPorGrupo: porGrupo,
             })
             downloadImpressaoHonorariosPdf(blob, cidadeNome || 'Cidade')
             onClose?.()

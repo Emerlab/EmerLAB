@@ -14,7 +14,7 @@ import {
     downloadImpressaoPlanosPdf,
     gerarImpressaoPlanosPdf,
 } from '../../../lib/impressaoPlanos/gerarImpressaoPlanosPdf.js'
-import { resolverMensagensObservacoesPorCategorias } from '../../../lib/impressaoPlanos/planosObservacoes.js'
+import { resolverObservacoesPlanosPorGrupo } from '../../../lib/impressaoPlanos/planosObservacoes.js'
 import { MIN_REALIZADORES_PRE_MARCAR } from '../../../lib/impressaoPlanos/mapaRealizadoresRegiao.js'
 import {
     aplicarSelecaoModo,
@@ -30,6 +30,8 @@ import { filtrarPorTermoBusca, normalizarTextoBusca } from '../../../lib/prestad
 import '../../Credenciamento/Credenciamento_main/Credenciamento_main.css'
 import '../../Supertabela/Supertabela_planos/Supertabelaplanos.css'
 import './ImpressaoPlanos.css'
+import { carregarDisponibilidadePlanos } from '../../../lib/impressaoPlanos/disponibilidadePlanos.js'
+import PainelZipPlanos from './PainelZipPlanos.jsx'
 import CelulaRealizadores, { obterClasseProcedimento } from './CelulaRealizadores.jsx'
 import { procedimentoIsentoLimiteGrupo } from '../../../lib/categoriaLimitesGrupo.js'
 import { SelectDropdown } from '../../../components/ui/Dropdown.jsx'
@@ -93,11 +95,18 @@ export default function ImpressaoPlanos() {
     const [categorias, setCategorias] = useState([])
     const [modoInfo, setModoInfo] = useState(null)
     const [avisoModo, setAvisoModo] = useState('')
+    const [disponibilidade, setDisponibilidade] = useState(null)
+    const [versaoModos, setVersaoModos] = useState(0)
+    const [revisarPlanoId, setRevisarPlanoId] = useState('')
     const [ordenColuna, setOrdenColuna] = useState('codigo')
     const [ordenDir, setOrdenDir] = useState('asc')
     const tabelaMobile = useMatchMedia('(max-width: 1023px)')
     const saveModoTimer = useRef(null)
     const ignorarProximoSaveModo = useRef(false)
+    const tokenCarregarLista = useRef(0)
+    const [zipGerando, setZipGerando] = useState(false)
+    const [salvandoPreset, setSalvandoPreset] = useState(false)
+    const [avisoPreset, setAvisoPreset] = useState('')
 
     useEffect(() => {
         const run = async () => {
@@ -166,6 +175,30 @@ export default function ImpressaoPlanos() {
     const cidadeTabelaId = municipioSelecionado?.cidadeTabelaId ?? null
 
     useEffect(() => {
+        let cancelado = false
+        setDisponibilidade(null)
+        if (!cidadeTabelaId) return undefined
+        const run = async () => {
+            const r = await carregarDisponibilidadePlanos({
+                planos: planosImpressao,
+                cidadeTabelaId,
+                buscarCidadeIds: (idPlano) =>
+                    buscarCidadeIdsFiltroPlanoCredenciados(supabase, idPlano, buscarTodosPaginado),
+            })
+            if (!cancelado) setDisponibilidade({ cidadeId: cidadeTabelaId, ...r })
+        }
+        void run()
+        return () => {
+            cancelado = true
+        }
+    }, [cidadeTabelaId, planosImpressao])
+
+    // Só vale a disponibilidade calculada para a cidade atual (nunca a de outra).
+    const disponibilidadePronta = disponibilidade?.cidadeId === cidadeTabelaId
+    const planosDisponiveis = disponibilidadePronta ? disponibilidade.disponiveis : []
+    const planosComFalha = disponibilidadePronta ? disponibilidade.comFalha : []
+
+    useEffect(() => {
         if (!uf) {
             setMunicipiosIbge([])
             setMunicipioNome('')
@@ -192,6 +225,9 @@ export default function ImpressaoPlanos() {
     }, [])
 
     const limparLista = useCallback(() => {
+        tokenCarregarLista.current += 1
+        setCarregando(false)
+        setAvisoPreset('')
         cancelarSaveModoPendente()
         setCategorias([])
         setMeta(null)
@@ -207,6 +243,7 @@ export default function ImpressaoPlanos() {
                 const info = await salvarModoImpressaoPlanos(planoId, cidadeTabelaId, cats)
                 setModoInfo(info)
                 setAvisoModo('')
+                setVersaoModos((v) => v + 1)
                 return info
             } catch (e) {
                 if (!silencioso) {
@@ -217,6 +254,23 @@ export default function ImpressaoPlanos() {
         },
         [planoId, cidadeTabelaId],
     )
+
+    const salvarPresetAgora = useCallback(async () => {
+        if (salvandoPreset || !categorias.length) return
+        cancelarSaveModoPendente()
+        setSalvandoPreset(true)
+        setAvisoPreset('')
+        try {
+            const info = await persistirModo(categorias, { silencioso: true })
+            setAvisoPreset(
+                info
+                    ? 'Preset da equipe salvo.'
+                    : 'Não foi possível salvar o preset da equipe. Tente de novo.',
+            )
+        } finally {
+            setSalvandoPreset(false)
+        }
+    }, [salvandoPreset, categorias, cancelarSaveModoPendente, persistirModo])
 
     const agendarSalvarModo = useCallback(
         (cats) => {
@@ -244,7 +298,12 @@ export default function ImpressaoPlanos() {
     }, [categorias, planoId, cidadeTabelaId, agendarSalvarModo, cancelarSaveModoPendente])
 
     const carregarLista = useCallback(async () => {
+        // Só a requisição mais recente pode atualizar a tela.
+        tokenCarregarLista.current += 1
+        const token = tokenCarregarLista.current
+        const ehAtual = () => token === tokenCarregarLista.current
         setErro('')
+        setAvisoPreset('')
         setAvisoModo('')
         setCarregando(true)
         cancelarSaveModoPendente()
@@ -259,6 +318,7 @@ export default function ImpressaoPlanos() {
                 incluirCidadesParalelas,
                 planosLista: planosTodos.length ? planosTodos : planos,
             })
+            if (!ehAtual()) return
             setMeta({
                 pdfUrl: res.pdfUrl,
                 planoNome: res.planoNome,
@@ -268,6 +328,7 @@ export default function ImpressaoPlanos() {
             let cats = res.categorias
             try {
                 const modo = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId)
+                if (!ehAtual()) return
                 if (modo?.selecao) {
                     cats = aplicarSelecaoModo(cats, modo.selecao)
                     setModoInfo(modo)
@@ -275,6 +336,7 @@ export default function ImpressaoPlanos() {
                     setModoInfo(null)
                 }
             } catch (eModo) {
+                if (!ehAtual()) return
                 setAvisoModo(
                     eModo?.message ||
                         'Não deu para carregar o modo salvo; usando a pré-marcação automática.',
@@ -284,9 +346,10 @@ export default function ImpressaoPlanos() {
             ignorarProximoSaveModo.current = true
             setCategorias(cats)
         } catch (e) {
+            if (!ehAtual()) return
             setErro(e?.message || String(e))
         } finally {
-            setCarregando(false)
+            if (ehAtual()) setCarregando(false)
         }
     }, [
         cidadeTabelaId,
@@ -297,6 +360,19 @@ export default function ImpressaoPlanos() {
         planosTodos,
         cancelarSaveModoPendente,
     ])
+
+    // "Revisar" no painel: define o plano e, quando o estado já reflete a escolha,
+    // dispara o fluxo normal de carregar (carregarLista lê planoId do estado).
+    const revisarPlano = useCallback((id) => {
+        setPlanoId(String(id))
+        setRevisarPlanoId(String(id))
+    }, [])
+
+    useEffect(() => {
+        if (!revisarPlanoId || String(planoId) !== revisarPlanoId) return
+        setRevisarPlanoId('')
+        void carregarLista()
+    }, [revisarPlanoId, planoId, carregarLista])
 
     const toggleLinha = (categoriaId, linhaKey) => {
         setCategorias((prev) =>
@@ -463,11 +539,12 @@ export default function ImpressaoPlanos() {
             // não bloqueia o PDF; aviso já foi setado em persistirModo
         }
         try {
-            const observacoes = await resolverMensagensObservacoesPorCategorias(categorias)
+            const { porGrupo, gerais } = await resolverObservacoesPlanosPorGrupo(categorias)
             const blob = await gerarImpressaoPlanosPdf({
                 pdfUrl: meta.pdfUrl,
                 categorias,
-                observacoes,
+                observacoes: gerais,
+                observacoesPorGrupo: porGrupo,
             })
             downloadImpressaoPlanosPdf(blob, meta.planoNome, meta.cidadeNome)
         } catch (e) {
@@ -504,6 +581,7 @@ export default function ImpressaoPlanos() {
                     <SelectUfBusca
                         value={uf}
                         ufs={ufsPermitidas}
+                        disabled={zipGerando}
                         emptyLabel="—"
                             onChange={(u) => {
                                 setUf(u)
@@ -521,7 +599,7 @@ export default function ImpressaoPlanos() {
                             id: o.municipioNome,
                             nome: o.municipioNome,
                         }))}
-                        disabled={!uf || loadingMunicipios}
+                        disabled={!uf || loadingMunicipios || zipGerando}
                         loading={loadingMunicipios}
                         placeholder={!uf ? 'Selecione a UF' : 'Buscar cidade…'}
                             onChange={(nome) => {
@@ -536,7 +614,7 @@ export default function ImpressaoPlanos() {
                     <SelectDropdown
                         className="ek-select"
                         value={planoId}
-                        disabled={!municipioNome}
+                        disabled={!municipioNome || zipGerando}
                             onChange={(e) => {
                                 setPlanoId(e.target.value)
                                 limparLista()
@@ -581,6 +659,23 @@ export default function ImpressaoPlanos() {
                 neste plano e cidade.
             </p>
 
+            {cidadeTabelaId ? (
+                <PainelZipPlanos
+                    cidadeTabelaId={cidadeTabelaId}
+                    municipioNome={municipioNome}
+                    cidadeNome={municipioNome}
+                    incluirCidadesParalelas={incluirCidadesParalelas}
+                    planosLista={planosTodos.length ? planosTodos : planos}
+                    planosDisponiveis={planosDisponiveis}
+                    planosComFalha={planosComFalha}
+                    disponibilidadeCarregando={!disponibilidadePronta}
+                    onRevisar={revisarPlano}
+                    versaoModos={versaoModos}
+                    ocupado={carregando || gerandoPdf}
+                    onGerandoChange={setZipGerando}
+                />
+            ) : null}
+
             {erro ? <p className="planos_impressao_erro">{erro}</p> : null}
             {avisoModo ? <p className="planos_impressao_aviso_modo">{avisoModo}</p> : null}
 
@@ -589,6 +684,11 @@ export default function ImpressaoPlanos() {
                     <p className="planos_impressao_modo_equipe" role="status">
                         {rotuloModoImpressao(modoInfo)}
                     </p>
+                    {avisoPreset ? (
+                        <p className="planos_impressao_aviso_modo" role="status">
+                            {avisoPreset}
+                        </p>
+                    ) : null}
                     <Toolbar title="Procedimentos" sticky={false}>
                         <div className="ek-field ek-field--grow">
                             <span className="ek-label">Buscar</span>
@@ -600,6 +700,15 @@ export default function ImpressaoPlanos() {
                             />
                         </div>
                         <div className="ek-toolbar__actions">
+                            <button
+                                type="button"
+                                className="ek-btn"
+                                disabled={salvandoPreset || totalMarcados === 0}
+                                title="Grava a marcação atual como preset da equipe para este plano e cidade"
+                                onClick={() => void salvarPresetAgora()}
+                            >
+                                {salvandoPreset ? 'Salvando…' : 'Salvar como preset da equipe'}
+                            </button>
                             <button
                                 type="button"
                                 className="ek-btn"

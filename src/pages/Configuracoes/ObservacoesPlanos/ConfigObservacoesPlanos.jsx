@@ -25,6 +25,7 @@ const FORM_VAZIO = {
     titulo: '',
     mensagem: '',
     ativa: true,
+    geral: false,
     ordem: 0,
     codigosSelecionados: [],
 }
@@ -250,6 +251,7 @@ const ConfigObservacoesPlanos = () => {
             titulo: String(item.titulo || '').trim(),
             mensagem: String(item.mensagem || '').trim(),
             ativa: item.ativa !== false,
+            geral: item.geral === true,
             ordem: Number(item.ordem) || 0,
             codigosSelecionados: [
                 ...new Set(
@@ -337,7 +339,8 @@ const ConfigObservacoesPlanos = () => {
                 mensagem: form.mensagem,
                 ativa: form.ativa,
                 ordem: form.ordem,
-                codigosProcedimentos: form.codigosSelecionados,
+                geral: form.geral,
+                codigosProcedimentos: form.geral ? [] : form.codigosSelecionados,
             })
             if (!res.ok) {
                 setErro(res.erro || 'Falha ao salvar.')
@@ -527,8 +530,24 @@ const ConfigObservacoesPlanos = () => {
                             />
                             Ativa (pode disparar na impressão)
                         </label>
+                        <label className="config_obs_planos_check_ativa">
+                            <input
+                                type="checkbox"
+                                checked={form.geral}
+                                disabled={somenteLeitura || salvando}
+                                onChange={(e) =>
+                                    setForm((prev) => ({ ...prev, geral: e.target.checked }))
+                                }
+                            />
+                            Observação geral (vai na última página, vale para o PDF todo)
+                        </label>
                     </div>
 
+                    {form.geral ? (
+                        <p className="config_obs_planos_muted">
+                            Observação geral não precisa de procedimentos.
+                        </p>
+                    ) : (
                     <div className="config_obs_planos_procs">
                         <div className="config_obs_planos_procs_head">
                             <h3>Procedimentos que disparam</h3>
@@ -649,6 +668,7 @@ const ConfigObservacoesPlanos = () => {
                             ) : null}
                         </div>
                     </div>
+                    )}
 
                     {!somenteLeitura ? (
                         <div className="config_obs_planos_form_acoes">
@@ -695,6 +715,9 @@ const ConfigObservacoesPlanos = () => {
                                 ) : (
                                     <span className="config_obs_planos_badge is-ativa">Ativa</span>
                                 )}
+                                {item.geral ? (
+                                    <span className="config_obs_planos_badge is-geral">Geral</span>
+                                ) : null}
                             </div>
                             <p className="config_obs_planos_card_msg">
                                 <strong>
@@ -702,10 +725,14 @@ const ConfigObservacoesPlanos = () => {
                                 </strong>{' '}
                                 {item.mensagem}
                             </p>
-                            <ChipsProcedimentos
-                                codigos={item.codigosProcedimentos || []}
-                                rotuloProc={rotuloProc}
-                            />
+                            {item.geral ? (
+                                <p className="config_obs_planos_muted">Aparece na última página</p>
+                            ) : (
+                                <ChipsProcedimentos
+                                    codigos={item.codigosProcedimentos || []}
+                                    rotuloProc={rotuloProc}
+                                />
+                            )}
                             {!somenteLeitura ? (
                                 <div className="config_obs_planos_card_acoes">
                                     <button

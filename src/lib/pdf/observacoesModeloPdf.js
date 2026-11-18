@@ -1,4 +1,5 @@
 import { PDFString, rgb } from 'pdf-lib'
+import { COR_NAVY } from './estiloTabelaPdf.js'
 
 const MARGIN_X = 42
 const MARGIN_TOP = 86
@@ -10,14 +11,13 @@ const FONT_SIZE_OBS = 9
 const FONT_SIZE_OBS_TITLE = 9.5
 const FONT_SIZE_OBS_H1 = 18
 const FONT_SIZE_DUVIDAS = 9
-const OBS_ITEM_GAP = 12
+export const OBS_ITEM_GAP = 12
 const OBS_NESTED_INDENT = 18
 const OBS_H1_GAP = 22
 const DUVIDAS_GAP = 18
 
 const LINK_WHATSAPP = 'https://wa.me/555499041695'
 
-const COR_NAVY = rgb(22 / 255, 33 / 255, 62 / 255)
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
 const COR_TEXTO_OBS = rgb(90 / 255, 96 / 255, 108 / 255)
 const COR_BRANCO = rgb(1, 1, 1)
@@ -249,7 +249,7 @@ function desenharSegmentos(page, fonts, x, y, segmentos, size, color) {
     return cursorX
 }
 
-function medirItemObservacaoModelo(item, fonts, larguraMax) {
+export function medirItemObservacaoModelo(item, fonts, larguraMax) {
     const tituloFont = fonts.bold
     const prefixo = `${item.numero}) `
     const titulo = item.titulo ? `${item.titulo}:` : ''
@@ -292,7 +292,7 @@ function medirItemObservacaoModelo(item, fonts, larguraMax) {
     return h + OBS_ITEM_GAP
 }
 
-function desenharItemObservacaoModelo(page, fonts, x, yTop, item, larguraMax) {
+export function desenharItemObservacaoModelo(page, fonts, x, yTop, item, larguraMax) {
     const tituloFont = fonts.bold
     const prefixo = `${item.numero}) `
     const tituloTxt = item.titulo ? `${sanitizarTextoPdf(item.titulo)}:` : ''

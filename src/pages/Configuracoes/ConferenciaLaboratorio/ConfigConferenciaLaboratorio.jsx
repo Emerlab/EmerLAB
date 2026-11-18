@@ -34,18 +34,29 @@ import {
 } from '../../../lib/configuracoes/conferencia/examSimilarity.js'
 import {
     atualizarEquivalenciaExame,
+    carregarMemoriaLaboratorio,
     carregarRegrasLaboratorio,
     listarLaboratorios,
     registrarRevisoes,
+    removerAliasPessoa,
     removerEquivalenciaExame,
     removerPerfilExame,
+    removerValorAceito,
     removerVinculoBase,
     resolverVinculosSalvos,
     salvarAliasPessoa,
     salvarEquivalenciaExame,
+    salvarImportacaoMemoria,
     salvarPerfilExame,
+    salvarValorAceito,
     salvarVinculoBase,
 } from '../../../lib/configuracoes/conferencia/persist.js'
+import {
+    aplicarValoresAceitos,
+    mapaColunasCompativel,
+    mapaColunasParaNomes,
+    regraValorAceitoDe,
+} from '../../../lib/configuracoes/conferencia/memoria.js'
 import { aplicarValoresBase, examesPendentesVinculo } from '../../../lib/configuracoes/conferencia/lookupBase.js'
 import { exportarConferenciaHonorariosExcel } from '../../../lib/configuracoes/conferencia/export.js'
 import {
@@ -56,6 +67,13 @@ import {
     salvarSessaoLocal,
     sessaoTemConteudo,
 } from '../../../lib/configuracoes/conferencia/sessaoLocal.js'
+import {
+    ABAS_RESULTADO,
+    avisoDePeriodo,
+    contarAbas,
+    linhaPertenceAba,
+    resumoDePares,
+} from '../../../lib/configuracoes/conferencia/visaoResultado.js'
 import {
     formatarDataConferencia,
     formatarValorConferencia,
@@ -85,14 +103,6 @@ const ROTULO_CAMPO = {
     valor: 'Valor',
 }
 
-const FILTROS_RAPIDOS = [
-    { id: 'todos', label: 'Todos' },
-    { id: 'divergencias', label: 'Somente divergências' },
-    { id: 'valores', label: 'Somente valores divergentes' },
-    { id: 'orfaos', label: 'Somente órfãos' },
-    { id: 'revisao', label: 'Somente revisão manual' },
-    { id: 'ok', label: 'Somente OK' },
-]
 
 function UploadZone({ titulo, dica, arquivo, nomeArquivo, onFile, disabled }) {
     const [arrastando, setArrastando] = useState(false)
@@ -274,13 +284,8 @@ const ACOES_MASSA = [
 
 function filtrarResultados(resultados, filtro, busca) {
     let list = resultados || []
+    if (filtro !== 'todos' && filtro !== 'divergencias') list = list.filter((r) => linhaPertenceAba(r, filtro))
     if (filtro === 'divergencias') list = list.filter((r) => statusEhDivergencia(r.status) && !r.revisao?.ignorar)
-    if (filtro === 'valores') list = list.filter((r) => r.status === 'VALOR_DIVERGENTE')
-    if (filtro === 'orfaos') {
-        list = list.filter((r) => r.status === 'ORFAO_MELLISLAB' || r.status === 'ORFAO_HONORARIOS')
-    }
-    if (filtro === 'revisao') list = list.filter((r) => r.status === 'REVISAO_MANUAL')
-    if (filtro === 'ok') list = list.filter((r) => statusEhOk(r.status))
     const t = String(busca || '')
         .trim()
         .toLowerCase()
@@ -396,6 +401,10 @@ const ConfigConferenciaLaboratorio = () => {
     const [periodoYm, setPeriodoYm] = useState(mesAtualYm)
     const [vinculosSalvos, setVinculosSalvos] = useState([])
     const [regrasInfo, setRegrasInfo] = useState({ carregando: false, migracaoPendente: false, motivo: '' })
+    // Memória extra do laboratório: diferenças de valor já aceitas e o que foi lembrado de cada arquivo importado
+    const [valoresAceitos, setValoresAceitos] = useState([])
+    const [memoriaImport, setMemoriaImport] = useState({})
+    const [baseGuardadaEmUso, setBaseGuardadaEmUso] = useState(false)
 
     const [arquivoHonorarios, setArquivoHonorarios] = useState(null)
     const [arquivoMellis, setArquivoMellis] = useState(null)
@@ -501,6 +510,11 @@ const ConfigConferenciaLaboratorio = () => {
         })
     }, [resultados, filtro, busca, ordem])
 
+    const contagemAbas = useMemo(() => contarAbas(resultados), [resultados])
+    const paresInfo = useMemo(() => resumoDePares(resultados), [resultados])
+    const avisoPeriodo = useMemo(() => avisoDePeriodo(resultados), [resultados])
+    const [ocultarAvisoPeriodo, setOcultarAvisoPeriodo] = useState(false)
+
     const alternarOrdem = useCallback((chave) => {
         setOrdem((prev) => {
             if (prev.chave !== chave) return { chave, dir: 'asc' }
@@ -552,6 +566,11 @@ const ConfigConferenciaLaboratorio = () => {
             setPerfis((prev) => [...r.perfis, ...prev.filter((p) => !p.id && !r.perfis.some((q) => q.nome === p.nome))])
             setVinculosSalvos(r.vinculos)
         })
+        carregarMemoriaLaboratorio(laboratorioId).then((m) => {
+            if (!vivo || !m.ok) return
+            setValoresAceitos(m.valoresAceitos)
+            setMemoriaImport(m.importacoes)
+        })
         return () => {
             vivo = false
         }
@@ -577,6 +596,9 @@ const ConfigConferenciaLaboratorio = () => {
         setPerfis([])
         setVinculosSalvos([])
         setVinculosBase({})
+        setValoresAceitos([])
+        setMemoriaImport({})
+        setBaseGuardadaEmUso(false)
         setRegrasInfo({ carregando: false, migracaoPendente: false, motivo: '' })
     }
 
@@ -822,7 +844,19 @@ const ConfigConferenciaLaboratorio = () => {
         setErro('')
         setProcessando(true)
         try {
-            const parsed = await parseArquivo(file, mapa, origem)
+            let parsed = await parseArquivo(file, mapa, origem)
+            // Colunas já mapeadas para este laboratório: reaproveita se o arquivo novo tem as mesmas colunas
+            const lembrado = Object.keys(mapa || {}).length
+                ? null
+                : mapaColunasCompativel(memoriaImport[origem]?.mapaColunas, parsed.headers)
+            if (lembrado) {
+                parsed = await parseArquivo(file, lembrado, origem)
+                if (origem === 'valores_base') setMapColsBase(lembrado)
+                else if (origem === 'honorarios') setMapColsHonorarios(lembrado)
+                else setMapColsMellis(lembrado)
+                setFeedback('Colunas reconhecidas pela memória deste laboratório.')
+            }
+            if (origem === 'valores_base') setBaseGuardadaEmUso(false)
             const falt = aplicarParse(parsed, origem)
             if (parsed.erro && falt.length) setErro(parsed.erro)
             else setPasso('preview')
@@ -896,6 +930,47 @@ const ConfigConferenciaLaboratorio = () => {
         }).then(avisarFalhaRegra)
     }
 
+    /** Guarda, por laboratório, as colunas mapeadas de cada arquivo (e a Valores de Base) para os próximos meses. */
+    const guardarImportacoes = () => {
+        if (!laboratorioId) return
+        const itens = [
+            { origem: 'valores_base', arquivo: arquivoBase, headers: headersBase, mapa: mapColsBase, linhas: linhasBase },
+            { origem: 'honorarios', arquivo: arquivoHonorarios, headers: headersHonorarios, mapa: mapColsHonorarios },
+            { origem: 'mellislab', arquivo: arquivoMellis, headers: headersMellis, mapa: mapColsMellis },
+        ]
+        for (const it of itens) {
+            const nomes = mapaColunasParaNomes(it.mapa, it.headers)
+            // sem arquivo novo nesta sessão (restaurada/base guardada), mantém o que já estava guardado
+            if (!it.arquivo || !Object.keys(nomes).length) continue
+            const nomeArquivo = it.arquivo.name
+            const linhas = it.origem === 'valores_base' && (it.linhas?.length || 0) <= 5000 ? it.linhas : null
+            void salvarImportacaoMemoria({ laboratorioId, origem: it.origem, nomeArquivo, mapaColunas: nomes, linhas }).then((r) => {
+                if (!r.ok && !r.migracaoPendente) setAviso(`Memória de importação não gravada: ${r.motivo}`)
+            })
+            setMemoriaImport((prev) => ({
+                ...prev,
+                [it.origem]: { nomeArquivo, mapaColunas: nomes, linhas: linhas ?? prev[it.origem]?.linhas ?? null, atualizadoEm: new Date().toISOString() },
+            }))
+        }
+    }
+
+    /** Usa a planilha Valores de Base guardada na última conferência deste laboratório (sem novo envio). */
+    const usarBaseGuardada = () => {
+        const g = memoriaImport.valores_base
+        if (!g?.linhas?.length) return
+        if (resultados.length && !window.confirm('Usar a base guardada descarta o resultado atual. Continuar?')) return
+        descartarResultados()
+        setArquivoBase(null)
+        setLinhasBase(g.linhas)
+        setHeadersBase([])
+        setFaltBase([])
+        setVinculosBase({})
+        setNomesArquivosSalvos((prev) => ({ ...prev, base: g.nomeArquivo || 'Valores de Base guardada' }))
+        setBaseGuardadaEmUso(true)
+        setFeedback(`Valores de Base guardada em uso: ${g.nomeArquivo || 'último envio'} (${g.linhas.length} itens).`)
+        if (arquivoHonorarios || linhasHonorarios.length) setPasso('preview')
+    }
+
     // ── Comparação ─────────────────────────────────────────────────────────────
     const executarComparacao = async () => {
         if (!podeComparar) {
@@ -931,13 +1006,21 @@ const ConfigConferenciaLaboratorio = () => {
                 aliasesPessoa,
                 perfis,
             })
-            setResultados(out.resultados)
-            setResumo(out.resumo)
+            const memoria = aplicarValoresAceitos(out.resultados, valoresAceitos)
+            setResultados(memoria.resultados)
+            setResumo(memoria.aplicadas ? resumirConferencia(memoria.resultados) : out.resumo)
             setRevisoes([])
             setSelecionados(new Set())
             setItemAberto(null)
             setPasso('resultado')
-            setFeedback('Comparação concluída. O valor oficial é o de Valores de Base.')
+            setFeedback(
+                memoria.aplicadas
+                    ? `Comparação concluída. ${memoria.aplicadas} linha(s) resolvida(s) pela memória (diferenças de valor já aceitas). O valor oficial é o de Valores de Base.`
+                    : 'Comparação concluída. O valor oficial é o de Valores de Base.',
+            )
+            guardarImportacoes()
+            setOcultarAvisoPeriodo(false)
+            setFiltro(memoria.resultados.some((r) => !statusEhOk(r.status) && !r.revisao?.ignorar) ? 'precisam' : 'todos')
         } catch (e) {
             setErro(e?.message || String(e))
         } finally {
@@ -1063,6 +1146,16 @@ const ConfigConferenciaLaboratorio = () => {
             revisao.statusFinal = proximoResultados.find((r) => r.revisao === revisao)?.status || ''
         }
 
+        if (acao === 'aceitar_valor') {
+            const regra = regraValorAceitoDe(item)
+            if (regra && laboratorioId) {
+                const nova = { exame: regra.exame, valorPlano: regra.valorPlano, valorLab: regra.valorLab, justificativa: revisao.justificativa }
+                void salvarValorAceito({ laboratorioId, ...nova }).then((r) => {
+                    avisarFalhaRegra(r)
+                    setValoresAceitos((prev) => [{ ...nova, id: r.ok ? r.id : undefined }, ...prev.filter((v) => !(v.exame === nova.exame && v.valorPlano === nova.valorPlano && v.valorLab === nova.valorLab))])
+                })
+            }
+        }
         setRevisoes((prev) => [...prev, revisao])
         setResultados(proximoResultados)
         setResumo(resumirConferencia(proximoResultados))
@@ -1094,6 +1187,17 @@ const ConfigConferenciaLaboratorio = () => {
             const next = new Set(prev)
             if (next.has(id)) next.delete(id)
             else next.add(id)
+            return next
+        })
+    }, [])
+
+    const alternarVarios = useCallback((linhas, marcar) => {
+        setSelecionados((prev) => {
+            const next = new Set(prev)
+            for (const r of linhas) {
+                if (marcar) next.add(r.id)
+                else next.delete(r.id)
+            }
             return next
         })
     }, [])
@@ -1220,6 +1324,24 @@ const ConfigConferenciaLaboratorio = () => {
         setEquivalencias((prev) => prev.filter((_, j) => j !== i))
         if (atual.id) avisarFalhaRegra(await removerEquivalenciaExame(atual.id))
         setFeedback('Equivalência removida.')
+    }
+
+    const removerAlias = async (idx) => {
+        const i = Number(idx)
+        const atual = aliasesPessoa[i]
+        if (!atual) return
+        setAliasesPessoa((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerAliasPessoa(atual.id))
+        setFeedback('Tutor alternativo removido.')
+    }
+
+    const removerValorAceitoMemoria = async (idx) => {
+        const i = Number(idx)
+        const atual = valoresAceitos[i]
+        if (!atual) return
+        setValoresAceitos((prev) => prev.filter((_, j) => j !== i))
+        if (atual.id) avisarFalhaRegra(await removerValorAceito(atual.id))
+        setFeedback('Valor aceito desfeito: volta a aparecer como divergência na próxima comparação.')
     }
 
     const salvarPerfil = async (dados) => {
@@ -1450,6 +1572,47 @@ const ConfigConferenciaLaboratorio = () => {
                         </p>
                     </div>
 
+                    {laboratorioId && !regrasInfo.carregando && !regrasInfo.motivo && !regrasInfo.migracaoPendente ? (
+                        <div className="conf_lab_memoria" role="status">
+                            <p className="conf_lab_memoria_titulo">O que o sistema já sabe sobre {laboratorioNome || 'este laboratório'}</p>
+                            <div className="conf_lab_memoria_chips">
+                                <span className="conf_lab_pilula is-info">{equivalencias.length} exame(s) equivalente(s)</span>
+                                <span className="conf_lab_pilula is-info">{aliasesPessoa.length} tutor(es) alternativo(s)</span>
+                                <span className="conf_lab_pilula is-info">{perfis.length} perfil(is)</span>
+                                <span className="conf_lab_pilula is-info">{valoresAceitos.length} valor(es) aceito(s)</span>
+                                {memoriaImport.valores_base?.linhas?.length ? (
+                                    <span className="conf_lab_pilula is-ok">Base guardada · {memoriaImport.valores_base.linhas.length} itens</span>
+                                ) : null}
+                            </div>
+                            <p className="conf_lab_muted">Isso é aplicado sozinho na comparação. Só pedimos a sua decisão para o que for novo.</p>
+                        </div>
+                    ) : null}
+
+                    {memoriaImport.valores_base?.linhas?.length && !arquivoBase && !baseGuardadaEmUso ? (
+                        <div className="conf_lab_base_guardada">
+                            <div>
+                                <strong>Valores de Base guardada</strong>
+                                <span>
+                                    {memoriaImport.valores_base.nomeArquivo || 'último envio'} · {memoriaImport.valores_base.linhas.length} itens
+                                    {memoriaImport.valores_base.atualizadoEm
+                                        ? ` · enviada em ${new Date(memoriaImport.valores_base.atualizadoEm).toLocaleDateString('pt-BR')}`
+                                        : ''}
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                className="credenciamento_main_action_btn"
+                                disabled={processando || !podeEditar}
+                                onClick={usarBaseGuardada}
+                            >
+                                Usar esta base
+                            </button>
+                        </div>
+                    ) : null}
+                    {baseGuardadaEmUso ? (
+                        <p className="conf_lab_muted">Usando a Valores de Base guardada. Para trocar, envie outro arquivo abaixo.</p>
+                    ) : null}
+
                     <div className="conf_lab_uploads conf_lab_uploads_tres !grid !grid-cols-1 gap-4 md:!grid-cols-3">
                         <UploadZone
                             titulo="Valores de Base"
@@ -1593,7 +1756,7 @@ const ConfigConferenciaLaboratorio = () => {
                             disabled={processando || !podeEditar}
                             onClick={() => setRegrasAberto(true)}
                         >
-                            Equivalências e perfis
+                            Memória do laboratório
                         </button>
                         <button
                             type="button"
@@ -1620,64 +1783,108 @@ const ConfigConferenciaLaboratorio = () => {
             {passo === 'resultado' && resumo ? (
                 <section className="conf_lab_card">
                     <h2>Resultado da conferência</h2>
-                    <div className="conf_lab_dash">
-                        <DashCard
-                            label="Total valor de base"
-                            valor={formatarValorConferencia(resumo.totalHonorarios)}
-                        />
-                        <DashCard
-                            label="Total laboratório"
-                            valor={formatarValorConferencia(resumo.totalMellis)}
-                        />
-                        <DashCard label="Itens conferidos" valor={resumo.itensConferidos} />
-                        <DashCard label="Itens OK" valor={resumo.itensOk} destaque="ok" />
-                        <DashCard
-                            label="Valores divergentes"
-                            valor={resumo.valoresDivergentes}
-                            destaque="warn"
-                        />
-                        <DashCard
-                            label="Datas divergentes"
-                            valor={resumo.datasDivergentes}
-                            destaque="warn"
-                        />
-                        <DashCard label="Órfãos Laboratório" valor={resumo.orfaosMellis} />
-                        <DashCard label="Órfãos Plano" valor={resumo.orfaosHonorarios} />
-                        {resumo.valoresAceitos ? (
-                            <DashCard label="Valores aceitos" valor={resumo.valoresAceitos} />
-                        ) : null}
-                        <DashCard
-                            label="Revisões manuais"
-                            valor={resumo.revisoesManuais}
-                            destaque="rev"
-                        />
-                        <DashCard
-                            label="Diferença financeira"
-                            valor={`${formatarValorConferencia(resumo.diferencaFinanceira)} (${resumo.diferencaFinanceira >= 0 ? 'a mais' : 'a menos'})`}
-                            destaque="warn"
-                        />
-                    </div>
-                    <p className="conf_lab_muted">
-                        Cobrado a mais: {formatarValorConferencia(resumo.valoresCobradosAMais)} · a
-                        menos: {formatarValorConferencia(resumo.valoresCobradosAMenos)}
-                    </p>
 
-                    <div className="conf_lab_filtros">
-                        {FILTROS_RAPIDOS.map((f) => (
+                    {avisoPeriodo && !ocultarAvisoPeriodo ? (
+                        <div className="conf_lab_alerta_periodo" role="alert">
+                            <div>
+                                <strong>
+                                    Só {avisoPeriodo.pares} de {avisoPeriodo.totalLinhas} linhas encontraram par
+                                </strong>
+                                <p>
+                                    {avisoPeriodo.faixaPlano
+                                        ? `Plano: ${formatarDataConferencia(avisoPeriodo.faixaPlano.de)} a ${formatarDataConferencia(avisoPeriodo.faixaPlano.ate)}`
+                                        : 'Plano: sem datas'}
+                                    {' · '}
+                                    {avisoPeriodo.faixaLab
+                                        ? `Laboratório: ${formatarDataConferencia(avisoPeriodo.faixaLab.de)} a ${formatarDataConferencia(avisoPeriodo.faixaLab.ate)}`
+                                        : 'Laboratório: sem datas'}
+                                    .{' '}
+                                    {avisoPeriodo.semSobreposicao
+                                        ? 'Os períodos não se cruzam: provavelmente são arquivos de meses diferentes.'
+                                        : 'Confira se os dois relatórios são do mesmo período.'}
+                                </p>
+                            </div>
+                            <div className="conf_lab_alerta_acoes">
+                                <button
+                                    type="button"
+                                    className="credenciamento_main_action_btn secondary"
+                                    onClick={() => setPasso('preview')}
+                                >
+                                    Trocar arquivo
+                                </button>
+                                <button
+                                    type="button"
+                                    className="credenciamento_main_action_btn secondary"
+                                    onClick={() => setOcultarAvisoPeriodo(true)}
+                                >
+                                    Ignorar aviso
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className="conf_lab_kpis">
+                        <div className="conf_lab_kpi">
+                            <span>Pares encontrados</span>
+                            <strong>{paresInfo.pares}</strong>
+                            <small>
+                                {paresInfo.paresOk} conferem · {paresInfo.paresComDiferenca} com diferença
+                            </small>
+                        </div>
+                        <div className="conf_lab_kpi">
+                            <span>Sem par</span>
+                            <strong>{paresInfo.orfaosLab + paresInfo.orfaosPlano}</strong>
+                            <small>
+                                {paresInfo.orfaosLab} só no laboratório · {paresInfo.orfaosPlano} só no plano
+                            </small>
+                        </div>
+                        <div className="conf_lab_kpi is-rev">
+                            <span>Revisão manual</span>
+                            <strong>{resumo.revisoesManuais}</strong>
+                            <small>
+                                {contagemAbas.memoria
+                                    ? `${contagemAbas.memoria} resolvida(s) pela memória`
+                                    : 'precisam da sua decisão'}
+                            </small>
+                        </div>
+                        <div
+                            className="conf_lab_kpi is-warn"
+                            title="Total do laboratório menos total do plano, somando também as linhas sem par."
+                        >
+                            <span>Diferença financeira</span>
+                            <strong>
+                                {formatarValorConferencia(Math.abs(resumo.diferencaFinanceira))}{' '}
+                                <em>{resumo.diferencaFinanceira >= 0 ? 'a mais' : 'a menos'}</em>
+                            </strong>
+                            <small>
+                                Base {formatarValorConferencia(resumo.totalHonorarios)} · Lab{' '}
+                                {formatarValorConferencia(resumo.totalMellis)}
+                            </small>
+                            <small>
+                                Nos pares: a mais {formatarValorConferencia(resumo.valoresCobradosAMais)} · a menos{' '}
+                                {formatarValorConferencia(resumo.valoresCobradosAMenos)}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div className="conf_lab_abas" role="tablist" aria-label="Tipo de problema">
+                        {ABAS_RESULTADO.filter((a) => a.id === 'todos' || contagemAbas[a.id] > 0 || filtro === a.id).map((a) => (
                             <button
-                                key={f.id}
+                                key={a.id}
                                 type="button"
-                                className={`conf_lab_chip${filtro === f.id ? ' is-active' : ''}`}
-                                onClick={() => setFiltro(f.id)}
+                                role="tab"
+                                aria-selected={filtro === a.id}
+                                className={`conf_lab_aba${filtro === a.id ? ' is-active' : ''}`}
+                                onClick={() => setFiltro(a.id)}
                             >
-                                {f.label}
+                                {a.rotulo} <span>{contagemAbas[a.id]}</span>
                             </button>
                         ))}
                         <input
                             type="search"
                             value={busca}
                             onChange={(e) => setBusca(e.target.value)}
-                            placeholder="Busca textual…"
+                            placeholder="Buscar tutor, animal ou exame…"
                             className="conf_lab_busca"
                         />
                     </div>
@@ -1716,6 +1923,7 @@ const ConfigConferenciaLaboratorio = () => {
                         onOrdenar={alternarOrdem}
                         onToggle={alternarSelecao}
                         onToggleTodos={alternarTodosVisiveis}
+                        onToggleVarios={alternarVarios}
                         onAbrir={setItemAberto}
                         todosMarcados={todosVisiveisMarcados}
                         algunsMarcados={algunsVisiveisMarcados}
@@ -1766,7 +1974,7 @@ const ConfigConferenciaLaboratorio = () => {
                             className="credenciamento_main_action_btn secondary"
                             onClick={() => setRegrasAberto(true)}
                         >
-                            Equivalências e perfis
+                            Memória do laboratório
                         </button>
                         <button
                             type="button"
@@ -1809,6 +2017,10 @@ const ConfigConferenciaLaboratorio = () => {
                 onRemoverEquivalencia={(idx) => void removerEquivalencia(idx)}
                 onSalvarPerfil={(dados) => void salvarPerfil(dados)}
                 onRemoverPerfil={(idx) => void removerPerfil(idx)}
+                aliasesPessoa={aliasesPessoa}
+                onRemoverAlias={(idx) => void removerAlias(idx)}
+                valoresAceitos={valoresAceitos}
+                onRemoverValorAceito={(idx) => void removerValorAceitoMemoria(idx)}
             />
         </main>
     )

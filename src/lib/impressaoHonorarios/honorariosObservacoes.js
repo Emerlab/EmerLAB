@@ -1,4 +1,5 @@
 import { supabase, buscarTodosPaginado } from '../supabase.js'
+import { distribuirObservacoes } from '../pdf/distribuirObservacoes.js'
 
 function isMissingTableError(error) {
     const msg = String(error?.message || error?.details || '').toLowerCase()
@@ -17,6 +18,16 @@ function isMissingTituloColumnError(error) {
     const msg = String(error?.message || error?.details || '').toLowerCase()
     return msg.includes('titulo') && (msg.includes('column') || msg.includes('schema cache'))
 }
+
+function isMissingGeralColumnError(error) {
+    const msg = String(error?.message || error?.details || '').toLowerCase()
+    const code = String(error?.code || '')
+    if (msg.includes('geral')) return true
+    return code === '42703' && !msg.includes('titulo')
+}
+
+const ERRO_MIGRACAO_GERAL =
+    'Coluna geral ausente no banco. Aplique a migração de observações gerais.'
 
 function isMissingRpcSalvarObservacaoError(error) {
     const msg = String(error?.message || error?.details || '').toLowerCase()
@@ -65,6 +76,7 @@ function mapearObservacao(row) {
         titulo: String(row.titulo || '').trim(),
         mensagem: String(row.mensagem || '').trim(),
         ativa: row.ativa !== false,
+        geral: row.geral === true,
         ordem: Number(row.ordem) || 0,
         codigosProcedimentos: codigos,
         createdAt: row.created_at || null,
@@ -77,23 +89,26 @@ function mapearObservacao(row) {
  * @returns {Promise<{ ok: true, itens: object[] } | { ok: false, erro: string, missingTable?: boolean }>}
  */
 export async function listarHonorariosObservacoes() {
-    const selectComTitulo =
-        'id, titulo, mensagem, ativa, ordem, created_at, updated_at, honorarios_observacoes_procedimentos(procedimento_codigo)'
-    const selectSemTitulo =
-        'id, mensagem, ativa, ordem, created_at, updated_at, honorarios_observacoes_procedimentos(procedimento_codigo)'
-
-    let { data, error } = await supabase
-        .from('honorarios_observacoes')
-        .select(selectComTitulo)
-        .order('ordem', { ascending: true })
-        .order('id', { ascending: true })
-
-    if (error && isMissingTituloColumnError(error)) {
-        ;({ data, error } = await supabase
+    const montarSelect = ({ titulo, geral }) =>
+        `id, ${titulo ? 'titulo, ' : ''}mensagem, ativa, ${geral ? 'geral, ' : ''}ordem, created_at, updated_at, honorarios_observacoes_procedimentos(procedimento_codigo)`
+    const consultar = (flags) =>
+        supabase
             .from('honorarios_observacoes')
-            .select(selectSemTitulo)
+            .select(montarSelect(flags))
             .order('ordem', { ascending: true })
-            .order('id', { ascending: true }))
+            .order('id', { ascending: true })
+
+    const flags = { titulo: true, geral: true }
+    let { data, error } = await consultar(flags)
+
+    if (error && flags.geral && isMissingGeralColumnError(error)) {
+        flags.geral = false
+        ;({ data, error } = await consultar(flags))
+    }
+    if (error && flags.titulo && isMissingTituloColumnError(error)) {
+        flags.titulo = false
+        flags.geral = false
+        ;({ data, error } = await consultar(flags))
     }
 
     if (error) {
@@ -128,14 +143,17 @@ export async function salvarHonorariosObservacao(payload) {
     if (!titulo) return { ok: false, erro: 'Informe o título da observação (ex.: Atendimentos Domiciliares).' }
     if (!mensagem) return { ok: false, erro: 'Informe o texto da observação.' }
 
-    const codigos = [
-        ...new Set(
-            (payload?.codigosProcedimentos || [])
-                .map(normalizarCodigoProcedimento)
-                .filter(Boolean),
-        ),
-    ]
-    if (!codigos.length) {
+    const geral = payload?.geral === true
+    const codigos = geral
+        ? []
+        : [
+              ...new Set(
+                  (payload?.codigosProcedimentos || [])
+                      .map(normalizarCodigoProcedimento)
+                      .filter(Boolean),
+              ),
+          ]
+    if (!geral && !codigos.length) {
         return { ok: false, erro: 'Vincule ao menos um procedimento que dispara a observação.' }
     }
 
@@ -144,7 +162,10 @@ export async function salvarHonorariosObservacao(payload) {
     const ordem = Number.isFinite(Number(payload?.ordem)) ? Number(payload.ordem) : 0
     const agora = new Date().toISOString()
 
-    const { data: rpcId, error: rpcError } = await supabase.rpc('salvar_honorarios_observacao_com_vinculos', {
+    // A RPC não carrega `geral`: se ela for criada/alterada, deve gravar `geral` (hoje gerais pulam a RPC).
+    const { data: rpcId, error: rpcError } = geral
+        ? { data: null, error: null }
+        : await supabase.rpc('salvar_honorarios_observacao_com_vinculos', {
         p_id: idExistente,
         p_titulo: titulo,
         p_mensagem: mensagem,
@@ -171,14 +192,17 @@ export async function salvarHonorariosObservacao(payload) {
     }
 
     let observacaoId = idExistente
-    const rowBase = { mensagem, ativa, ordem, updated_at: agora, titulo }
+    const rowBase = { mensagem, ativa, ordem, updated_at: agora, titulo, geral }
+    const { geral: _geral, ...rowSemGeral } = rowBase
 
     if (idExistente) {
-        let { data: updated, error } = await supabase
-            .from('honorarios_observacoes')
-            .update(rowBase)
-            .eq('id', idExistente)
-            .select('id')
+        const executarUpdate = (row) =>
+            supabase.from('honorarios_observacoes').update(row).eq('id', idExistente).select('id')
+        let { data: updated, error } = await executarUpdate(rowBase)
+        if (error && isMissingGeralColumnError(error)) {
+            if (geral) return { ok: false, erro: ERRO_MIGRACAO_GERAL }
+            ;({ data: updated, error } = await executarUpdate(rowSemGeral))
+        }
         if (error && isMissingTituloColumnError(error)) {
             return { ok: false, erro: ERRO_MIGRACAO_TITULO_HONORARIOS }
         }
@@ -200,11 +224,13 @@ export async function salvarHonorariosObservacao(payload) {
             }
         }
     } else {
-        let { data, error } = await supabase
-            .from('honorarios_observacoes')
-            .insert(rowBase)
-            .select('id')
-            .single()
+        const executarInsert = (row) =>
+            supabase.from('honorarios_observacoes').insert(row).select('id').single()
+        let { data, error } = await executarInsert(rowBase)
+        if (error && isMissingGeralColumnError(error)) {
+            if (geral) return { ok: false, erro: ERRO_MIGRACAO_GERAL }
+            ;({ data, error } = await executarInsert(rowSemGeral))
+        }
         if (error && isMissingTituloColumnError(error)) {
             return { ok: false, erro: ERRO_MIGRACAO_TITULO_HONORARIOS }
         }
@@ -238,6 +264,8 @@ export async function salvarHonorariosObservacao(payload) {
     if (errDel) {
         return { ok: false, erro: errDel.message || 'Erro ao atualizar vínculos.' }
     }
+
+    if (!codigos.length) return { ok: true, id: observacaoId }
 
     const rows = codigos.map((procedimento_codigo) => ({
         observacao_id: observacaoId,
@@ -282,37 +310,26 @@ export async function excluirHonorariosObservacao(id) {
 }
 
 /**
- * Itens ativos cujo vínculo cruza com os códigos impressos (ordem preservada).
- * @param {string[]} codigos
- * @returns {Promise<Array<{ titulo: string, mensagem: string }>>}
+ * Chave do grupo (cartão) de uma seção no PDF de honorários.
+ * @param {{ categoriaNome?: string, nome?: string }} secao
  */
-export async function resolverMensagensObservacoesPorCodigos(codigos) {
-    const setCodigos = new Set(
-        (codigos || []).map(normalizarCodigoProcedimento).filter(Boolean),
-    )
-    if (!setCodigos.size) return []
-
-    const lista = await listarHonorariosObservacoes()
-    if (!lista.ok) return []
-
-    return lista.itens
-        .filter((item) => item.ativa)
-        .filter((item) =>
-            (item.codigosProcedimentos || []).some((c) => setCodigos.has(normalizarCodigoProcedimento(c))),
-        )
-        .map((item) => ({
-            titulo: item.titulo || '',
-            mensagem: item.mensagem || '',
-        }))
-        .filter((item) => item.mensagem)
+export function chaveGrupoHonorarios(secao) {
+    return String(secao?.categoriaNome || secao?.nome || 'Categoria')
 }
 
 /**
+ * Distribui as observações ativas entre os grupos (seções) e as gerais.
  * @param {object[]} secoes
- * @returns {Promise<Array<{ titulo: string, mensagem: string }>>}
+ * @returns {Promise<{ porGrupo: Record<string, Array<{ titulo: string, mensagem: string }>>, gerais: Array<{ titulo: string, mensagem: string }> }>}
  */
-export async function resolverMensagensObservacoesPorSecoes(secoes) {
-    return resolverMensagensObservacoesPorCodigos(coletarCodigosSecoesHonorarios(secoes))
+export async function resolverObservacoesHonorariosPorSecoes(secoes) {
+    const lista = await listarHonorariosObservacoes()
+    if (!lista.ok) return { porGrupo: {}, gerais: [] }
+    const grupos = (secoes || []).map((secao) => ({
+        chave: chaveGrupoHonorarios(secao),
+        codigos: coletarCodigosSecoesHonorarios([secao]),
+    }))
+    return distribuirObservacoes({ grupos, observacoes: lista.itens })
 }
 
 export async function listarProcedimentosParaObservacoes() {

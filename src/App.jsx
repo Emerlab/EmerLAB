@@ -52,6 +52,7 @@ const ClicksignEmerdog = lazy(() => import('./pages/Contratos/ClicksignEmerdog')
 const PagamentosRegistro = lazy(() => import('./pages/Pagamentos/PagamentosRegistro'));
 const PagamentosCaixa = lazy(() => import('./pages/Pagamentos/PagamentosCaixa'));
 const RepasseMensalPublico = lazy(() => import('./pages/RepasseMensal/RepasseMensalPublico'));
+const TabelaPlanosPublico = lazy(() => import('./pages/Publico/TabelaPlanosPublico/TabelaPlanosPublico'));
 const NotFound = lazy(() => import('./pages/NotFound/NotFound'));
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
         <Route path="/repasse_mensal/:token" element={<RepasseMensalPublico />} />
         <Route path="/credenciamento/cadastro-publico" element={<CredenciamentoFormularioPublico />} />
         <Route path="/credenciamento/cadastro-publico/:slug" element={<CredenciamentoFormularioPublico />} />
+        <Route path="/tabela-planos" element={<TabelaPlanosPublico />} />
         <Route path="/emerzap" element={<Navigate to="/home" replace />} />
         {/* Home pós-login: Layout2 (sidebar) */}
         <Route element={<Layout2 />}>
