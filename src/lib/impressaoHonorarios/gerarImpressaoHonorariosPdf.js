@@ -2,10 +2,27 @@ import { PDFDocument, rgb, PDFString } from 'pdf-lib'
 import { blobDePdfLib } from '../pdf/serializarPdf.js'
 import { embedMontserratNoPdf } from '../impressaoPlanos/montserratPdfFonts.js'
 import { formatarCarimboDataHora } from '../pdf/formatarCarimboEmissao.js'
+import {
+    CARD_PADDING_BOTTOM,
+    CARD_RADIUS,
+    COR_BRANCO,
+    COR_NAVY,
+    COR_ZEBRA,
+    FONT_SIZE_BODY,
+    FONT_SIZE_HEADER,
+    ROW_BASE_HEIGHT,
+    TABLE_HEADER_HEIGHT,
+    TITLE_BAR_HEIGHT,
+    desenharBarraTitulo,
+    desenharDivisoria,
+    desenharRetanguloArredondado,
+    yBaselineCentro,
+    yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
+} from '../pdf/estiloTabelaPdf.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 import urlHonorariosPdf from '../../assets/honorarios/honorarios.pdf?url'
 
-const ICON_CAB_SIZE_PT = 10
+const ICON_CAB_SIZE_PT = 14
 const ICON_CAB_GAP_PT = 4
 const ICON_RASTER_PX = 64
 
@@ -17,13 +34,7 @@ const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
 const SECTION_GAP = 16
-const CARD_RADIUS = 8
-const TITLE_BAR_HEIGHT = 32
-const TABLE_HEADER_HEIGHT = 26
-const ROW_BASE_HEIGHT = 26
-const LINE_LEADING = 11
-const FONT_SIZE_BODY = 9
-const FONT_SIZE_HEADER = 9
+const LINE_LEADING = 12
 const FONT_SIZE_TITLE_PREFIX = 10
 const FONT_SIZE_TITLE_CAT = 10
 const FONT_SIZE_STAMP = 7
@@ -40,12 +51,8 @@ const DUVIDAS_GAP = 18
 const LINK_WHATSAPP = 'https://wa.me/555499041695'
 const LINK_VIDEO = 'https://www.youtube.com/watch?v=rUNF0hKrO20'
 
-const COR_NAVY = rgb(22 / 255, 33 / 255, 62 / 255)
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
 const COR_TEXTO_OBS = rgb(90 / 255, 96 / 255, 108 / 255)
-const COR_BRANCO = rgb(1, 1, 1)
-const COR_ZEBRA = rgb(247 / 255, 248 / 255, 250 / 255)
-const COR_BORDA = rgb(229 / 255, 230 / 255, 234 / 255)
 const COR_STAMP = rgb(0.72, 0.72, 0.72)
 const COR_LINK = rgb(30 / 255, 100 / 255, 180 / 255)
 const COR_INFO_TEXTO = rgb(30 / 255, 70 / 255, 120 / 255)
@@ -503,55 +510,12 @@ async function carregarSvgComoPngBytes(urlSvg, sizePx = ICON_RASTER_PX) {
 function desenharIconeEstetoscopio(page, iconePng, x, textY) {
     if (!iconePng) return
     const size = ICON_CAB_SIZE_PT
+    // Centro do ícone = centro das maiúsculas do texto do cabeçalho (≈ 0,36 do corpo da fonte).
     page.drawImage(iconePng, {
         x,
-        y: textY - 1,
+        y: textY + FONT_SIZE_HEADER * 0.36 - size / 2,
         width: size,
         height: size,
-    })
-}
-
-function desenharBarraTituloSecao(page, fonts, x, yTop, innerW, nomeCategoria) {
-    const y = yTop - TITLE_BAR_HEIGHT
-    page.drawRectangle({
-        x,
-        y,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT,
-        color: COR_NAVY,
-        borderRadius: CARD_RADIUS,
-    })
-    page.drawRectangle({
-        x,
-        y,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT / 2,
-        color: COR_NAVY,
-    })
-
-    const baseY = y + 10
-    const prefix = '| Procedimentos: '
-    page.drawText(prefix, {
-        x: x + 14,
-        y: baseY,
-        size: FONT_SIZE_TITLE_PREFIX,
-        font: fonts.regular,
-        color: COR_BRANCO,
-    })
-    const prefixW = fonts.regular.widthOfTextAtSize(prefix, FONT_SIZE_TITLE_PREFIX)
-    const catNome = sanitizarTextoPdf(nomeCategoria) || 'Categoria'
-    const linhasCat = quebrarTexto(
-        catNome,
-        fonts.bold,
-        FONT_SIZE_TITLE_CAT,
-        innerW - 28 - prefixW,
-    )
-    page.drawText(linhasCat[0], {
-        x: x + 14 + prefixW,
-        y: baseY,
-        size: FONT_SIZE_TITLE_CAT,
-        font: fonts.bold,
-        color: COR_BRANCO,
     })
 }
 
@@ -567,13 +531,19 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
         color: COR_BRANCO,
     })
 
-    const textY = y + 8
+    // Meio das maiúsculas (≈ 0,36 do corpo) no meio da faixa: baseline = meio − 0,36·corpo.
+    const textY = yBaselineCentro(y + TABLE_HEADER_HEIGHT / 2, FONT_SIZE_HEADER)
     const labels = ['Nome', 'Porte P', 'Porte M', 'Porte G']
     labels.forEach((label, idx) => {
         const colX = xs[idx]
         const colW = widths[idx]
         if (idx === 0) {
-            const iconX = colX + 6
+            // Ícone + rótulo centralizados sobre a coluna.
+            const grupoW =
+                ICON_CAB_SIZE_PT +
+                ICON_CAB_GAP_PT +
+                fonts.bold.widthOfTextAtSize(label, FONT_SIZE_HEADER)
+            const iconX = colX + Math.max(2, (colW - grupoW) / 2)
             desenharIconeEstetoscopio(page, iconeEstetoscopio, iconX, textY)
             page.drawText(label, {
                 x: iconX + ICON_CAB_SIZE_PT + ICON_CAB_GAP_PT,
@@ -593,23 +563,15 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
         }
     })
 
-    page.drawLine({
-        start: { x: MARGIN_X, y },
-        end: { x: MARGIN_X + innerW, y },
-        thickness: 0.5,
-        color: COR_BORDA,
-    })
-
+    // Sem linha entre o cabeçalho e a primeira linha do grupo.
     return y
 }
 
 function yPrimeiraLinhaBloco(yTop, yBottom, numLinhas, fontSize) {
-    const h = yTop - yBottom
-    const blockH = (Math.max(1, numLinhas) - 1) * LINE_LEADING + fontSize
-    return yBottom + (h + blockH) / 2 - fontSize
+    return yPrimeiraLinhaBlocoBase(yTop, yBottom, numLinhas, fontSize, LINE_LEADING)
 }
 
-function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra) {
+function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoes) {
     const { xs, widths } = layout
     const corpo = fontCorpo(fonts)
     const h = medirAlturaLinha(linha, fonts, widths[0])
@@ -624,11 +586,16 @@ function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra) {
         color: fundo,
     })
 
+    // Divisória no TOPO da linha (depois do fundo, para a zebra não cobri-la); a 1ª do bloco não tem.
+    if (!opcoes?.semLinhaSuperior) {
+        desenharDivisoria(page, { x: MARGIN_X, innerW: layout.innerW, y: yTop })
+    }
+
     const linhasNome = quebrarTexto(linha.nome, corpo, FONT_SIZE_BODY, widths[0] - 12)
     const yNome = yPrimeiraLinhaBloco(yTop, yBottom, linhasNome.length, FONT_SIZE_BODY)
     linhasNome.forEach((ln, i) => {
         page.drawText(ln, {
-            x: xs[0] + 10,
+            x: xs[0] + 14,
             y: yNome - i * LINE_LEADING,
             size: FONT_SIZE_BODY,
             font: corpo,
@@ -647,13 +614,6 @@ function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra) {
             font: corpo,
             color: COR_TEXTO,
         })
-    })
-
-    page.drawLine({
-        start: { x: MARGIN_X, y: yBottom },
-        end: { x: MARGIN_X + layout.innerW, y: yBottom },
-        thickness: 0.4,
-        color: COR_BORDA,
     })
 
     return { yBottom, h }
@@ -1011,28 +971,35 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
                 yProbe -= hProbe
                 iProbe += 1
             }
-            yCardBottom = yProbe
+            yCardBottom = yProbe - CARD_PADDING_BOTTOM
         }
 
         const topFundo = desenharTituloCategoria ? cardTop : corpoTop
         {
             const cardH = topFundo - yCardBottom
             if (cardH > 0) {
-                page.drawRectangle({
+                desenharRetanguloArredondado(page, {
                     x: MARGIN_X,
-                    y: yCardBottom,
+                    yTop: topFundo,
                     width: layout.innerW,
                     height: cardH,
+                    raio: CARD_RADIUS,
                     color: COR_BRANCO,
-                    borderRadius: CARD_RADIUS,
                 })
             }
         }
         if (desenharTituloCategoria) {
-            desenharBarraTituloSecao(page, fonts, MARGIN_X, cardTop, layout.innerW, secao.nome)
+            desenharBarraTitulo(page, fonts, {
+                x: MARGIN_X,
+                yTop: cardTop,
+                innerW: layout.innerW,
+                prefixo: 'Grupo de ',
+                destaque: sanitizarTextoPdf(secao.nome) || 'Categoria',
+            })
         }
 
         let yCursor = desenharCabecalhoTabela(page, fonts, layout, corpoTop, iconeEstetoscopio)
+        const yTopoLinhas = yCursor
         desenhouAlgoNestaPagina = true
 
         while (linhaIdx < linhas.length) {
@@ -1041,7 +1008,9 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             if (yCursor - h < MARGIN_BOTTOM) {
                 return { secaoIdx, linhaIdx, zebra, done: false }
             }
-            const { yBottom } = desenharLinhaDados(page, fonts, layout, yCursor, linha, zebra)
+            const { yBottom } = desenharLinhaDados(page, fonts, layout, yCursor, linha, zebra, {
+                semLinhaSuperior: yCursor === yTopoLinhas,
+            })
             yCursor = yBottom
             zebra += 1
             linhaIdx += 1
@@ -1049,7 +1018,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
 
         secaoIdx += 1
         linhaIdx = 0
-        y = yCursor - SECTION_GAP
+        y = yCursor - CARD_PADDING_BOTTOM - SECTION_GAP
     }
 
     return { secaoIdx, linhaIdx: 0, zebra, done: true }
