@@ -7,6 +7,24 @@ import {
     adicionarPaginasObservacoesDinamicas,
     normalizarListaObservacoes,
 } from '../pdf/observacoesModeloPdf.js'
+import {
+    CARD_PADDING_BOTTOM,
+    CARD_RADIUS,
+    COR_BORDA,
+    COR_BRANCO,
+    COR_NAVY,
+    COR_ZEBRA,
+    FONT_SIZE_BODY,
+    FONT_SIZE_HEADER,
+    ROW_BASE_HEIGHT,
+    TABLE_HEADER_HEIGHT,
+    TITLE_BAR_HEIGHT,
+    desenharBarraTitulo,
+    desenharDivisoria,
+    desenharRetanguloArredondado,
+    yBaselineCentro,
+    yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
+} from '../pdf/estiloTabelaPdf.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 
 const ICON_CAB_SIZE_PT = 14
@@ -22,29 +40,14 @@ const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
 const SECTION_GAP = 16
-const CARD_RADIUS = 14
-const TITLE_BAR_HEIGHT = 44
-const TABLE_HEADER_HEIGHT = 36
-const ROW_BASE_HEIGHT = 34
-const ROW_DIVIDER_INSET = 14
-const CARD_PADDING_BOTTOM = 12
 // Grupo com limite mesclado: só é partido entre páginas se couberem ao menos N linhas na atual
 // e sobrarem ao menos M na seguinte (evita linhas órfãs).
 const MIN_LINHAS_GRUPO_PARTIDO = 5
 const MIN_LINHAS_GRUPO_PARTIDO_RESTO = 2
 const LINE_LEADING = 12
-const FONT_SIZE_BODY = 10
-const FONT_SIZE_HEADER = 11
-const FONT_SIZE_TITLE_PREFIX = 15
-const FONT_SIZE_TITLE_CAT = 15
 const FONT_SIZE_STAMP = 7
 
-const COR_NAVY = rgb(0x1e / 255, 0x31 / 255, 0x48 / 255) // #1E3148
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
-const COR_BRANCO = rgb(1, 1, 1)
-// Linhas alternam entre branco e um branco levemente acinzentado (#FCFCFC).
-const COR_ZEBRA = rgb(252 / 255, 252 / 255, 252 / 255)
-const COR_BORDA = rgb(218 / 255, 220 / 255, 225 / 255)
 const COR_STAMP = rgb(0.72, 0.72, 0.72)
 
 const COL_FRAC = [0.44, 0.18, 0.18, 0.2]
@@ -205,67 +208,6 @@ function desenharIconeEstetoscopio(page, iconePng, x, textY) {
     })
 }
 
-/**
- * pdf-lib ignora borderRadius em drawRectangle; desenha o retângulo arredondado por caminho SVG
- * (y do caminho cresce para baixo, a partir de yTop). `soTopo` arredonda só os cantos superiores.
- */
-function desenharRetanguloArredondado(page, { x, yTop, width, height, raio, color, soTopo = false }) {
-    const r = Math.max(0, Math.min(raio, width / 2, height / 2))
-    const w = width
-    const h = height
-    const d = soTopo
-        ? `M 0 ${h} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h} Z`
-        : `M ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} L ${r} ${h} A ${r} ${r} 0 0 1 0 ${h - r} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`
-    page.drawSvgPath(d, { x, y: yTop, color, borderWidth: 0 })
-}
-
-function desenharBarraTituloSecao(page, fonts, x, yTop, innerW, nomeCategoria) {
-    const y = yTop - TITLE_BAR_HEIGHT
-    desenharRetanguloArredondado(page, {
-        x,
-        yTop,
-        width: innerW,
-        height: TITLE_BAR_HEIGHT,
-        raio: CARD_RADIUS,
-        color: COR_NAVY,
-        soTopo: true,
-    })
-
-    const baseY = y + (TITLE_BAR_HEIGHT - FONT_SIZE_TITLE_PREFIX) / 2 + 2
-    const corPrefixo = fonts.light || fonts.regular
-    // Barra vertical fina antes do título, como no layout do Canva.
-    page.drawLine({
-        start: { x: x + 16, y: y + 11 },
-        end: { x: x + 16, y: y + TITLE_BAR_HEIGHT - 11 },
-        thickness: 0.8,
-        color: rgb(0.78, 0.82, 0.88),
-    })
-    const prefix = 'Grupo de '
-    const textoX = x + 28
-    page.drawText(prefix, {
-        x: textoX,
-        y: baseY,
-        size: FONT_SIZE_TITLE_PREFIX,
-        font: corPrefixo,
-        color: COR_BRANCO,
-    })
-    const prefixW = corPrefixo.widthOfTextAtSize(prefix, FONT_SIZE_TITLE_PREFIX)
-    const catNome = sanitizarTextoPdf(nomeCategoria) || 'Categoria'
-    const linhasCat = quebrarTexto(
-        catNome,
-        fonts.bold,
-        FONT_SIZE_TITLE_CAT,
-        innerW - 28 - prefixW - 14,
-    )
-    page.drawText(linhasCat[0], {
-        x: textoX + prefixW,
-        y: baseY,
-        size: FONT_SIZE_TITLE_CAT,
-        font: fonts.bold,
-        color: COR_BRANCO,
-    })
-}
-
 function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
     const { xs, widths, innerW } = layout
     const y = yTop - TABLE_HEADER_HEIGHT
@@ -279,7 +221,7 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
     })
 
     // Meio das maiúsculas (≈ 0,36 do corpo) no meio da faixa: baseline = meio − 0,36·corpo.
-    const textY = y + TABLE_HEADER_HEIGHT / 2 - FONT_SIZE_HEADER * 0.36
+    const textY = yBaselineCentro(y + TABLE_HEADER_HEIGHT / 2, FONT_SIZE_HEADER)
     const labels = ['Procedimento', 'Diferença', 'Carências', 'Limites']
     labels.forEach((label, idx) => {
         const colX = xs[idx]
@@ -315,10 +257,7 @@ function desenharCabecalhoTabela(page, fonts, layout, yTop, iconeEstetoscopio) {
 }
 
 function yPrimeiraLinhaBloco(yTop, yBottom, numLinhas, fontSize) {
-    const h = yTop - yBottom
-    const blockH = (Math.max(1, numLinhas) - 1) * LINE_LEADING + fontSize
-    // Sobe 0,14·corpo: centraliza pelas maiúsculas, não pela linha de base.
-    return yBottom + (h + blockH) / 2 - fontSize + fontSize * 0.14
+    return yPrimeiraLinhaBlocoBase(yTop, yBottom, numLinhas, fontSize, LINE_LEADING)
 }
 
 function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoesLimite) {
@@ -339,12 +278,7 @@ function desenharLinhaDados(page, fonts, layout, yTop, linha, indiceZebra, opcoe
     // Divisória no TOPO da linha (desenhada depois do fundo, para a zebra não cobri-la).
     // A primeira linha do bloco não tem borda superior; a última do grupo fica sem borda inferior.
     if (!opcoesLimite?.semLinhaSuperior) {
-        page.drawLine({
-            start: { x: MARGIN_X + ROW_DIVIDER_INSET, y: yTop },
-            end: { x: MARGIN_X + layout.innerW - ROW_DIVIDER_INSET, y: yTop },
-            thickness: 0.8,
-            color: COR_BORDA,
-        })
+        desenharDivisoria(page, { x: MARGIN_X, innerW: layout.innerW, y: yTop })
     }
 
     const linhasNome = quebrarTexto(linha.nome, corpo, FONT_SIZE_BODY, widths[0] - 12)
@@ -548,7 +482,13 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             }
         }
         if (desenharTituloCategoria) {
-            desenharBarraTituloSecao(page, fonts, MARGIN_X, cardTop, layout.innerW, secao.nome)
+            desenharBarraTitulo(page, fonts, {
+                x: MARGIN_X,
+                yTop: cardTop,
+                innerW: layout.innerW,
+                prefixo: 'Grupo de ',
+                destaque: sanitizarTextoPdf(secao.nome) || 'Categoria',
+            })
         }
 
         let yCursor = desenharCabecalhoTabela(page, fonts, layout, corpoTop, iconeEstetoscopio)
