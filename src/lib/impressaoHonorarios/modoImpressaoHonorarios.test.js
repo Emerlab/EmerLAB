@@ -112,6 +112,20 @@ describe('buscarModoImpressaoHonorarios', () => {
         expect(await buscarModoImpressaoHonorarios(5)).toBeNull()
     })
 
+    it.each([
+        [{ code: 'PGRST205', message: 'x' }],
+        [{ code: 'X', message: 'relation "public.impressao_honorarios_modos" does not exist' }],
+        [{ code: 'X', message: 'Could not find the table in the schema cache' }],
+    ])('null para tabela ausente %j', async (erro) => {
+        estado.respostas = [{ data: null, error: erro }]
+        expect(await buscarModoImpressaoHonorarios(5)).toBeNull()
+    })
+
+    it('lança quando permissão negada menciona relation', async () => {
+        estado.respostas = [{ data: null, error: { code: '42501', message: 'permission denied for relation impressao_honorarios_modos' } }]
+        await expect(buscarModoImpressaoHonorarios(5)).rejects.toMatchObject({ code: '42501' })
+    })
+
     it('null quando não há registro', async () => {
         estado.respostas = [{ data: null, error: null }]
         expect(await buscarModoImpressaoHonorarios(5)).toBeNull()
@@ -149,6 +163,26 @@ describe('salvarModoImpressaoHonorarios', () => {
         })
         expect(r.selecao).toEqual(montarSelecaoDeCategorias(cats()))
         expect(r.atualizadoPor).toBe('u1')
+    })
+
+    it('lança sem sessão, sem gravar', async () => {
+        estado.sessao = null
+        await expect(salvarModoImpressaoHonorarios(7, cats())).rejects.toThrow()
+        expect(estado.upserts).toHaveLength(0)
+    })
+
+    it('usa a linha devolvida pelo servidor', async () => {
+        const selecaoSrv = { v: 1, ordemCategorias: [2], categorias: {} }
+        estado.respostas = [
+            { data: { selecao: selecaoSrv, atualizado_em: '2026-11-18T12:00:00Z', atualizado_por: 'u2' }, error: null },
+            { data: { name: 'Bia' }, error: null },
+        ]
+        expect(await salvarModoImpressaoHonorarios(7, cats())).toEqual({
+            selecao: selecaoSrv,
+            atualizadoEm: '2026-11-18T12:00:00Z',
+            atualizadoPor: 'u2',
+            atualizadoPorNome: 'Bia',
+        })
     })
 
     it('lança em erro', async () => {

@@ -9,7 +9,6 @@ function ehTabelaAusente(error) {
         code === '42P01' ||
         code === 'PGRST205' ||
         msg.includes('does not exist') ||
-        msg.includes('relation') ||
         msg.includes('schema cache')
     )
 }
@@ -98,16 +97,16 @@ export async function buscarModoImpressaoHonorarios(cidadeId) {
 export async function salvarModoImpressaoHonorarios(cidadeId, categorias) {
     if (!cidadeId) throw new Error('Cidade é obrigatória para salvar o modo.')
     const selecao = montarSelecaoDeCategorias(categorias)
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
-    const user = session?.user ?? null
+    const { data: sessaoData, error: sessaoErro } = await supabase.auth.getSession()
+    if (sessaoErro) throw sessaoErro
+    const user = sessaoData?.session?.user ?? null
+    if (!user) throw new Error('Sessão ausente: não é possível salvar o modo.')
     const agora = new Date().toISOString()
     const row = {
         cidade_id: Number(cidadeId),
         selecao,
         atualizado_em: agora,
-        atualizado_por: user?.id || null,
+        atualizado_por: user.id,
     }
     const { data, error } = await supabase
         .from(TABELA)
@@ -119,8 +118,8 @@ export async function salvarModoImpressaoHonorarios(cidadeId, categorias) {
     return {
         selecao: data?.selecao || selecao,
         atualizadoEm: data?.atualizado_em || agora,
-        atualizadoPor: data?.atualizado_por || user?.id || null,
-        atualizadoPorNome: await nomeDoAutor(data?.atualizado_por),
+        atualizadoPor: data?.atualizado_por || user.id,
+        atualizadoPorNome: await nomeDoAutor(data?.atualizado_por || user.id),
     }
 }
 
