@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
     ALTURA_CABECALHO_BLOCO,
+    alturasItensBloco,
     PADDING_FINAL_BLOCO,
     desenharBlocoInformacoes,
     medirBlocoInformacoes,
+    planejarFatiaBlocoInformacoes,
     quantosItensCabem,
 } from './blocoInformacoesPdf.js'
 
@@ -76,5 +78,63 @@ describe('blocoInformacoesPdf', () => {
             [54, y0, 1, 476],
             [54, y0 - 30, 2, 476],
         ])
+    })
+
+    it('numeroInicial continua a numeração ao medir e desenhar', () => {
+        const vistos = []
+        const medir = (item) => {
+            vistos.push(item.numero)
+            return 30
+        }
+        const itens = [{ titulo: 'c', mensagem: 'z' }, { titulo: 'd', mensagem: 'w' }]
+        medirBlocoInformacoes({ itens, innerW: 500, medirItem: medir, numeroInicial: 3 })
+        expect(vistos).toEqual([3, 4])
+        const desenhados = []
+        const page = { drawLine: () => {}, drawText: () => {} }
+        const fonts = { bold: { widthOfTextAtSize: () => 50 } }
+        desenharBlocoInformacoes(page, fonts, {
+            x: 0,
+            yTop: 500,
+            innerW: 500,
+            itens,
+            medirItem: medir,
+            numeroInicial: 3,
+            desenharItem: (p, f, x, y, item) => desenhados.push(item.numero),
+        })
+        expect(desenhados).toEqual([3, 4])
+    })
+
+    it('planejarFatiaBlocoInformacoes: tudo cabe, parte cabe, nada cabe, forçar um', () => {
+        const base = ALTURA_CABECALHO_BLOCO + PADDING_FINAL_BLOCO
+        const alturasItens = [30, 40, 50]
+        expect(
+            planejarFatiaBlocoInformacoes({ alturasItens, inicio: 0, alturaDisponivel: 1000 }),
+        ).toEqual({ inicio: 0, fim: 3, altura: base + 120, completo: true })
+        expect(
+            planejarFatiaBlocoInformacoes({ alturasItens, inicio: 0, alturaDisponivel: base + 75 }),
+        ).toEqual({ inicio: 0, fim: 2, altura: base + 70, completo: false })
+        expect(
+            planejarFatiaBlocoInformacoes({ alturasItens, inicio: 2, alturaDisponivel: base + 50 }),
+        ).toEqual({ inicio: 2, fim: 3, altura: base + 50, completo: true })
+        expect(
+            planejarFatiaBlocoInformacoes({ alturasItens, inicio: 1, alturaDisponivel: base + 10 }),
+        ).toEqual({ inicio: 1, fim: 1, altura: 0, completo: false })
+        expect(
+            planejarFatiaBlocoInformacoes({
+                alturasItens,
+                inicio: 1,
+                alturaDisponivel: base + 10,
+                forcarAoMenosUm: true,
+            }),
+        ).toEqual({ inicio: 1, fim: 2, altura: base + 40, completo: false })
+    })
+
+    it('alturasItensBloco numera antes de medir e usa a largura do bloco', () => {
+        const alturas = alturasItensBloco({
+            itens: [{ titulo: 'a', mensagem: 'x' }, { titulo: 'b', mensagem: 'y' }],
+            innerW: 500,
+            medirItem: (item, larg) => item.numero * 1000 + larg,
+        })
+        expect(alturas).toEqual([1476, 2476])
     })
 })

@@ -12,8 +12,8 @@ export const ALTURA_CABECALHO_BLOCO =
     INFO_SEP_GAP + 1 + INFO_TITLE_GAP + FONT_SIZE_INFO + INFO_TITLE_GAP
 export const PADDING_FINAL_BLOCO = OBS_PADDING
 
-function numerar(itens) {
-    return (itens || []).map((item, i) => ({ ...item, numero: i + 1 }))
+function numerar(itens, numeroInicial = 1) {
+    return (itens || []).map((item, i) => ({ ...item, numero: numeroInicial + i }))
 }
 
 /**
@@ -22,8 +22,8 @@ function numerar(itens) {
  * medirItem JÁ inclui o espaçamento final do item (OBS_ITEM_GAP), então o
  * bloco não soma espaçamento próprio entre itens.
  */
-export function medirBlocoInformacoes({ itens, innerW, medirItem }) {
-    const lista = numerar(itens)
+export function medirBlocoInformacoes({ itens, innerW, medirItem, numeroInicial = 1 }) {
+    const lista = numerar(itens, numeroInicial)
     if (!lista.length) return 0
     const larguraTexto = innerW - OBS_PADDING * 2
     let h = ALTURA_CABECALHO_BLOCO
@@ -31,6 +31,15 @@ export function medirBlocoInformacoes({ itens, innerW, medirItem }) {
         h += medirItem(item, larguraTexto)
     })
     return h + PADDING_FINAL_BLOCO
+}
+
+/**
+ * Altura de cada item (já numerado 1..n, na mesma largura usada pelo bloco),
+ * para alimentar quantosItensCabem/planejarFatiaBlocoInformacoes.
+ */
+export function alturasItensBloco({ itens, innerW, medirItem }) {
+    const larguraTexto = innerW - OBS_PADDING * 2
+    return numerar(itens).map((item) => medirItem(item, larguraTexto))
 }
 
 /**
@@ -49,13 +58,38 @@ export function quantosItensCabem({ alturasItens, alturaDisponivel }) {
     return n
 }
 
+/**
+ * Planeja a fatia de itens [inicio, fim) que entra num espaço (cabeçalho e
+ * padding final incluídos). Com forcarAoMenosUm, uma página nova sempre recebe
+ * ao menos um item (item maior que a página não trava a paginação).
+ * altura = altura da fatia desenhada (0 se nenhum item entra).
+ */
+export function planejarFatiaBlocoInformacoes({
+    alturasItens,
+    inicio = 0,
+    alturaDisponivel,
+    forcarAoMenosUm = false,
+}) {
+    const todas = alturasItens || []
+    const resto = todas.slice(inicio)
+    let n = quantosItensCabem({ alturasItens: resto, alturaDisponivel })
+    if (n === 0 && forcarAoMenosUm && resto.length) n = 1
+    const fim = inicio + n
+    const altura = n
+        ? ALTURA_CABECALHO_BLOCO +
+          resto.slice(0, n).reduce((acc, h) => acc + h, 0) +
+          PADDING_FINAL_BLOCO
+        : 0
+    return { inicio, fim, altura, completo: fim >= todas.length }
+}
+
 /** Desenha separador, título e itens; devolve o yBottom (com padding final). */
 export function desenharBlocoInformacoes(
     page,
     fonts,
-    { x, yTop, innerW, itens, desenharItem, medirItem },
+    { x, yTop, innerW, itens, desenharItem, medirItem, numeroInicial = 1 },
 ) {
-    const lista = numerar(itens)
+    const lista = numerar(itens, numeroInicial)
     if (!lista.length) return yTop
 
     const sepW = Math.min(120, innerW * 0.28)
