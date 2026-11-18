@@ -9,6 +9,7 @@ import { config as dotenvConfig } from 'dotenv'
 import { aguardarImagensIcones, ajustarFontesTextosRc, carregarIconesRcParaHtml } from '../src/lib/rc/rcPdfIcones.js'
 import { aplicarCarimboRcDocumento } from '../src/lib/rc/rcPdfCarimbo.js'
 import { montarNomeArquivoRc } from '../src/lib/rc/rcPdfNomeArquivo.js'
+import { montarRotuloAtendimentoRc } from '../src/lib/rc/rotuloAtendimentoRc.js'
 import { buildMapaOrdemRc, ordenarLinhasRc } from '../src/lib/rc/ordenarCardsRc.js'
 
 dotenvConfig({ path: path.resolve(process.cwd(), '.env.local') })
@@ -176,6 +177,10 @@ const montarCards = (base, cidadesSelecionadas) => {
         const temEspecialidadeDomiciliar = nomesEspecialidadesPrestador.some((nome) =>
             normalizarTexto(nome).includes('DOMICILIAR')
         )
+        const temEspecialidadeLocal = [
+            especialidadePrincipalObj,
+            ...especialidadesDoPrestador.map((rel) => especialidadePorId.get(Number(rel.especialidade_id))),
+        ].some((esp) => esp && normalizarTexto(esp.tipo) === 'LOCAL')
         const situacaoDescricao = situacaoPorId.get(Number(prestador.situacao_id))?.descricao || '-'
         const estabelecimentosVinculados = (estabelecimentosPorVeterinario.get(Number(prestador.id)) || [])
             .map((rel) => prestadorPorId.get(Number(rel.estabelecimento_id)))
@@ -206,6 +211,7 @@ const montarCards = (base, cidadesSelecionadas) => {
             possuiVinculoClinica: estabelecimentosVinculados.length > 0,
             nomesClinicasVinculadas,
             temModalidadeVolante,
+            temEspecialidadeLocal,
         }
     })
 
@@ -230,20 +236,7 @@ const gerarHtmlCards = (cardsPorPagina, pageWidthPt, pageHeightPt, icones) => {
                 .map((item) => {
                     const especialidade = escaparHtml(item.especialidadePrincipalNome || '-')
                     const nome = escaparHtml(item.nome || '-')
-                    let atendimentoLabel
-                    if (item.temEspecialidadeDomiciliar) {
-                        atendimentoLabel = 'Atendimento Domiciliar'
-                    } else if (item.possuiVinculoClinica && item.nomesClinicasVinculadas?.length) {
-                        const lista = item.nomesClinicasVinculadas
-                        const conector = lista.length === 1 ? `na ${lista[0]}` : `em: ${lista.join(', ')}`
-                        atendimentoLabel = `Atendimentos ${conector}`
-                    } else if (item.temModalidadeVolante) {
-                        atendimentoLabel = 'Atendimento em clínicas parceiras'
-                    } else {
-                        const baseAtendimento = String(item.modalidadeEfetiva || item.endereco || '-').trim()
-                        atendimentoLabel = baseAtendimento.replace(/^atendimento[\s:-]*/i, '').trim() || '-'
-                    }
-                    const atendimento = escaparHtml(atendimentoLabel)
+                    const atendimento = escaparHtml(montarRotuloAtendimentoRc(item))
                     const telefone = escaparHtml(formatarTelefone(item.telefoneEfetivo || item.telefone || '-'))
                     return `
                         <article class="card">
