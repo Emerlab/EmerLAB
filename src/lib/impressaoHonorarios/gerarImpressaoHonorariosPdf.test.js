@@ -143,7 +143,7 @@ describe('paginarSecoesHonorarios — bloco Informações por grupo', () => {
         const yFimLinhas = topoLinhas - 3 * 34
         expect(c1.bottom).toBeLessThan(yFimLinhas - ALTURA_CABECALHO_BLOCO)
         const sep = paginas[0].chamadas.find(
-            (c) => c.op === 'drawLine' && c.args[0].start.y === yFimLinhas - 14,
+            (c) => c.op === 'drawLine' && c.args[0].start.y === yFimLinhas - 8,
         )
         expect(sep).toBeTruthy()
         expect(c1.bottom - c2.top).toBeCloseTo(2 * SECTION_GAP, 6)

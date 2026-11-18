@@ -127,7 +127,7 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         // O cartão passa do fim das linhas pelo bloco inteiro (sem somar CARD_PADDING_BOTTOM).
         expect(c1.bottom).toBeLessThan(yFimLinhas - ALTURA_CABECALHO_BLOCO)
         const sep = paginas[0].chamadas.find(
-            (c) => c.op === 'drawLine' && c.args[0].start.y === yFimLinhas - 14,
+            (c) => c.op === 'drawLine' && c.args[0].start.y === yFimLinhas - 8,
         )
         expect(sep).toBeTruthy()
         // Próxima seção mantém o mesmo espaçamento entre cartões de hoje (2 × SECTION_GAP).

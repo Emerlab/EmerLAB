@@ -14,8 +14,8 @@ const medirItem = () => 30
 
 describe('blocoInformacoesPdf', () => {
     it('constantes do cabeçalho e padding', () => {
-        expect(ALTURA_CABECALHO_BLOCO).toBe(14 + 1 + 12 + 10 + 12)
-        expect(PADDING_FINAL_BLOCO).toBe(12)
+        expect(ALTURA_CABECALHO_BLOCO).toBe(8 + 1 + 8 + 10 + 8)
+        expect(PADDING_FINAL_BLOCO).toBe(4)
     })
 
     it('mede 0 sem itens', () => {
