@@ -25,7 +25,7 @@ function criarDeps(extra = {}) {
                 ],
             }
         }),
-        resolverObservacoes: vi.fn(async () => ['obs']),
+        resolverObservacoes: vi.fn(async () => ({ porGrupo: { 10: [{ titulo: 't', mensagem: 'm' }] }, gerais: ['obs'] })),
         gerarPdf: vi.fn(async () => new Uint8Array([1, 2, 3])),
         criarZip: () => new JSZip(),
         ...extra,
@@ -66,6 +66,8 @@ describe('gerarZipPlanosCidade', () => {
         const a = deps.gerarPdf.mock.calls[0][0]
         expect(a.categorias[0].linhas[0].checked).toBe(false)
         expect(a.observacoes).toEqual(['obs'])
+        expect(a.observacoesPorGrupo).toEqual({ 10: [{ titulo: 't', mensagem: 'm' }] })
+        expect(deps.resolverObservacoes).toHaveBeenCalledWith(a.categorias)
         expect(a.pdfUrl).toBe('u1')
         const b = deps.gerarPdf.mock.calls[1][0]
         expect(b.categorias[0].linhas[0].checked).toBe(true)

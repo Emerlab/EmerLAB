@@ -3,7 +3,7 @@ import { aplicarSelecaoModo } from './modoImpressaoPlanos.js'
 import { nomeArquivoImpressaoPlanosPdf, nomeArquivoZipPlanos } from './statusZipPlanos.js'
 
 async function depsPadrao() {
-    const [{ carregarLinhasImpressaoPlanos }, { resolverMensagensObservacoesPorCategorias }, { gerarImpressaoPlanosPdf }] =
+    const [{ carregarLinhasImpressaoPlanos }, { resolverObservacoesPlanosPorGrupo }, { gerarImpressaoPlanosPdf }] =
         await Promise.all([
             import('./carregarLinhasImpressaoPlanos.js'),
             import('./planosObservacoes.js'),
@@ -11,7 +11,7 @@ async function depsPadrao() {
         ])
     return {
         carregarLinhas: carregarLinhasImpressaoPlanos,
-        resolverObservacoes: resolverMensagensObservacoesPorCategorias,
+        resolverObservacoes: resolverObservacoesPlanosPorGrupo,
         gerarPdf: gerarImpressaoPlanosPdf,
         criarZip: () => new JSZip(),
     }
@@ -54,8 +54,13 @@ export async function gerarZipPlanosCidade(params, deps) {
                 planosLista,
             })
             const categorias = aplicarSelecaoModo(res.categorias, modo.selecao)
-            const observacoes = await d.resolverObservacoes(categorias)
-            const blob = await d.gerarPdf({ pdfUrl: res.pdfUrl, categorias, observacoes })
+            const { porGrupo, gerais } = await d.resolverObservacoes(categorias)
+            const blob = await d.gerarPdf({
+                pdfUrl: res.pdfUrl,
+                categorias,
+                observacoes: gerais,
+                observacoesPorGrupo: porGrupo,
+            })
             zip.file(nomeArquivoImpressaoPlanosPdf(res.planoNome, res.cidadeNome), blob)
             if (res.cidadeNome) cidadeNomeZip = res.cidadeNome
         } catch (e) {

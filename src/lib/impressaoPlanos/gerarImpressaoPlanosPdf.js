@@ -6,8 +6,15 @@ import { nomeArquivoImpressaoPlanosPdf } from './statusZipPlanos.js'
 import { formatarCarimboDataHora } from '../pdf/formatarCarimboEmissao.js'
 import {
     adicionarPaginasObservacoesDinamicas,
+    desenharItemObservacaoModelo,
+    medirItemObservacaoModelo,
     normalizarListaObservacoes,
 } from '../pdf/observacoesModeloPdf.js'
+import {
+    alturasItensBloco,
+    desenharBlocoInformacoes,
+    planejarFatiaBlocoInformacoes,
+} from '../pdf/blocoInformacoesPdf.js'
 import {
     CARD_PADDING_BOTTOM,
     CARD_RADIUS,
@@ -119,10 +126,20 @@ function medirAlturaLinha(linha, fonts, colProcW) {
     return Math.max(ROW_BASE_HEIGHT, h)
 }
 
+/** Observações do grupo (Informações no fim do cartão), sem a numeração (o bloco numera). */
+function itensInformacoesDoGrupo(observacoesPorGrupo, cat) {
+    const brutos = observacoesPorGrupo?.[String(cat?.id)]
+    return normalizarListaObservacoes(brutos || []).map(({ titulo, mensagem }) => ({
+        titulo,
+        mensagem,
+    }))
+}
+
 /**
  * @param {Array<{ id: number, nome: string, limiteGrupoValor?: string, textoLimiteGrupo?: string, linhas: object[] }>} categorias
+ * @param {Record<string, Array<{ titulo?: string, mensagem: string }>>} [observacoesPorGrupo]
  */
-function montarSecoesImpressao(categorias) {
+export function montarSecoesImpressao(categorias, observacoesPorGrupo = {}) {
     const secoes = []
     for (const cat of categorias || []) {
         const linhasMarcadas = (cat.linhas || []).filter(
@@ -137,6 +154,7 @@ function montarSecoesImpressao(categorias) {
             nome: String(cat.nome || 'Categoria'),
             textoLimiteGrupo: limiteGrupoAtivo ? String(cat.textoLimiteGrupo || '').trim() : '',
             limiteGrupoAtivo,
+            infoItens: itensInformacoesDoGrupo(observacoesPorGrupo, cat),
             linhas: linhasMarcadas.map((l) => {
                 const isento = procedimentoIsentoLimiteGrupo(l)
                 const usaLimiteGrupoLinha = limiteGrupoAtivo && !isento
@@ -362,6 +380,34 @@ function alturaGrupo(linhas, indices, fonts, colProcW) {
     return indices.reduce((acc, i) => acc + medirAlturaLinha(linhas[i], fonts, colProcW), 0)
 }
 
+function medirItemInformacoes(fonts) {
+    return (item, larguraMax) => medirItemObservacaoModelo(item, fonts, larguraMax)
+}
+
+/** Altura (por item, já numerado) do bloco Informações de cada seção; [] sem observações. */
+function calcularAlturasInformacoes(secoes, fonts, innerW) {
+    return secoes.map((secao) =>
+        alturasItensBloco({
+            itens: secao.infoItens || [],
+            innerW,
+            medirItem: medirItemInformacoes(fonts),
+        }),
+    )
+}
+
+/** Desenha os itens [fatia.inicio, fatia.fim) do bloco, numerados a partir de inicio + 1. */
+function desenharFatiaInformacoes(page, fonts, layout, yTop, secao, fatia) {
+    return desenharBlocoInformacoes(page, fonts, {
+        x: MARGIN_X,
+        yTop,
+        innerW: layout.innerW,
+        itens: (secao.infoItens || []).slice(fatia.inicio, fatia.fim),
+        numeroInicial: fatia.inicio + 1,
+        medirItem: medirItemInformacoes(fonts),
+        desenharItem: desenharItemObservacaoModelo,
+    })
+}
+
 function desenharCarimboPagina(page, fonts, width) {
     const stamp = formatarCarimboDataHora()
     const w = fonts.regular.widthOfTextAtSize(stamp, FONT_SIZE_STAMP)
@@ -378,7 +424,16 @@ function desenharCarimboPagina(page, fonts, width) {
  * Renderiza uma página de conteúdo. Sempre inicia no topo útil da página.
  * @param {object} cursor — pode incluir grupoMergeAberto indicando continuidade de rowspan entre páginas
  */
-function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio) {
+function renderizarUmaPagina(
+    page,
+    fonts,
+    width,
+    height,
+    secoes,
+    cursor,
+    iconeEstetoscopio,
+    alturasInformacoes = [],
+) {
     const layout = colunasLayout(width)
     let y = height - MARGIN_TOP
     let { secaoIdx, linhaIdx, zebra } = cursor
@@ -387,6 +442,52 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
     const secaoIdxInicial = secaoIdx
     const linhaIdxInicial = linhaIdx
     let desenhouAlgoNestaPagina = false
+
+    // Continuação do bloco Informações de uma seção: cartão novo com o título do grupo
+    // repetido e o restante dos itens (sem cabeçalho de tabela). O cursor já aponta
+    // para a seção seguinte (secaoIdx = pendente.secaoIdx + 1, linhaIdx = 0).
+    const pendente = cursor.blocoPendente
+    if (pendente && secoes[pendente.secaoIdx]) {
+        const secaoInfo = secoes[pendente.secaoIdx]
+        const cardTop = y - SECTION_GAP
+        const corpoTop = cardTop - TITLE_BAR_HEIGHT
+        // Página nova: ao menos um item entra (item maior que a página não trava a paginação).
+        const fatia = planejarFatiaBlocoInformacoes({
+            alturasItens: alturasInformacoes[pendente.secaoIdx] || [],
+            inicio: pendente.proximoItem,
+            alturaDisponivel: corpoTop - LIMITE_LINHAS,
+            forcarAoMenosUm: true,
+        })
+        const yCardBottom = corpoTop - fatia.altura
+        desenharRetanguloArredondado(page, {
+            x: MARGIN_X,
+            yTop: cardTop,
+            width: layout.innerW,
+            height: cardTop - yCardBottom,
+            raio: CARD_RADIUS,
+            color: COR_BRANCO,
+        })
+        desenharBarraTitulo(page, fonts, {
+            x: MARGIN_X,
+            yTop: cardTop,
+            innerW: layout.innerW,
+            prefixo: 'Grupo de ',
+            destaque: sanitizarTextoPdf(secaoInfo.nome) || 'Categoria',
+        })
+        desenharFatiaInformacoes(page, fonts, layout, corpoTop, secaoInfo, fatia)
+        desenhouAlgoNestaPagina = true
+        if (!fatia.completo) {
+            return {
+                secaoIdx,
+                linhaIdx,
+                zebra,
+                grupoMergeAberto: false,
+                blocoPendente: { secaoIdx: pendente.secaoIdx, proximoItem: fatia.fim },
+                done: false,
+            }
+        }
+        y = yCardBottom - SECTION_GAP
+    }
 
     while (secaoIdx < secoes.length) {
         const secao = secoes[secaoIdx]
@@ -458,6 +559,8 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
 
         // Mede até onde o card deve ir nesta página (só até a última linha que cabe).
         let yCardBottom = corpoTop - TABLE_HEADER_HEIGHT
+        // Bloco Informações desta seção nesta página (só quando a seção termina aqui).
+        let fatiaInformacoes = null
         {
             let yProbe = yCardBottom
             let iProbe = linhaIdx
@@ -468,6 +571,18 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
                 iProbe += 1
             }
             yCardBottom = yProbe - CARD_PADDING_BOTTOM
+            const alturasInfo = alturasInformacoes[secaoIdx] || []
+            if (iProbe >= linhas.length && alturasInfo.length) {
+                fatiaInformacoes = planejarFatiaBlocoInformacoes({
+                    alturasItens: alturasInfo,
+                    inicio: 0,
+                    alturaDisponivel: yProbe - LIMITE_LINHAS,
+                })
+                // O padding final do bloco substitui o CARD_PADDING_BOTTOM.
+                if (fatiaInformacoes.fim > fatiaInformacoes.inicio) {
+                    yCardBottom = yProbe - fatiaInformacoes.altura
+                }
+            }
         }
 
         // Fundo branco só até o fim do conteúdo deste bloco (gap = cor da folha).
@@ -563,6 +678,30 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             linhaIdx += 1
         }
 
+        if (fatiaInformacoes) {
+            // Todas as linhas da seção já foram desenhadas (e a célula mesclada, fechada).
+            const temItensAqui = fatiaInformacoes.fim > fatiaInformacoes.inicio
+            const yFimCard = temItensAqui
+                ? desenharFatiaInformacoes(page, fonts, layout, yCursor, secao, fatiaInformacoes)
+                : yCursor - CARD_PADDING_BOTTOM
+            if (!fatiaInformacoes.completo) {
+                return {
+                    secaoIdx: secaoIdx + 1,
+                    linhaIdx: 0,
+                    zebra,
+                    grupoMergeAberto: false,
+                    blocoPendente: { secaoIdx, proximoItem: fatiaInformacoes.fim },
+                    done: false,
+                }
+            }
+            secaoIdx += 1
+            linhaIdx = 0
+            grupoMergeAberto = false
+            mergeTopY = null
+            y = yFimCard - SECTION_GAP
+            continue
+        }
+
         secaoIdx += 1
         linhaIdx = 0
         grupoMergeAberto = false
@@ -570,7 +709,76 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         y = yCursor - CARD_PADDING_BOTTOM - SECTION_GAP
     }
 
-    return { secaoIdx, linhaIdx: 0, zebra, grupoMergeAberto: false, done: true }
+    return { secaoIdx, linhaIdx: 0, zebra, grupoMergeAberto: false, blocoPendente: null, done: true }
+}
+
+/** Assinatura de progresso do cursor (guarda anti-laço). */
+function assinaturaCursor(cursor) {
+    const p = cursor.blocoPendente
+    const bloco = p ? `${p.secaoIdx}:${p.proximoItem}` : '-'
+    return `${cursor.secaoIdx}-${cursor.linhaIdx}-${cursor.grupoMergeAberto}-${bloco}`
+}
+
+/**
+ * Pagina as seções: pede uma página a novaPagina() enquanto houver conteúdo,
+ * renderiza e chama aposPagina(page). Exportada para testes com página que grava chamadas.
+ */
+export async function paginarSecoesPlanos({
+    secoes,
+    fonts,
+    width,
+    height,
+    iconeEstetoscopio,
+    novaPagina,
+    aposPagina = () => {},
+}) {
+    const alturasInformacoes = calcularAlturasInformacoes(
+        secoes,
+        fonts,
+        colunasLayout(width).innerW,
+    )
+    let cursor = {
+        secaoIdx: 0,
+        linhaIdx: 0,
+        zebra: 0,
+        grupoMergeAberto: false,
+        blocoPendente: null,
+        done: false,
+    }
+    let guard = 0
+    const totalLinhas = secoes.reduce((n, s) => n + s.linhas.length, 0)
+    // Cada item de Informações ocupa no máximo uma página de continuação.
+    const totalItensInfo = alturasInformacoes.reduce((n, a) => n + a.length, 0)
+    const maxPaginas = Math.max(30, totalLinhas + 4) + totalItensInfo
+
+    while (!cursor.done && guard < maxPaginas) {
+        guard += 1
+        const antes = assinaturaCursor(cursor)
+        const page = await novaPagina()
+        cursor = renderizarUmaPagina(
+            page,
+            fonts,
+            width,
+            height,
+            secoes,
+            cursor,
+            iconeEstetoscopio,
+            alturasInformacoes,
+        )
+        aposPagina(page)
+        const depois = assinaturaCursor(cursor)
+        if (!cursor.done && depois === antes) {
+            if (cursor.blocoPendente) {
+                const total = alturasInformacoes[cursor.blocoPendente.secaoIdx]?.length || 0
+                const proximo = cursor.blocoPendente.proximoItem + 1
+                cursor.blocoPendente =
+                    proximo < total ? { ...cursor.blocoPendente, proximoItem: proximo } : null
+            } else {
+                cursor.linhaIdx += 1
+                cursor.grupoMergeAberto = false
+            }
+        }
+    }
 }
 
 /**
@@ -578,7 +786,10 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
  *   pdfUrl: string,
  *   categorias: object[],
  *   observacoes?: Array<{ titulo?: string, mensagem: string }> | string | string[],
- * }} opts
+ *   observacoesPorGrupo?: Record<string, Array<{ titulo?: string, mensagem: string }>>,
+ * }} opts — observacoes = só as gerais (páginas do fim; sem gerais → páginas fixas do modelo);
+ *   observacoesPorGrupo = bloco Informações no fim do cartão de cada categoria
+ *   (chave String(categoria.id)).
  */
 export async function gerarImpressaoPlanosPdf(opts) {
     const resposta = await fetch(opts.pdfUrl)
@@ -589,7 +800,7 @@ export async function gerarImpressaoPlanosPdf(opts) {
         throw new Error('O PDF base do plano deve conter 4 páginas (capa, listagem, observações).')
     }
 
-    const secoes = montarSecoesImpressao(opts.categorias)
+    const secoes = montarSecoesImpressao(opts.categorias, opts.observacoesPorGrupo || {})
     if (!secoes.length) {
         throw new Error('Selecione ao menos um procedimento para imprimir.')
     }
@@ -606,29 +817,18 @@ export async function gerarImpressaoPlanosPdf(opts) {
     const [capa] = await finalDoc.copyPages(templateDoc, [COVER_INDEX])
     desenharCarimboPagina(finalDoc.addPage(capa), fonts, width)
 
-    let cursor = {
-        secaoIdx: 0,
-        linhaIdx: 0,
-        zebra: 0,
-        grupoMergeAberto: false,
-        done: false,
-    }
-    let guard = 0
-    const maxPaginas = Math.max(30, secoes.reduce((n, s) => n + s.linhas.length, 0) + 4)
-
-    while (!cursor.done && guard < maxPaginas) {
-        guard += 1
-        const antes = `${cursor.secaoIdx}-${cursor.linhaIdx}-${cursor.grupoMergeAberto}`
-        const [tpl] = await finalDoc.copyPages(templateDoc, [TEMPLATE_PAGE_INDEX])
-        const page = finalDoc.addPage(tpl)
-        cursor = renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio)
-        desenharCarimboPagina(page, fonts, width)
-        const depois = `${cursor.secaoIdx}-${cursor.linhaIdx}-${cursor.grupoMergeAberto}`
-        if (!cursor.done && depois === antes) {
-            cursor.linhaIdx += 1
-            cursor.grupoMergeAberto = false
-        }
-    }
+    await paginarSecoesPlanos({
+        secoes,
+        fonts,
+        width,
+        height,
+        iconeEstetoscopio,
+        novaPagina: async () => {
+            const [tpl] = await finalDoc.copyPages(templateDoc, [TEMPLATE_PAGE_INDEX])
+            return finalDoc.addPage(tpl)
+        },
+        aposPagina: (page) => desenharCarimboPagina(page, fonts, width),
+    })
 
     if (observacoesDinamicas.length) {
         await adicionarPaginasObservacoesDinamicas({

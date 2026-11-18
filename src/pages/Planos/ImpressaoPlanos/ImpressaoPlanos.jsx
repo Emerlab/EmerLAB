@@ -14,7 +14,7 @@ import {
     downloadImpressaoPlanosPdf,
     gerarImpressaoPlanosPdf,
 } from '../../../lib/impressaoPlanos/gerarImpressaoPlanosPdf.js'
-import { resolverMensagensObservacoesPorCategorias } from '../../../lib/impressaoPlanos/planosObservacoes.js'
+import { resolverObservacoesPlanosPorGrupo } from '../../../lib/impressaoPlanos/planosObservacoes.js'
 import { MIN_REALIZADORES_PRE_MARCAR } from '../../../lib/impressaoPlanos/mapaRealizadoresRegiao.js'
 import {
     aplicarSelecaoModo,
@@ -539,11 +539,12 @@ export default function ImpressaoPlanos() {
             // não bloqueia o PDF; aviso já foi setado em persistirModo
         }
         try {
-            const observacoes = await resolverMensagensObservacoesPorCategorias(categorias)
+            const { porGrupo, gerais } = await resolverObservacoesPlanosPorGrupo(categorias)
             const blob = await gerarImpressaoPlanosPdf({
                 pdfUrl: meta.pdfUrl,
                 categorias,
-                observacoes,
+                observacoes: gerais,
+                observacoesPorGrupo: porGrupo,
             })
             downloadImpressaoPlanosPdf(blob, meta.planoNome, meta.cidadeNome)
         } catch (e) {
