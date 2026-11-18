@@ -11,7 +11,6 @@ import {
 import {
     CARD_PADDING_BOTTOM,
     CARD_RADIUS,
-    COR_BORDA,
     COR_BRANCO,
     COR_NAVY,
     COR_ZEBRA,
@@ -23,6 +22,9 @@ import {
     desenharBarraTitulo,
     desenharDivisoria,
     desenharRetanguloArredondado,
+    contarLinhasQueCabem,
+    decidirPartirGrupo,
+    limiteInferiorLinhas,
     yBaselineCentro,
     yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
 } from '../pdf/estiloTabelaPdf.js'
@@ -40,6 +42,8 @@ const OBS_INDEX_B = 3
 const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
+// Limite das linhas: margem + respiro do card (o padding fica dentro da margem).
+const LIMITE_LINHAS = limiteInferiorLinhas(MARGIN_BOTTOM)
 const SECTION_GAP = 16
 // Grupo com limite mesclado: só é partido entre páginas se couberem ao menos N linhas na atual
 // e sobrarem ao menos M na seguinte (evita linhas órfãs).
@@ -162,7 +166,7 @@ function indicesGrupoLimite(linhas) {
 /** Altura útil para linhas numa página (com ou sem barra de título de seção). */
 function calcularAlturaUtilPagina(height, comecaSecao) {
     const reservaTitulo = comecaSecao ? TITLE_BAR_HEIGHT + SECTION_GAP : 0
-    return height - MARGIN_TOP - MARGIN_BOTTOM - reservaTitulo - TABLE_HEADER_HEIGHT
+    return height - MARGIN_TOP - LIMITE_LINHAS - reservaTitulo - TABLE_HEADER_HEIGHT
 }
 
 async function carregarSvgComoPngBytes(urlSvg, sizePx = ICON_RASTER_PX) {
@@ -406,7 +410,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         const alturaPrimeiraLinha = medirAlturaLinha(linhas[linhaIdx], fonts, layout.widths[0])
 
         // Não desenhar título/cabeçalho se a primeira linha real não couber — evita página quase vazia.
-        if (y - overhead < MARGIN_BOTTOM + alturaPrimeiraLinha) {
+        if (y - overhead < LIMITE_LINHAS + alturaPrimeiraLinha) {
             return {
                 secaoIdx,
                 linhaIdx,
@@ -422,23 +426,22 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         const temGrupoPre = idxGrupoPre.length > 0 && secao.textoLimiteGrupo
         if (temGrupoPre && linhaIdx === idxGrupoPre[0] && !grupoMergeAberto) {
             const hGrupo = alturaGrupo(linhas, idxGrupoPre, fonts, layout.widths[0])
-            const espacoAposChrome = y - overhead - MARGIN_BOTTOM
+            const espacoAposChrome = y - overhead - LIMITE_LINHAS
             const cabeAqui = hGrupo <= espacoAposChrome
             const cabeEmPaginaNova = hGrupo <= calcularAlturaUtilPagina(height, true)
             // Parte o grupo entre páginas só se sobrar espaço para linhas suficientes aqui
             // (e restarem linhas na próxima); senão empurra o grupo inteiro para a página nova.
-            let linhasQueCabem = 0
-            {
-                let acc = 0
-                for (const i of idxGrupoPre) {
-                    acc += medirAlturaLinha(linhas[i], fonts, layout.widths[0])
-                    if (acc > espacoAposChrome - CARD_PADDING_BOTTOM) break
-                    linhasQueCabem += 1
-                }
-            }
+            const linhasQueCabem = contarLinhasQueCabem(
+                idxGrupoPre.map((i) => medirAlturaLinha(linhas[i], fonts, layout.widths[0])),
+                espacoAposChrome,
+            )
             const restantes = idxGrupoPre.length - linhasQueCabem
-            const podePartir =
-                linhasQueCabem >= MIN_LINHAS_GRUPO_PARTIDO && restantes >= MIN_LINHAS_GRUPO_PARTIDO_RESTO
+            const podePartir = decidirPartirGrupo({
+                linhasQueCabem,
+                restantes,
+                minAqui: MIN_LINHAS_GRUPO_PARTIDO,
+                minResto: MIN_LINHAS_GRUPO_PARTIDO_RESTO,
+            })
             if (!cabeAqui && cabeEmPaginaNova && !podePartir) {
                 return {
                     secaoIdx,
@@ -460,7 +463,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             let iProbe = linhaIdx
             while (iProbe < linhas.length) {
                 const hProbe = medirAlturaLinha(linhas[iProbe], fonts, layout.widths[0])
-                if (yProbe - hProbe < MARGIN_BOTTOM) break
+                if (yProbe - hProbe < LIMITE_LINHAS) break
                 yProbe -= hProbe
                 iProbe += 1
             }
@@ -516,7 +519,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
                 grupoMergeAberto = true
             }
 
-            if (yCursor - h < MARGIN_BOTTOM) {
+            if (yCursor - h < LIMITE_LINHAS) {
                 if (grupoMergeAberto && mergeTopY != null && naGrupo) {
                     desenharCelulaLimiteGrupoMesclada(
                         page,

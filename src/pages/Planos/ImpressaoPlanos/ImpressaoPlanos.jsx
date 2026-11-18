@@ -103,6 +103,10 @@ export default function ImpressaoPlanos() {
     const tabelaMobile = useMatchMedia('(max-width: 1023px)')
     const saveModoTimer = useRef(null)
     const ignorarProximoSaveModo = useRef(false)
+    const tokenCarregarLista = useRef(0)
+    const [zipGerando, setZipGerando] = useState(false)
+    const [salvandoPreset, setSalvandoPreset] = useState(false)
+    const [avisoPreset, setAvisoPreset] = useState('')
 
     useEffect(() => {
         const run = async () => {
@@ -221,6 +225,9 @@ export default function ImpressaoPlanos() {
     }, [])
 
     const limparLista = useCallback(() => {
+        tokenCarregarLista.current += 1
+        setCarregando(false)
+        setAvisoPreset('')
         cancelarSaveModoPendente()
         setCategorias([])
         setMeta(null)
@@ -248,6 +255,23 @@ export default function ImpressaoPlanos() {
         [planoId, cidadeTabelaId],
     )
 
+    const salvarPresetAgora = useCallback(async () => {
+        if (salvandoPreset || !categorias.length) return
+        cancelarSaveModoPendente()
+        setSalvandoPreset(true)
+        setAvisoPreset('')
+        try {
+            const info = await persistirModo(categorias, { silencioso: true })
+            setAvisoPreset(
+                info
+                    ? 'Preset da equipe salvo.'
+                    : 'Não foi possível salvar o preset da equipe. Tente de novo.',
+            )
+        } finally {
+            setSalvandoPreset(false)
+        }
+    }, [salvandoPreset, categorias, cancelarSaveModoPendente, persistirModo])
+
     const agendarSalvarModo = useCallback(
         (cats) => {
             if (!planoId || !cidadeTabelaId || !(cats || []).length) return
@@ -274,7 +298,12 @@ export default function ImpressaoPlanos() {
     }, [categorias, planoId, cidadeTabelaId, agendarSalvarModo, cancelarSaveModoPendente])
 
     const carregarLista = useCallback(async () => {
+        // Só a requisição mais recente pode atualizar a tela.
+        tokenCarregarLista.current += 1
+        const token = tokenCarregarLista.current
+        const ehAtual = () => token === tokenCarregarLista.current
         setErro('')
+        setAvisoPreset('')
         setAvisoModo('')
         setCarregando(true)
         cancelarSaveModoPendente()
@@ -289,6 +318,7 @@ export default function ImpressaoPlanos() {
                 incluirCidadesParalelas,
                 planosLista: planosTodos.length ? planosTodos : planos,
             })
+            if (!ehAtual()) return
             setMeta({
                 pdfUrl: res.pdfUrl,
                 planoNome: res.planoNome,
@@ -298,6 +328,7 @@ export default function ImpressaoPlanos() {
             let cats = res.categorias
             try {
                 const modo = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId)
+                if (!ehAtual()) return
                 if (modo?.selecao) {
                     cats = aplicarSelecaoModo(cats, modo.selecao)
                     setModoInfo(modo)
@@ -305,6 +336,7 @@ export default function ImpressaoPlanos() {
                     setModoInfo(null)
                 }
             } catch (eModo) {
+                if (!ehAtual()) return
                 setAvisoModo(
                     eModo?.message ||
                         'Não deu para carregar o modo salvo; usando a pré-marcação automática.',
@@ -314,9 +346,10 @@ export default function ImpressaoPlanos() {
             ignorarProximoSaveModo.current = true
             setCategorias(cats)
         } catch (e) {
+            if (!ehAtual()) return
             setErro(e?.message || String(e))
         } finally {
-            setCarregando(false)
+            if (ehAtual()) setCarregando(false)
         }
     }, [
         cidadeTabelaId,
@@ -547,6 +580,7 @@ export default function ImpressaoPlanos() {
                     <SelectUfBusca
                         value={uf}
                         ufs={ufsPermitidas}
+                        disabled={zipGerando}
                         emptyLabel="—"
                             onChange={(u) => {
                                 setUf(u)
@@ -564,7 +598,7 @@ export default function ImpressaoPlanos() {
                             id: o.municipioNome,
                             nome: o.municipioNome,
                         }))}
-                        disabled={!uf || loadingMunicipios}
+                        disabled={!uf || loadingMunicipios || zipGerando}
                         loading={loadingMunicipios}
                         placeholder={!uf ? 'Selecione a UF' : 'Buscar cidade…'}
                             onChange={(nome) => {
@@ -579,7 +613,7 @@ export default function ImpressaoPlanos() {
                     <SelectDropdown
                         className="ek-select"
                         value={planoId}
-                        disabled={!municipioNome}
+                        disabled={!municipioNome || zipGerando}
                             onChange={(e) => {
                                 setPlanoId(e.target.value)
                                 limparLista()
@@ -636,6 +670,8 @@ export default function ImpressaoPlanos() {
                     disponibilidadeCarregando={!disponibilidadePronta}
                     onRevisar={revisarPlano}
                     versaoModos={versaoModos}
+                    ocupado={carregando || gerandoPdf}
+                    onGerandoChange={setZipGerando}
                 />
             ) : null}
 
@@ -647,6 +683,11 @@ export default function ImpressaoPlanos() {
                     <p className="planos_impressao_modo_equipe" role="status">
                         {rotuloModoImpressao(modoInfo)}
                     </p>
+                    {avisoPreset ? (
+                        <p className="planos_impressao_aviso_modo" role="status">
+                            {avisoPreset}
+                        </p>
+                    ) : null}
                     <Toolbar title="Procedimentos" sticky={false}>
                         <div className="ek-field ek-field--grow">
                             <span className="ek-label">Buscar</span>
@@ -658,6 +699,15 @@ export default function ImpressaoPlanos() {
                             />
                         </div>
                         <div className="ek-toolbar__actions">
+                            <button
+                                type="button"
+                                className="ek-btn"
+                                disabled={salvandoPreset || totalMarcados === 0}
+                                title="Grava a marcação atual como preset da equipe para este plano e cidade"
+                                onClick={() => void salvarPresetAgora()}
+                            >
+                                {salvandoPreset ? 'Salvando…' : 'Salvar como preset da equipe'}
+                            </button>
                             <button
                                 type="button"
                                 className="ek-btn"

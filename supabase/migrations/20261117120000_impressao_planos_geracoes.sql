@@ -3,7 +3,7 @@
 create table if not exists public.impressao_planos_geracoes (
   id bigint generated always as identity primary key,
   cidade_id integer not null references public.cidades (id) on delete cascade,
-  plano_ids integer[] not null,
+  plano_ids integer[] not null check (cardinality(plano_ids) > 0),
   gerado_em timestamptz not null default now(),
   gerado_por uuid references public.profiles (id) on delete set null
 );

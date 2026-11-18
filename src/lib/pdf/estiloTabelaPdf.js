@@ -59,6 +59,50 @@ function sanitizar(texto) {
         .trim()
 }
 
+/**
+ * Limite inferior (y) para linhas de dados: a margem da folha mais o respiro do card,
+ * para o card inteiro (linhas + padding) nunca invadir a margem.
+ */
+export function limiteInferiorLinhas(marginBottom) {
+    return marginBottom + CARD_PADDING_BOTTOM
+}
+
+/**
+ * Quantas linhas (na ordem) cabem em `espaco`; mesma regra do laço de desenho
+ * (uma linha cabe quando a soma acumulada não passa do espaço).
+ */
+export function contarLinhasQueCabem(alturas, espaco) {
+    let acc = 0
+    let n = 0
+    for (const h of alturas) {
+        acc += h
+        if (acc > espaco) break
+        n += 1
+    }
+    return n
+}
+
+/** Parte o grupo entre páginas só com linhas suficientes aqui e sobra suficiente na seguinte. */
+export function decidirPartirGrupo({ linhasQueCabem, restantes, minAqui = 5, minResto = 2 }) {
+    return linhasQueCabem >= minAqui && restantes >= minResto
+}
+
+/**
+ * Texto de destaque ajustado a larguraMax: primeira linha por palavras; se algo foi cortado
+ * ou a linha ainda é mais larga que o espaço, corta por caracteres e termina com "…".
+ */
+export function ajustarDestaqueAoTitulo(texto, font, size, larguraMax) {
+    const palavras = sanitizar(texto).split(/\s+/).filter(Boolean)
+    if (!palavras.length) return ''
+    const linha = primeiraLinhaQueCabe(texto, font, size, larguraMax)
+    const cortouPalavras = linha.split(' ').length < palavras.length
+    const largura = (t) => font.widthOfTextAtSize(t, size)
+    if (!cortouPalavras && largura(linha) <= larguraMax) return linha
+    let base = linha
+    while (base.length > 0 && largura(`${base}…`) > larguraMax) base = base.slice(0, -1)
+    return `${base.trimEnd()}…`
+}
+
 /** Primeira linha (quebra por palavras) do texto que cabe em larguraMax. */
 function primeiraLinhaQueCabe(texto, font, size, larguraMax) {
     const palavras = sanitizar(texto).split(/\s+/).filter(Boolean)
@@ -108,7 +152,7 @@ export function desenharBarraTitulo(page, fonts, { x, yTop, innerW, prefixo, des
     })
     const prefixoW = fontPrefixo.widthOfTextAtSize(prefixo, FONT_SIZE_TITLE)
     const texto =
-        primeiraLinhaQueCabe(destaque, fonts.bold, FONT_SIZE_TITLE, innerW - 28 - prefixoW - 14) ||
+        ajustarDestaqueAoTitulo(destaque, fonts.bold, FONT_SIZE_TITLE, innerW - 28 - prefixoW - 14) ||
         '—'
     page.drawText(texto, {
         x: textoX + prefixoW,

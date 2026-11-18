@@ -471,7 +471,7 @@ export async function gerarImpressaoDescontosPdf(opts) {
             const h = medirAlturaLinha(linhas[i], fonts, layout.widths[0])
             const restanteApos = linhas.length - 1 - i
             const incluiInfoAqui = restanteApos === 0
-            const reserva = incluiInfoAqui ? hInfo : 0
+            const reserva = incluiInfoAqui ? hInfo : CARD_PADDING_BOTTOM
             if (yProbe - h < yFloor + reserva) break
             lote.push(linhas[i])
             yProbe -= h

@@ -41,6 +41,8 @@ export default function PainelZipPlanos({
     disponibilidadeCarregando = false,
     onRevisar,
     versaoModos = 0,
+    ocupado = false,
+    onGerandoChange,
 }) {
     const [modos, setModos] = useState([])
     const [ultimaGeracao, setUltimaGeracao] = useState(null)
@@ -52,13 +54,25 @@ export default function PainelZipPlanos({
     const [erro, setErro] = useState('')
     const [aviso, setAviso] = useState('')
     const gerandoRef = useRef(false)
+    const cidadeAtualRef = useRef(cidadeTabelaId)
+
+    useEffect(() => {
+        cidadeAtualRef.current = cidadeTabelaId
+    }, [cidadeTabelaId])
+
+    useEffect(() => {
+        onGerandoChange?.(gerando)
+    }, [gerando, onGerandoChange])
 
     const recarregarUltimaGeracao = useCallback(async () => {
+        const cidadeDaChamada = cidadeTabelaId
         try {
-            const ult = await buscarUltimaGeracaoZip(cidadeTabelaId)
+            const ult = await buscarUltimaGeracaoZip(cidadeDaChamada)
+            if (cidadeAtualRef.current !== cidadeDaChamada) return
             setUltimaGeracao(ult)
             setHistoricoIndisponivel(false)
         } catch {
+            if (cidadeAtualRef.current !== cidadeDaChamada) return
             setUltimaGeracao(null)
             setHistoricoIndisponivel(true)
         }
@@ -124,6 +138,7 @@ export default function PainelZipPlanos({
         setErro('')
         setAviso('')
         setProgresso('Preparando…')
+        const cidadeDaGeracao = cidadeTabelaId
         try {
             const { blob, nomeZip, planoIds } = await gerarZipPlanosCidade({
                 cidadeTabelaId,
@@ -133,17 +148,20 @@ export default function PainelZipPlanos({
                 planosDisponiveis,
                 modos,
                 onProgresso: (atual, total, planoNome) =>
+                    cidadeAtualRef.current === cidadeDaGeracao &&
                     setProgresso(`${atual} de ${total} concluídos — último: ${planoNome}`),
             })
             baixarBlob(blob, nomeZip)
             setProgresso('')
             try {
-                await registrarGeracaoZip(cidadeTabelaId, planoIds)
+                await registrarGeracaoZip(cidadeDaGeracao, planoIds)
                 await recarregarUltimaGeracao()
             } catch {
+                if (cidadeAtualRef.current !== cidadeDaGeracao) return
                 setAviso('Zip baixado, mas o histórico não foi gravado.')
             }
         } catch (e) {
+            if (cidadeAtualRef.current !== cidadeDaGeracao) return
             setProgresso('')
             setErro(e?.message || 'Falha ao gerar o zip.')
         } finally {
@@ -162,13 +180,6 @@ export default function PainelZipPlanos({
             {carregando ? <p className="planos_impressao_zip_info">Carregando presets…</p> : null}
             {erroCarga ? (
                 <p className="planos_impressao_erro planos_impressao_zip_msg">{erroCarga}</p>
-            ) : null}
-
-            {!carregando &&
-            !disponibilidadeCarregando &&
-            planosComFalha.length === 0 &&
-            status.linhas.length === 0 ? (
-                <p className="planos_impressao_zip_info">Nenhum plano disponível nesta cidade.</p>
             ) : null}
 
             {status.linhas.length > 0 ? (
@@ -194,7 +205,7 @@ export default function PainelZipPlanos({
                                 <button
                                     type="button"
                                     className="ek-btn planos_impressao_zip_revisar"
-                                    disabled={gerando}
+                                    disabled={gerando || ocupado}
                                     onClick={() => onRevisar?.(l.planoId)}
                                 >
                                     Revisar

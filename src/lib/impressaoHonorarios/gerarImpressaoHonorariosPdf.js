@@ -16,6 +16,7 @@ import {
     desenharBarraTitulo,
     desenharDivisoria,
     desenharRetanguloArredondado,
+    limiteInferiorLinhas,
     yBaselineCentro,
     yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
 } from '../pdf/estiloTabelaPdf.js'
@@ -33,9 +34,10 @@ const OBS_INDEX = 2
 const MARGIN_X = 42
 const MARGIN_TOP = 86
 const MARGIN_BOTTOM = 58
+// Limite das linhas: margem + respiro do card.
+const LIMITE_LINHAS = limiteInferiorLinhas(MARGIN_BOTTOM)
 const SECTION_GAP = 16
 const LINE_LEADING = 12
-const FONT_SIZE_TITLE_PREFIX = 10
 const FONT_SIZE_TITLE_CAT = 10
 const FONT_SIZE_STAMP = 7
 const FONT_SIZE_OBS = 9
@@ -954,7 +956,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             (desenharTituloCategoria ? SECTION_GAP + TITLE_BAR_HEIGHT : 0) + TABLE_HEADER_HEIGHT
         const alturaPrimeiraLinha = medirAlturaLinha(linhas[linhaIdx], fonts, layout.widths[0])
 
-        if (y - overhead < MARGIN_BOTTOM + alturaPrimeiraLinha) {
+        if (y - overhead < LIMITE_LINHAS + alturaPrimeiraLinha) {
             return { secaoIdx, linhaIdx, zebra, done: false }
         }
 
@@ -967,7 +969,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             let iProbe = linhaIdx
             while (iProbe < linhas.length) {
                 const hProbe = medirAlturaLinha(linhas[iProbe], fonts, layout.widths[0])
-                if (yProbe - hProbe < MARGIN_BOTTOM) break
+                if (yProbe - hProbe < LIMITE_LINHAS) break
                 yProbe -= hProbe
                 iProbe += 1
             }
@@ -1005,7 +1007,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         while (linhaIdx < linhas.length) {
             const linha = linhas[linhaIdx]
             const h = medirAlturaLinha(linha, fonts, layout.widths[0])
-            if (yCursor - h < MARGIN_BOTTOM) {
+            if (yCursor - h < LIMITE_LINHAS) {
                 return { secaoIdx, linhaIdx, zebra, done: false }
             }
             const { yBottom } = desenharLinhaDados(page, fonts, layout, yCursor, linha, zebra, {
