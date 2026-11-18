@@ -456,7 +456,7 @@ function medirAlturaLinha(linha, fonts, colNomeW) {
 /**
  * @param {Array<{ categoriaNome?: string, nome?: string, linhas: object[] }>} secoes
  */
-function montarSecoesImpressao(secoes) {
+export function montarSecoesImpressao(secoes) {
     const saida = []
     for (const secao of secoes || []) {
         const linhas = (secao.linhas || [])
@@ -1027,6 +1027,36 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
 }
 
 /**
+ * Pagina as seções: pede uma página a novaPagina() enquanto houver conteúdo,
+ * renderiza e chama aposPagina(page). Exportada para testes com página que grava chamadas.
+ */
+export async function paginarSecoesHonorarios({
+    secoes,
+    fonts,
+    width,
+    height,
+    iconeEstetoscopio,
+    novaPagina,
+    aposPagina = () => {},
+}) {
+    let cursor = { secaoIdx: 0, linhaIdx: 0, zebra: 0, done: false }
+    let guard = 0
+    const maxPaginas = Math.max(30, secoes.reduce((n, s) => n + s.linhas.length, 0) + 4)
+
+    while (!cursor.done && guard < maxPaginas) {
+        guard += 1
+        const antes = `${cursor.secaoIdx}-${cursor.linhaIdx}`
+        const page = await novaPagina()
+        cursor = renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio)
+        aposPagina(page)
+        const depois = `${cursor.secaoIdx}-${cursor.linhaIdx}`
+        if (!cursor.done && depois === antes) {
+            cursor.linhaIdx += 1
+        }
+    }
+}
+
+/**
  * @param {{
  *   secoes: object[],
  *   cidadeNome?: string,
@@ -1069,22 +1099,18 @@ export async function gerarImpressaoHonorariosPdf(opts) {
     const [capa] = await finalDoc.copyPages(templateDoc, [COVER_INDEX])
     finalDoc.addPage(capa)
 
-    let cursor = { secaoIdx: 0, linhaIdx: 0, zebra: 0, done: false }
-    let guard = 0
-    const maxPaginas = Math.max(30, secoes.reduce((n, s) => n + s.linhas.length, 0) + 4)
-
-    while (!cursor.done && guard < maxPaginas) {
-        guard += 1
-        const antes = `${cursor.secaoIdx}-${cursor.linhaIdx}`
-        const [tpl] = await finalDoc.copyPages(templateDoc, [TEMPLATE_PAGE_INDEX])
-        const page = finalDoc.addPage(tpl)
-        cursor = renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio)
-        desenharCarimboPagina(page, fonts, width, carimboEsq)
-        const depois = `${cursor.secaoIdx}-${cursor.linhaIdx}`
-        if (!cursor.done && depois === antes) {
-            cursor.linhaIdx += 1
-        }
-    }
+    await paginarSecoesHonorarios({
+        secoes,
+        fonts,
+        width,
+        height,
+        iconeEstetoscopio,
+        novaPagina: async () => {
+            const [tpl] = await finalDoc.copyPages(templateDoc, [TEMPLATE_PAGE_INDEX])
+            return finalDoc.addPage(tpl)
+        },
+        aposPagina: (page) => desenharCarimboPagina(page, fonts, width, carimboEsq),
+    })
 
     if (observacoesDinamicas.length) {
         // Folha em branco (mesmo template da listagem) + bloco de dúvidas ao final.
