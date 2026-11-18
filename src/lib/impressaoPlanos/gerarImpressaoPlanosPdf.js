@@ -2,6 +2,7 @@ import { PDFDocument, rgb } from 'pdf-lib'
 import { blobDePdfLib } from '../pdf/serializarPdf.js'
 import { procedimentoIsentoLimiteGrupo } from '../categoriaLimitesGrupo.js'
 import { embedMontserratNoPdf } from './montserratPdfFonts.js'
+import { nomeArquivoImpressaoPlanosPdf } from './statusZipPlanos.js'
 import { formatarCarimboDataHora } from '../pdf/formatarCarimboEmissao.js'
 import {
     adicionarPaginasObservacoesDinamicas,
@@ -647,12 +648,7 @@ export async function gerarImpressaoPlanosPdf(opts) {
 }
 
 export function downloadImpressaoPlanosPdf(blob, planoNome, cidadeNome) {
-    const limpar = (s) =>
-        String(s || '')
-            .replace(/[\\/:*?"<>|]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-    const nome = `${limpar(planoNome)} ${limpar(cidadeNome)}.pdf`.trim() || 'Plano Cidade.pdf'
+    const nome = nomeArquivoImpressaoPlanosPdf(planoNome, cidadeNome)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
