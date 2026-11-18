@@ -11,6 +11,8 @@ import {
     normalizarListaObservacoes,
 } from '../pdf/observacoesModeloPdf.js'
 import {
+    ALTURA_CABECALHO_BLOCO,
+    PADDING_FINAL_BLOCO,
     alturasItensBloco,
     desenharBlocoInformacoes,
     planejarFatiaBlocoInformacoes,
@@ -188,6 +190,26 @@ export function linhasALevarComBloco({
 }) {
     if (!fatiaVazia || linhasNestaPagina <= 1) return 0
     return Math.min(max, linhasNestaPagina - 1)
+}
+
+/**
+ * Guarda de viabilidade da regra "manter junto": só leva linhas se o primeiro item do bloco
+ * couber na página de continuação logo após as linhas levadas. alturaUtilBloco = espaço entre
+ * o topo das linhas de uma página de continuação (título + cabeçalho) e MARGIN_BOTTOM.
+ */
+export function blocoCabeComLinhasLevadas({
+    alturaPrimeiroItem,
+    alturaLinhasLevadas,
+    alturaUtilBloco,
+}) {
+    const alturaBloco = ALTURA_CABECALHO_BLOCO + alturaPrimeiroItem + PADDING_FINAL_BLOCO
+    return alturaBloco <= alturaUtilBloco - alturaLinhasLevadas
+}
+
+/** Espaço para linhas + bloco numa página de continuação da seção, até MARGIN_BOTTOM. */
+export function alturaUtilBlocoContinuacao(height) {
+    // calcularAlturaUtilPagina desconta LIMITE_LINHAS; o bloco vai até a margem.
+    return calcularAlturaUtilPagina(height, true) + (LIMITE_LINHAS - MARGIN_BOTTOM)
 }
 
 function indicesGrupoLimite(linhas) {
@@ -601,10 +623,28 @@ function renderizarUmaPagina(
                     alturaDisponivel: yProbe - MARGIN_BOTTOM,
                 })
                 const fatiaVazia = fatiaInformacoes.fim === fatiaInformacoes.inicio
-                const levar = linhasALevarComBloco({
+                let levar = linhasALevarComBloco({
                     linhasNestaPagina: iProbe - linhaIdx,
                     fatiaVazia,
                 })
+                if (levar > 0) {
+                    let alturaLinhasLevadas = 0
+                    for (let k = iProbe - levar; k < iProbe; k += 1) {
+                        alturaLinhasLevadas += medirAlturaLinha(linhas[k], fonts, layout.widths[0])
+                    }
+                    // Item que não cabe nem com as linhas levadas numa página nova: não leva
+                    // (o bloco vai sozinho, como antes). Isso também impede levar de novo na
+                    // página de continuação, que tem exatamente esta geometria.
+                    if (
+                        !blocoCabeComLinhasLevadas({
+                            alturaPrimeiroItem: alturasInfo[0],
+                            alturaLinhasLevadas,
+                            alturaUtilBloco: alturaUtilBlocoContinuacao(height),
+                        })
+                    ) {
+                        levar = 0
+                    }
+                }
                 if (levar > 0) {
                     // Recua a sonda: o cartão termina após as linhas que ficam, sem bloco; a
                     // seção continua na página seguinte (linhas levadas + bloco).

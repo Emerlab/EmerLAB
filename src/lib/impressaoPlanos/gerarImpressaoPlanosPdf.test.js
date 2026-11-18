@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import {
     LINHAS_QUE_ACOMPANHAM_BLOCO,
+    alturaUtilBlocoContinuacao,
+    blocoCabeComLinhasLevadas,
     linhasALevarComBloco,
     montarSecoesImpressao,
     paginarSecoesPlanos,
@@ -85,6 +87,14 @@ function cartoes(pagina) {
         })
 }
 
+function nomesLinhas(pagina) {
+    return textos(pagina).filter((t) => /^Procedimento \d+-\d+$/.test(t))
+}
+
+function nomesEsperados(id, n) {
+    return Array.from({ length: n }, (_, i) => `Procedimento ${id}-${i + 1}`)
+}
+
 function numerosItens(pagina) {
     return textos(pagina)
         .filter((t) => /^\d+\) $/.test(t))
@@ -122,6 +132,24 @@ describe('linhasALevarComBloco', () => {
         expect(linhasALevarComBloco({ linhasNestaPagina: 3, fatiaVazia: true })).toBe(2)
         expect(linhasALevarComBloco({ linhasNestaPagina: 10, fatiaVazia: true })).toBe(2)
         expect(linhasALevarComBloco({ linhasNestaPagina: 10, fatiaVazia: true, max: 3 })).toBe(3)
+    })
+})
+
+describe('blocoCabeComLinhasLevadas', () => {
+    it('altura útil da continuação vai do topo das linhas (título + cabeçalho) até a margem', () => {
+        expect(alturaUtilBlocoContinuacao(HEIGHT)).toBeCloseTo(
+            HEIGHT - MARGIN_TOP - SECTION_GAP - 44 - 36 - MARGIN_BOTTOM,
+            6,
+        )
+    })
+
+    it('fronteira exata: cabe com igualdade, não cabe por um centésimo', () => {
+        // 500 − 68 (2 linhas) − cabeçalho − padding final = maior item que cabe.
+        const limite = 500 - 68 - ALTURA_CABECALHO_BLOCO - PADDING_FINAL_BLOCO
+        const base = { alturaLinhasLevadas: 68, alturaUtilBloco: 500 }
+        expect(blocoCabeComLinhasLevadas({ ...base, alturaPrimeiroItem: limite })).toBe(true)
+        expect(blocoCabeComLinhasLevadas({ ...base, alturaPrimeiroItem: limite + 0.01 })).toBe(false)
+        expect(blocoCabeComLinhasLevadas({ ...base, alturaPrimeiroItem: 20 })).toBe(true)
     })
 })
 
@@ -281,6 +309,53 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         expect(t2).toContain('Procedimento 2-2')
         expect(t2.indexOf('Procedimento 2-2')).toBeLessThan(t2.indexOf('Informações'))
         expect(numerosItens(paginas[1])).toEqual([1])
+    })
+
+    it('item enorme: não leva linhas (página 1 com todas, bloco na seguinte, nenhuma página de 1 linha)', async () => {
+        const obs = [{ titulo: 'Enorme', mensagem: Array(40).fill(textoLongo).join(' ') }]
+        const secoes = montarSecoesImpressao([categoria(1, 'Consultas', 17)], { 1: obs })
+        const [hItem] = alturasItensBloco({
+            itens: secoes[0].infoItens,
+            innerW: WIDTH - 2 * 42,
+            medirItem: (item, w) => medirItemObservacaoModelo(item, fonts, w),
+        })
+        expect(hItem).toBeGreaterThan(alturaUtilBlocoContinuacao(HEIGHT))
+        const paginas = await paginar([categoria(1, 'Consultas', 17)], { 1: obs })
+        expect(paginas).toHaveLength(2)
+        expect(nomesLinhas(paginas[0])).toEqual(nomesEsperados(1, 17))
+        expect(textos(paginas[0])).not.toContain('Informações')
+        expect(nomesLinhas(paginas[1])).toEqual([])
+        expect(numerosItens(paginas[1])).toEqual([1])
+    })
+
+    it('varredura do tamanho do item: leva 2 linhas só se o item couber com elas na seguinte', async () => {
+        const util = alturaUtilBlocoContinuacao(HEIGHT)
+        const vistos = { leva: 0, naoLeva: 0 }
+        for (let k = 1; k <= 30; k += 1) {
+            const obs = [{ titulo: 'Item', mensagem: Array(k).fill(textoLongo).join(' ') }]
+            const cats = [categoria(1, 'Consultas', 17)]
+            const [hItem] = alturasItensBloco({
+                itens: montarSecoesImpressao(cats, { 1: obs })[0].infoItens,
+                innerW: WIDTH - 2 * 42,
+                medirItem: (item, w) => medirItemObservacaoModelo(item, fonts, w),
+            })
+            const leva = blocoCabeComLinhasLevadas({
+                alturaPrimeiroItem: hItem,
+                alturaLinhasLevadas: 2 * 34,
+                alturaUtilBloco: util,
+            })
+            vistos[leva ? 'leva' : 'naoLeva'] += 1
+            const paginas = await paginar(cats, { 1: obs })
+            expect(paginas).toHaveLength(2)
+            expect(nomesLinhas(paginas[0])).toEqual(nomesEsperados(1, leva ? 15 : 17))
+            expect(nomesLinhas(paginas[1])).toEqual(leva ? ['Procedimento 1-16', 'Procedimento 1-17'] : [])
+            expect(paginas.flatMap(numerosItens)).toEqual([1])
+            expect(numerosItens(paginas[1])).toEqual([1])
+            // Nenhuma página com uma única linha da seção (sem re-levar na continuação).
+            for (const p of paginas) expect(nomesLinhas(p).length).not.toBe(1)
+        }
+        expect(vistos.leva).toBeGreaterThan(0)
+        expect(vistos.naoLeva).toBeGreaterThan(0)
     })
 
     it('limite mesclado com linhas levadas: célula fechada aqui e reaberta na seguinte', async () => {
