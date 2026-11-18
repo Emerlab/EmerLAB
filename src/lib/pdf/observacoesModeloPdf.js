@@ -1,4 +1,5 @@
 import { PDFString, rgb } from 'pdf-lib'
+import { COR_NAVY } from './estiloTabelaPdf.js'
 
 const MARGIN_X = 42
 const MARGIN_TOP = 86
@@ -17,7 +18,6 @@ const DUVIDAS_GAP = 18
 
 const LINK_WHATSAPP = 'https://wa.me/555499041695'
 
-const COR_NAVY = rgb(22 / 255, 33 / 255, 62 / 255)
 const COR_TEXTO = rgb(58 / 255, 63 / 255, 75 / 255)
 const COR_TEXTO_OBS = rgb(90 / 255, 96 / 255, 108 / 255)
 const COR_BRANCO = rgb(1, 1, 1)
