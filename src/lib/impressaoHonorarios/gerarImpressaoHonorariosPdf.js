@@ -1213,6 +1213,9 @@ export async function paginarSecoesHonorarios({
         if (!cursor.done && depois === antes) {
             if (cursor.blocoPendente) {
                 const total = alturasInformacoes[cursor.blocoPendente.secaoIdx]?.length || 0
+                console.warn(
+                    'Paginação sem progresso: item do bloco Informações ignorado para evitar laço infinito.',
+                )
                 const proximo = cursor.blocoPendente.proximoItem + 1
                 cursor.blocoPendente =
                     proximo < total ? { ...cursor.blocoPendente, proximoItem: proximo } : null

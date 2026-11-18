@@ -166,6 +166,7 @@ export async function salvarPlanosObservacao(payload) {
     const ordem = Number.isFinite(Number(payload?.ordem)) ? Number(payload.ordem) : 0
     const agora = new Date().toISOString()
 
+    // A RPC não carrega `geral`: se ela for criada/alterada, deve gravar `geral` (hoje gerais pulam a RPC).
     const { data: rpcId, error: rpcError } = geral
         ? { data: null, error: null }
         : await supabase.rpc('salvar_planos_observacao_com_vinculos', {
@@ -308,40 +309,6 @@ export async function excluirPlanosObservacao(id) {
         return { ok: false, erro: error.message || 'Erro ao excluir observação.' }
     }
     return { ok: true }
-}
-
-/**
- * @param {string[]} codigos
- * @returns {Promise<Array<{ titulo: string, mensagem: string }>>}
- */
-export async function resolverMensagensObservacoesPlanosPorCodigos(codigos) {
-    const setCodigos = new Set(
-        (codigos || []).map(normalizarCodigoProcedimento).filter(Boolean),
-    )
-    if (!setCodigos.size) return []
-
-    const lista = await listarPlanosObservacoes()
-    if (!lista.ok) return []
-
-    return lista.itens
-        .filter((item) => item.ativa)
-        .filter((item) =>
-            (item.codigosProcedimentos || []).some((c) =>
-                setCodigos.has(normalizarCodigoProcedimento(c)),
-            ),
-        )
-        .map((item) => ({
-            titulo: item.titulo || '',
-            mensagem: item.mensagem || '',
-        }))
-        .filter((item) => item.mensagem)
-}
-
-/**
- * @param {Array<{ linhas?: object[] }>} categorias
- */
-export async function resolverMensagensObservacoesPorCategorias(categorias) {
-    return resolverMensagensObservacoesPlanosPorCodigos(coletarCodigosCategoriasPlanos(categorias))
 }
 
 /**

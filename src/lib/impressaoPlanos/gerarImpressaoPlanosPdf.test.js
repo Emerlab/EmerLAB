@@ -55,15 +55,22 @@ function textos(pagina) {
     return pagina.chamadas.filter((c) => c.op === 'drawText').map((c) => c.args[0])
 }
 
+/** Altura do cartão lida do caminho SVG: maior y entre os pontos finais dos comandos (M/L/A). */
+function alturaDoCaminho(d) {
+    let h = 0
+    for (const [, , args] of d.matchAll(/([MLA])([^MLAZ]*)/g)) {
+        const n = args.trim().split(/\s+/).map(Number)
+        h = Math.max(h, n[n.length - 1])
+    }
+    return h
+}
+
 /** Cartões brancos (retângulo arredondado completo, não a barra de título só com topo). */
 function cartoes(pagina) {
     return pagina.chamadas
         .filter((c) => c.op === 'drawSvgPath' && !c.args[0].startsWith('M 0 '))
         .map((c) => {
-            const t = c.args[0].split(' ')
-            // M r 0 L (w-r) 0 A r r 0 0 1 w r L w (h-r) ... → t[16] = h - r
-            const r = Number(t[1])
-            const h = Number(t[16]) + r
+            const h = alturaDoCaminho(c.args[0])
             return { top: c.args[1].y, bottom: c.args[1].y - h }
         })
 }
@@ -125,6 +132,16 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         expect(sep).toBeTruthy()
         // Próxima seção mantém o mesmo espaçamento entre cartões de hoje (2 × SECTION_GAP).
         expect(c1.bottom - c2.top).toBeCloseTo(2 * SECTION_GAP, 6)
+        // Nada é desenhado abaixo do cartão da primeira seção (entre ele e o seguinte).
+        const textoAbaixo = paginas[0].chamadas.filter(
+            (c) => c.op === 'drawText' && c.args[1].y < c1.bottom && c.args[1].y > c2.top,
+        )
+        expect(textoAbaixo).toEqual([])
+        // O último texto do bloco fica dentro do cartão.
+        const textosBloco = paginas[0].chamadas.filter(
+            (c) => c.op === 'drawText' && c.args[1].y < yFimLinhas && c.args[1].y > c1.bottom,
+        )
+        expect(textosBloco.length).toBeGreaterThan(0)
         // A seção sem observações não ganha bloco.
         expect(c2.bottom).toBeCloseTo(c2.top - 44 - 36 - 2 * 34 - 12, 6)
     })
@@ -149,11 +166,10 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         expect(t2).toContain('Cirurgias')
         expect(t2).toContain('Informações')
         // Cabeçalho de tabela só aparece depois, no cartão da seção seguinte (Exames).
-        const iProc = t2.indexOf('Procedimento')
-        if (iProc >= 0) {
-            expect(iProc).toBeGreaterThan(t2.indexOf('Exames'))
-            expect(t2.indexOf('Exames')).toBeGreaterThan(t2.indexOf('Informações'))
-        }
+        const iInfo = t2.indexOf('Informações')
+        expect(iInfo).toBeGreaterThanOrEqual(0)
+        expect(t2.slice(0, iInfo)).not.toContain('Procedimento')
+        expect(t2.indexOf('Exames')).toBeGreaterThan(iInfo)
         // Nenhum cartão passa da margem inferior.
         for (const p of paginas) {
             for (const c of cartoes(p)) expect(c.bottom).toBeGreaterThanOrEqual(MARGIN_BOTTOM - 1e-6)

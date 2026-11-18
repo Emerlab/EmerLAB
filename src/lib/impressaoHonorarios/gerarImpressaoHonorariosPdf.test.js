@@ -44,14 +44,22 @@ function textos(pagina) {
     return pagina.chamadas.filter((c) => c.op === 'drawText').map((c) => c.args[0])
 }
 
+/** Altura do cartão lida do caminho SVG: maior y entre os pontos finais dos comandos (M/L/A). */
+function alturaDoCaminho(d) {
+    let h = 0
+    for (const [, , args] of d.matchAll(/([MLA])([^MLAZ]*)/g)) {
+        const n = args.trim().split(/\s+/).map(Number)
+        h = Math.max(h, n[n.length - 1])
+    }
+    return h
+}
+
 /** Cartões brancos (retângulo arredondado completo, não a barra de título só com topo). */
 function cartoes(pagina) {
     return pagina.chamadas
         .filter((c) => c.op === 'drawSvgPath' && !c.args[0].startsWith('M 0 '))
         .map((c) => {
-            const t = c.args[0].split(' ')
-            const r = Number(t[1])
-            const h = Number(t[16]) + r
+            const h = alturaDoCaminho(c.args[0])
             return { top: c.args[1].y, bottom: c.args[1].y - h }
         })
 }
@@ -159,11 +167,10 @@ describe('paginarSecoesHonorarios — bloco Informações por grupo', () => {
         expect(t2).toContain('Grupo de ')
         expect(t2).toContain('Cirurgias')
         expect(t2).toContain('Informações')
-        const iCab = t2.indexOf('Nome')
-        if (iCab >= 0) {
-            expect(iCab).toBeGreaterThan(t2.indexOf('Exames'))
-            expect(t2.indexOf('Exames')).toBeGreaterThan(t2.indexOf('Informações'))
-        }
+        const iInfo = t2.indexOf('Informações')
+        expect(iInfo).toBeGreaterThanOrEqual(0)
+        expect(t2.slice(0, iInfo)).not.toContain('Nome')
+        expect(t2.indexOf('Exames')).toBeGreaterThan(iInfo)
         for (const p of paginas) {
             for (const c of cartoes(p)) expect(c.bottom).toBeGreaterThanOrEqual(MARGIN_BOTTOM - 1e-6)
         }
