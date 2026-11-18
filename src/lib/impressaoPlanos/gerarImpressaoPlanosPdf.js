@@ -11,12 +11,16 @@ import {
     normalizarListaObservacoes,
 } from '../pdf/observacoesModeloPdf.js'
 import {
-    ALTURA_CABECALHO_BLOCO,
-    PADDING_FINAL_BLOCO,
+    LINHAS_QUE_ACOMPANHAM_BLOCO,
     alturasItensBloco,
+    blocoCabeComLinhasLevadas,
     desenharBlocoInformacoes,
+    linhasALevarComBloco,
     planejarFatiaBlocoInformacoes,
 } from '../pdf/blocoInformacoesPdf.js'
+
+// Reexportadas: a regra "manter junto" é compartilhada com o gerador do Honorários.
+export { LINHAS_QUE_ACOMPANHAM_BLOCO, blocoCabeComLinhasLevadas, linhasALevarComBloco }
 import {
     CARD_PADDING_BOTTOM,
     CARD_RADIUS,
@@ -60,7 +64,6 @@ const MIN_LINHAS_GRUPO_PARTIDO = 5
 const MIN_LINHAS_GRUPO_PARTIDO_RESTO = 2
 // Quando nenhum item do bloco Informações cabe após as linhas, as últimas N linhas da seção
 // vão para a página seguinte junto com o bloco (o bloco não fica separado da tabela).
-export const LINHAS_QUE_ACOMPANHAM_BLOCO = 2
 const LINE_LEADING = 12
 const FONT_SIZE_STAMP = 7
 
@@ -176,34 +179,6 @@ export function montarSecoesImpressao(categorias, observacoesPorGrupo = {}) {
         })
     }
     return secoes
-}
-
-/**
- * Quantas das últimas linhas da seção nesta página vão para a seguinte junto com o bloco
- * Informações: só quando nenhum item do bloco cabe (fatia vazia), e sempre deixando ao menos
- * uma linha da seção nesta página.
- */
-export function linhasALevarComBloco({
-    linhasNestaPagina,
-    fatiaVazia,
-    max = LINHAS_QUE_ACOMPANHAM_BLOCO,
-}) {
-    if (!fatiaVazia || linhasNestaPagina <= 1) return 0
-    return Math.min(max, linhasNestaPagina - 1)
-}
-
-/**
- * Guarda de viabilidade da regra "manter junto": só leva linhas se o primeiro item do bloco
- * couber na página de continuação logo após as linhas levadas. alturaUtilBloco = espaço entre
- * o topo das linhas de uma página de continuação (título + cabeçalho) e MARGIN_BOTTOM.
- */
-export function blocoCabeComLinhasLevadas({
-    alturaPrimeiroItem,
-    alturaLinhasLevadas,
-    alturaUtilBloco,
-}) {
-    const alturaBloco = ALTURA_CABECALHO_BLOCO + alturaPrimeiroItem + PADDING_FINAL_BLOCO
-    return alturaBloco <= alturaUtilBloco - alturaLinhasLevadas
 }
 
 /** Espaço para linhas + bloco numa página de continuação da seção, até MARGIN_BOTTOM. */

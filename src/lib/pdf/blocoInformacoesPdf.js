@@ -12,6 +12,40 @@ export const ALTURA_CABECALHO_BLOCO =
     INFO_SEP_GAP + 1 + INFO_TITLE_GAP + FONT_SIZE_INFO + INFO_TITLE_GAP
 export const PADDING_FINAL_BLOCO = 4
 
+/**
+ * Quantas das últimas linhas da seção vão para a página seguinte junto com o bloco: as N linhas
+ * que acompanham o bloco quando nenhum item dele cabe.
+ */
+export const LINHAS_QUE_ACOMPANHAM_BLOCO = 2
+
+/**
+ * Quantas das últimas linhas da seção nesta página vão para a seguinte junto com o bloco
+ * Informações: só quando nenhum item do bloco cabe (fatia vazia), e sempre deixando ao menos
+ * uma linha da seção nesta página.
+ */
+export function linhasALevarComBloco({
+    linhasNestaPagina,
+    fatiaVazia,
+    max = LINHAS_QUE_ACOMPANHAM_BLOCO,
+}) {
+    if (!fatiaVazia || linhasNestaPagina <= 1) return 0
+    return Math.min(max, linhasNestaPagina - 1)
+}
+
+/**
+ * Guarda de viabilidade da regra "manter junto": só leva linhas se o primeiro item do bloco
+ * couber na página de continuação logo após as linhas levadas. alturaUtilBloco = espaço entre
+ * o topo das linhas de uma página de continuação (título + cabeçalho) e MARGIN_BOTTOM.
+ */
+export function blocoCabeComLinhasLevadas({
+    alturaPrimeiroItem,
+    alturaLinhasLevadas,
+    alturaUtilBloco,
+}) {
+    const alturaBloco = ALTURA_CABECALHO_BLOCO + alturaPrimeiroItem + PADDING_FINAL_BLOCO
+    return alturaBloco <= alturaUtilBloco - alturaLinhasLevadas
+}
+
 function numerar(itens, numeroInicial = 1) {
     return (itens || []).map((item, i) => ({ ...item, numero: numeroInicial + i }))
 }

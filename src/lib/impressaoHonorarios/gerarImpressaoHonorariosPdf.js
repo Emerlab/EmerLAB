@@ -21,8 +21,11 @@ import {
     yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
 } from '../pdf/estiloTabelaPdf.js'
 import {
+    LINHAS_QUE_ACOMPANHAM_BLOCO,
     alturasItensBloco,
+    blocoCabeComLinhasLevadas,
     desenharBlocoInformacoes,
+    linhasALevarComBloco,
     planejarFatiaBlocoInformacoes,
 } from '../pdf/blocoInformacoesPdf.js'
 import { chaveGrupoHonorarios } from './honorariosObservacoes.js'
@@ -55,6 +58,17 @@ const OBS_ITEM_GAP = 12
 const OBS_NESTED_INDENT = 18
 const OBS_H1_GAP = 22
 const DUVIDAS_GAP = 18
+
+// Regra "manter junto" (compartilhada com o Planos, ver blocoInformacoesPdf.js).
+export { LINHAS_QUE_ACOMPANHAM_BLOCO, blocoCabeComLinhasLevadas, linhasALevarComBloco }
+
+/**
+ * Espaço para linhas + bloco numa página de continuação da seção: do topo das linhas
+ * (título + cabeçalho da tabela) até MARGIN_BOTTOM.
+ */
+export function alturaUtilBlocoContinuacao(height) {
+    return height - MARGIN_TOP - SECTION_GAP - TITLE_BAR_HEIGHT - TABLE_HEADER_HEIGHT - MARGIN_BOTTOM
+}
 
 const LINK_WHATSAPP = 'https://wa.me/555499041695'
 const LINK_VIDEO = 'https://www.youtube.com/watch?v=rUNF0hKrO20'
@@ -955,7 +969,7 @@ function medirItemInformacoes(fonts) {
 }
 
 /** Altura (por item, já numerado) do bloco Informações de cada seção; [] sem observações. */
-function calcularAlturasInformacoes(secoes, fonts, innerW) {
+export function calcularAlturasInformacoes(secoes, fonts, innerW) {
     return secoes.map((secao) =>
         alturasItensBloco({
             itens: secao.infoItens || [],
@@ -1007,7 +1021,7 @@ function renderizarUmaPagina(
         const fatia = planejarFatiaBlocoInformacoes({
             alturasItens: alturasInformacoes[pendente.secaoIdx] || [],
             inicio: pendente.proximoItem,
-            alturaDisponivel: corpoTop - LIMITE_LINHAS,
+            alturaDisponivel: corpoTop - MARGIN_BOTTOM,
             forcarAoMenosUm: true,
         })
         const yCardBottom = corpoTop - fatia.altura
@@ -1067,6 +1081,9 @@ function renderizarUmaPagina(
         let yCardBottom = corpoTop - TABLE_HEADER_HEIGHT
         // Bloco Informações desta seção nesta página (só quando a seção termina aqui).
         let fatiaInformacoes = null
+        // Linhas [linhaIdx, fimLinhasPagina) saem nesta página; menor que linhas.length só
+        // quando as últimas linhas vão para a seguinte junto com o bloco Informações.
+        let fimLinhasPagina = linhas.length
         {
             let yProbe = yCardBottom
             let iProbe = linhaIdx
@@ -1079,13 +1096,46 @@ function renderizarUmaPagina(
             yCardBottom = yProbe - CARD_PADDING_BOTTOM
             const alturasInfo = alturasInformacoes[secaoIdx] || []
             if (iProbe >= linhas.length && alturasInfo.length) {
+                // O padding final do bloco substitui o CARD_PADDING_BOTTOM: limite = margem.
                 fatiaInformacoes = planejarFatiaBlocoInformacoes({
                     alturasItens: alturasInfo,
                     inicio: 0,
-                    alturaDisponivel: yProbe - LIMITE_LINHAS,
+                    alturaDisponivel: yProbe - MARGIN_BOTTOM,
                 })
-                // O padding final do bloco substitui o CARD_PADDING_BOTTOM.
-                if (fatiaInformacoes.fim > fatiaInformacoes.inicio) {
+                const fatiaVazia = fatiaInformacoes.fim === fatiaInformacoes.inicio
+                let levar = linhasALevarComBloco({
+                    linhasNestaPagina: iProbe - linhaIdx,
+                    fatiaVazia,
+                })
+                if (levar > 0) {
+                    let alturaLinhasLevadas = 0
+                    for (let k = iProbe - levar; k < iProbe; k += 1) {
+                        alturaLinhasLevadas += medirAlturaLinha(linhas[k], fonts, layout.widths[0])
+                    }
+                    // Item que não cabe nem com as linhas levadas numa página nova: não leva
+                    // (o bloco vai sozinho, como antes). Isso também impede levar de novo na
+                    // página de continuação, que tem exatamente esta geometria.
+                    if (
+                        !blocoCabeComLinhasLevadas({
+                            alturaPrimeiroItem: alturasInfo[0],
+                            alturaLinhasLevadas,
+                            alturaUtilBloco: alturaUtilBlocoContinuacao(height),
+                        })
+                    ) {
+                        levar = 0
+                    }
+                }
+                if (levar > 0) {
+                    // Recua a sonda: o cartão termina após as linhas que ficam, sem bloco; a
+                    // seção continua na página seguinte (linhas levadas + bloco).
+                    for (let k = 0; k < levar; k += 1) {
+                        iProbe -= 1
+                        yProbe += medirAlturaLinha(linhas[iProbe], fonts, layout.widths[0])
+                    }
+                    fimLinhasPagina = iProbe
+                    fatiaInformacoes = null
+                    yCardBottom = yProbe - CARD_PADDING_BOTTOM
+                } else if (!fatiaVazia) {
                     yCardBottom = yProbe - fatiaInformacoes.altura
                 }
             }
@@ -1120,6 +1170,10 @@ function renderizarUmaPagina(
         desenhouAlgoNestaPagina = true
 
         while (linhaIdx < linhas.length) {
+            if (linhaIdx >= fimLinhasPagina) {
+                // Linhas levadas com o bloco: o restante da seção continua na página seguinte.
+                return { secaoIdx, linhaIdx, zebra, blocoPendente: null, done: false }
+            }
             const linha = linhas[linhaIdx]
             const h = medirAlturaLinha(linha, fonts, layout.widths[0])
             if (yCursor - h < LIMITE_LINHAS) {
