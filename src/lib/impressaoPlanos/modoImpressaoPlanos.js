@@ -61,6 +61,32 @@ export async function buscarModoImpressaoPlanos(planoId, cidadeId) {
     }
 }
 
+/** Todos os presets salvos de uma cidade (um por plano), com nome do autor em lote. */
+export async function listarModosDaCidade(cidadeId) {
+    if (!cidadeId) return []
+    const { data, error } = await supabase
+        .from('impressao_planos_modos')
+        .select('plano_id, selecao, atualizado_em, atualizado_por')
+        .eq('cidade_id', Number(cidadeId))
+    if (error) throw error
+    const linhas = data || []
+
+    const autorIds = [...new Set(linhas.map((l) => l.atualizado_por).filter(Boolean))]
+    const nomes = new Map()
+    if (autorIds.length) {
+        const { data: perfis } = await supabase.from('profiles').select('id, name').in('id', autorIds)
+        for (const p of perfis || []) nomes.set(p.id, p.name || null)
+    }
+
+    return linhas.map((l) => ({
+        planoId: Number(l.plano_id),
+        selecao: l.selecao && typeof l.selecao === 'object' ? l.selecao : {},
+        atualizadoEm: l.atualizado_em || null,
+        atualizadoPor: l.atualizado_por || null,
+        atualizadoPorNome: (l.atualizado_por && nomes.get(l.atualizado_por)) || null,
+    }))
+}
+
 export async function salvarModoImpressaoPlanos(planoId, cidadeId, categorias) {
     if (!planoId || !cidadeId) throw new Error('Plano e cidade são obrigatórios para salvar o modo.')
     const selecao = montarSelecaoDeCategorias(categorias)
