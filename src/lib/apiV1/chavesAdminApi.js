@@ -19,7 +19,7 @@ export function montarPayloadChave(form = {}) {
     const payload = {
         nome: String(form.nome || '').trim(),
         tipo,
-        escopos: tipo === 'rede' ? [...ESCOPOS_POR_TIPO.rede] : form.escrita ? [...ESCOPOS_POR_TIPO.pagamentos] : ['pagamentos:ler'],
+        escopos: tipo === 'rede' ? [ESCOPOS_POR_TIPO.rede[0]] : form.escrita ? [...ESCOPOS_POR_TIPO.pagamentos] : ['pagamentos:ler'],
         origens_permitidas: tipo === 'rede' ? textoParaLista(form.origensTexto) : [],
     }
     const limite = String(form.limite ?? '').trim()

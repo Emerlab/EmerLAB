@@ -18,6 +18,8 @@ describe('constantes', () => {
     })
     it('tipoDosEscopos', () => {
         expect(tipoDosEscopos(['rede:ler'])).toBe('rede')
+        expect(tipoDosEscopos(['planos:ler'])).toBe('rede')
+        expect(tipoDosEscopos(['rede:ler', 'planos:ler'])).toBe('rede')
         expect(tipoDosEscopos(['pagamentos:ler', 'pagamentos:escrever'])).toBe('pagamentos')
         expect(tipoDosEscopos(['rede:ler', 'pagamentos:ler'])).toBeNull()
         expect(tipoDosEscopos([])).toBeNull()
@@ -61,6 +63,17 @@ describe('validarNovaChave', () => {
             ips_permitidos: [],
             expira_em: null,
         })
+    })
+    it('rede aceita rede:ler + planos:ler; padrão continua só rede:ler', () => {
+        const r = validarNovaChave(rede({ escopos: ['rede:ler', 'planos:ler'] }), { agora: AGORA })
+        expect(r.ok).toBe(true)
+        expect(r.dados.escopos).toEqual(['rede:ler', 'planos:ler'])
+        expect(ESCOPOS_POR_TIPO.rede).toEqual(['rede:ler', 'planos:ler'])
+    })
+    it('pagamentos rejeita planos:ler', () => {
+        const r = validarNovaChave({ nome: 'a', tipo: 'pagamentos', escopos: ['planos:ler'] }, { agora: AGORA })
+        expect(r.ok).toBe(false)
+        expect(r.erro.codigo).toBe('escopos_invalidos')
     })
     it('pagamentos: padrão 60/min e escopo ler', () => {
         const r = validarNovaChave({ nome: 'ERP', tipo: 'pagamentos' }, { agora: AGORA })

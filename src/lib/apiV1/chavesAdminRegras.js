@@ -4,7 +4,7 @@
  */
 
 export const ESCOPOS_POR_TIPO = Object.freeze({
-    rede: Object.freeze(['rede:ler']),
+    rede: Object.freeze(['rede:ler', 'planos:ler']),
     pagamentos: Object.freeze(['pagamentos:ler', 'pagamentos:escrever']),
 })
 export const LIMITE_PADRAO = Object.freeze({ rede: 120, pagamentos: 60 })
