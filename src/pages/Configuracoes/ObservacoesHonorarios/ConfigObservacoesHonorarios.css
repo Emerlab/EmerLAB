@@ -311,6 +311,11 @@
     color: #1f7a45;
 }
 
+.config_obs_honorarios_badge.is-geral {
+    background: #e3edf7;
+    color: #1e3148;
+}
+
 .config_obs_honorarios_card_msg {
     margin: 0 0 0.65rem;
     white-space: pre-wrap;
