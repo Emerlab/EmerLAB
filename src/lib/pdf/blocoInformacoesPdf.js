@@ -7,7 +7,7 @@ const INFO_SEP_GAP = 8
 const INFO_TITLE_GAP = 8
 const COR_SEP = rgb(170 / 255, 200 / 255, 220 / 255)
 
-/** Separador + título "Informações" (mesmas medidas do bloco do Descontos). */
+/** Separador + título "Informações" (medidas próprias deste módulo, mais compactas que as do bloco do Descontos). */
 export const ALTURA_CABECALHO_BLOCO =
     INFO_SEP_GAP + 1 + INFO_TITLE_GAP + FONT_SIZE_INFO + INFO_TITLE_GAP
 export const PADDING_FINAL_BLOCO = 4

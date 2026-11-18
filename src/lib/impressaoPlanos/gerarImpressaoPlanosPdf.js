@@ -56,6 +56,9 @@ const SECTION_GAP = 16
 // e sobrarem ao menos M na seguinte (evita linhas órfãs).
 const MIN_LINHAS_GRUPO_PARTIDO = 5
 const MIN_LINHAS_GRUPO_PARTIDO_RESTO = 2
+// Quando nenhum item do bloco Informações cabe após as linhas, as últimas N linhas da seção
+// vão para a página seguinte junto com o bloco (o bloco não fica separado da tabela).
+export const LINHAS_QUE_ACOMPANHAM_BLOCO = 2
 const LINE_LEADING = 12
 const FONT_SIZE_STAMP = 7
 
@@ -171,6 +174,20 @@ export function montarSecoesImpressao(categorias, observacoesPorGrupo = {}) {
         })
     }
     return secoes
+}
+
+/**
+ * Quantas das últimas linhas da seção nesta página vão para a seguinte junto com o bloco
+ * Informações: só quando nenhum item do bloco cabe (fatia vazia), e sempre deixando ao menos
+ * uma linha da seção nesta página.
+ */
+export function linhasALevarComBloco({
+    linhasNestaPagina,
+    fatiaVazia,
+    max = LINHAS_QUE_ACOMPANHAM_BLOCO,
+}) {
+    if (!fatiaVazia || linhasNestaPagina <= 1) return 0
+    return Math.min(max, linhasNestaPagina - 1)
 }
 
 function indicesGrupoLimite(linhas) {
@@ -452,10 +469,11 @@ function renderizarUmaPagina(
         const cardTop = y - SECTION_GAP
         const corpoTop = cardTop - TITLE_BAR_HEIGHT
         // Página nova: ao menos um item entra (item maior que a página não trava a paginação).
+        // O padding final do bloco substitui o do cartão: o limite do bloco é a margem.
         const fatia = planejarFatiaBlocoInformacoes({
             alturasItens: alturasInformacoes[pendente.secaoIdx] || [],
             inicio: pendente.proximoItem,
-            alturaDisponivel: corpoTop - LIMITE_LINHAS,
+            alturaDisponivel: corpoTop - MARGIN_BOTTOM,
             forcarAoMenosUm: true,
         })
         const yCardBottom = corpoTop - fatia.altura
@@ -561,6 +579,9 @@ function renderizarUmaPagina(
         let yCardBottom = corpoTop - TABLE_HEADER_HEIGHT
         // Bloco Informações desta seção nesta página (só quando a seção termina aqui).
         let fatiaInformacoes = null
+        // Linhas [linhaIdx, fimLinhasPagina) saem nesta página; menor que linhas.length só
+        // quando as últimas linhas vão para a seguinte junto com o bloco Informações.
+        let fimLinhasPagina = linhas.length
         {
             let yProbe = yCardBottom
             let iProbe = linhaIdx
@@ -573,13 +594,28 @@ function renderizarUmaPagina(
             yCardBottom = yProbe - CARD_PADDING_BOTTOM
             const alturasInfo = alturasInformacoes[secaoIdx] || []
             if (iProbe >= linhas.length && alturasInfo.length) {
+                // O padding final do bloco substitui o CARD_PADDING_BOTTOM: limite = margem.
                 fatiaInformacoes = planejarFatiaBlocoInformacoes({
                     alturasItens: alturasInfo,
                     inicio: 0,
-                    alturaDisponivel: yProbe - LIMITE_LINHAS,
+                    alturaDisponivel: yProbe - MARGIN_BOTTOM,
                 })
-                // O padding final do bloco substitui o CARD_PADDING_BOTTOM.
-                if (fatiaInformacoes.fim > fatiaInformacoes.inicio) {
+                const fatiaVazia = fatiaInformacoes.fim === fatiaInformacoes.inicio
+                const levar = linhasALevarComBloco({
+                    linhasNestaPagina: iProbe - linhaIdx,
+                    fatiaVazia,
+                })
+                if (levar > 0) {
+                    // Recua a sonda: o cartão termina após as linhas que ficam, sem bloco; a
+                    // seção continua na página seguinte (linhas levadas + bloco).
+                    for (let k = 0; k < levar; k += 1) {
+                        iProbe -= 1
+                        yProbe += medirAlturaLinha(linhas[iProbe], fonts, layout.widths[0])
+                    }
+                    fimLinhasPagina = iProbe
+                    fatiaInformacoes = null
+                    yCardBottom = yProbe - CARD_PADDING_BOTTOM
+                } else if (!fatiaVazia) {
                     yCardBottom = yProbe - fatiaInformacoes.altura
                 }
             }
@@ -623,6 +659,27 @@ function renderizarUmaPagina(
         }
 
         while (linhaIdx < linhas.length) {
+            if (linhaIdx >= fimLinhasPagina) {
+                // Linhas levadas com o bloco: fecha aqui a célula mesclada aberta e a reabre na
+                // página seguinte (o restante do grupo ainda não foi desenhado).
+                if (grupoMergeAberto && mergeTopY != null) {
+                    desenharCelulaLimiteGrupoMesclada(
+                        page,
+                        fonts,
+                        layout,
+                        mergeTopY,
+                        yCursor,
+                        secao.textoLimiteGrupo,
+                    )
+                }
+                return {
+                    secaoIdx,
+                    linhaIdx,
+                    zebra,
+                    grupoMergeAberto: grupoMergeAberto && mergeTopY != null,
+                    done: false,
+                }
+            }
             const linha = linhas[linhaIdx]
             const h = medirAlturaLinha(linha, fonts, layout.widths[0])
             const naGrupo = temGrupo && linha.usaLimiteGrupoLinha

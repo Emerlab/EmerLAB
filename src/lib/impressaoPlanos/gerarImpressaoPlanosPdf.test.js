@@ -1,7 +1,17 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
-import { montarSecoesImpressao, paginarSecoesPlanos } from './gerarImpressaoPlanosPdf.js'
-import { ALTURA_CABECALHO_BLOCO } from '../pdf/blocoInformacoesPdf.js'
+import {
+    LINHAS_QUE_ACOMPANHAM_BLOCO,
+    linhasALevarComBloco,
+    montarSecoesImpressao,
+    paginarSecoesPlanos,
+} from './gerarImpressaoPlanosPdf.js'
+import {
+    ALTURA_CABECALHO_BLOCO,
+    PADDING_FINAL_BLOCO,
+    alturasItensBloco,
+} from '../pdf/blocoInformacoesPdf.js'
+import { medirItemObservacaoModelo } from '../pdf/observacoesModeloPdf.js'
 
 // Página falsa que grava as chamadas de desenho (fontes reais Helvetica para as medidas).
 const WIDTH = 595.28
@@ -102,6 +112,19 @@ const textoLongo =
     'veterinario com assinatura e carimbo, alem de exames complementares quando solicitados ' +
     'pela auditoria, conforme regulamento vigente do plano contratado pelo tutor do animal.'
 
+describe('linhasALevarComBloco', () => {
+    it('leva as últimas linhas só quando a fatia é vazia, deixando ao menos 1', () => {
+        expect(LINHAS_QUE_ACOMPANHAM_BLOCO).toBe(2)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 10, fatiaVazia: false })).toBe(0)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 0, fatiaVazia: true })).toBe(0)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 1, fatiaVazia: true })).toBe(0)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 2, fatiaVazia: true })).toBe(1)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 3, fatiaVazia: true })).toBe(2)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 10, fatiaVazia: true })).toBe(2)
+        expect(linhasALevarComBloco({ linhasNestaPagina: 10, fatiaVazia: true, max: 3 })).toBe(3)
+    })
+})
+
 describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
     it('seção sem observações: nenhum bloco, cartão termina no padding do card', async () => {
         const paginas = await paginar([categoria(1, 'Consultas', 3)], {})
@@ -179,19 +202,116 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         expect(textos(ultima)).toContain('Exames')
     })
 
-    it('linhas terminam perto do limite: o bloco inteiro vai para a página seguinte', async () => {
-        // 17 linhas de 34 deixam 12pt acima do limite: nenhum item cabe.
+    it('bloco que só cabia descontando o padding do cartão agora fica na mesma página', async () => {
+        // A (2 linhas) + B (10 linhas) deixam ~57,9pt entre o fim das linhas de B e o limite
+        // das linhas (MARGIN_BOTTOM + CARD_PADDING_BOTTOM): o bloco (35 + 23,5 + 4 = 62,5) não
+        // cabia; com o limite MARGIN_BOTTOM (~69,9pt) cabe.
+        const obs = [{ titulo: 'Aviso', mensagem: 'Levar documento.' }]
+        const secoes = montarSecoesImpressao([categoria(1, 'A', 2), categoria(2, 'B', 10)], {
+            2: obs,
+        })
+        const [hItem] = alturasItensBloco({
+            itens: secoes[1].infoItens,
+            innerW: WIDTH - 2 * 42,
+            medirItem: (item, w) => medirItemObservacaoModelo(item, fonts, w),
+        })
+        const alturaBloco = ALTURA_CABECALHO_BLOCO + hItem + PADDING_FINAL_BLOCO
+        const yFimLinhasB =
+            HEIGHT - MARGIN_TOP - (SECTION_GAP + 44 + 36 + 2 * 34 + 12) - (SECTION_GAP + 44 + 36) -
+            SECTION_GAP - 10 * 34
+        expect(yFimLinhasB - (MARGIN_BOTTOM + 12)).toBeLessThan(alturaBloco)
+        expect(yFimLinhasB - MARGIN_BOTTOM).toBeGreaterThanOrEqual(alturaBloco)
+
+        const paginas = await paginar([categoria(1, 'A', 2), categoria(2, 'B', 10)], { 2: obs })
+        expect(paginas).toHaveLength(1)
+        expect(numerosItens(paginas[0])).toEqual([1])
+        const [, cB] = cartoes(paginas[0])
+        expect(cB.bottom).toBeCloseTo(yFimLinhasB - alturaBloco, 6)
+        expect(cB.bottom).toBeGreaterThanOrEqual(MARGIN_BOTTOM - 1e-6)
+    })
+
+    it('nenhum item cabe: as 2 últimas linhas vão para a página seguinte junto com o bloco', async () => {
+        // 17 linhas de 34 deixam ~23,9pt até MARGIN_BOTTOM: nenhum item cabe.
         const paginas = await paginar([categoria(1, 'Consultas', 17)], {
             1: [{ titulo: 'Aviso', mensagem: 'Levar documento.' }],
         })
         expect(paginas).toHaveLength(2)
-        expect(textos(paginas[0])).not.toContain('Informações')
+        const t1 = textos(paginas[0])
+        expect(t1).not.toContain('Informações')
+        expect(t1).toContain('Procedimento 1-15')
+        expect(t1).not.toContain('Procedimento 1-16')
+        expect(t1).not.toContain('Procedimento 1-17')
         const [c1] = cartoes(paginas[0])
         const topoLinhas = HEIGHT - MARGIN_TOP - SECTION_GAP - 44 - 36
-        expect(c1.bottom).toBeCloseTo(topoLinhas - 17 * 34 - 12, 6)
+        expect(c1.bottom).toBeCloseTo(topoLinhas - 15 * 34 - 12, 6)
+
+        const t2 = textos(paginas[1])
+        const ordem = ['Grupo de ', 'Consultas', 'Procedimento', 'Procedimento 1-16', 'Procedimento 1-17', 'Informações']
+        const posicoes = ordem.map((x) => t2.indexOf(x))
+        expect(posicoes.every((p) => p >= 0)).toBe(true)
+        expect([...posicoes].sort((a, b) => a - b)).toEqual(posicoes)
         expect(numerosItens(paginas[1])).toEqual([1])
-        expect(textos(paginas[1])).toContain('Consultas')
-        expect(textos(paginas[1])).not.toContain('Procedimento')
+        // Um único cartão na página seguinte: linhas e bloco juntos.
+        expect(cartoes(paginas[1])).toHaveLength(1)
+    })
+
+    it('seção com 1 linha na página e bloco que não cabe: nada é levado', async () => {
+        // A (12 linhas) empurra B (1 linha) para perto do fim; o bloco de B não cabe.
+        const paginas = await paginar([categoria(1, 'A', 12), categoria(2, 'B', 1)], {
+            2: [{ titulo: 'Aviso', mensagem: 'Levar documento.' }],
+        })
+        expect(paginas).toHaveLength(2)
+        expect(textos(paginas[0])).toContain('Procedimento 2-1')
+        expect(textos(paginas[0])).not.toContain('Informações')
+        const t2 = textos(paginas[1])
+        expect(t2).not.toContain('Procedimento 2-1')
+        expect(t2).not.toContain('Procedimento')
+        expect(numerosItens(paginas[1])).toEqual([1])
+    })
+
+    it('seção com 2 linhas na página e bloco que não cabe: só 1 linha é levada', async () => {
+        const paginas = await paginar([categoria(1, 'A', 11), categoria(2, 'B', 2)], {
+            2: [{ titulo: 'Aviso', mensagem: 'Levar documento.' }],
+        })
+        expect(paginas).toHaveLength(2)
+        expect(textos(paginas[0])).toContain('Procedimento 2-1')
+        expect(textos(paginas[0])).not.toContain('Procedimento 2-2')
+        expect(textos(paginas[0])).not.toContain('Informações')
+        const t2 = textos(paginas[1])
+        expect(t2).toContain('Procedimento 2-2')
+        expect(t2.indexOf('Procedimento 2-2')).toBeLessThan(t2.indexOf('Informações'))
+        expect(numerosItens(paginas[1])).toEqual([1])
+    })
+
+    it('limite mesclado com linhas levadas: célula fechada aqui e reaberta na seguinte', async () => {
+        const cat = categoria(1, 'Vacinas', 17, {
+            cat: { limiteGrupoValor: '2', textoLimiteGrupo: '2 por ano no grupo' },
+        })
+        const paginas = await paginar([cat], { 1: [{ titulo: 'Aviso', mensagem: 'Texto.' }] })
+        expect(paginas).toHaveLength(2)
+        const topoLinhas = HEIGHT - MARGIN_TOP - SECTION_GAP - 44 - 36
+        // Só a célula mesclada é retângulo fora da margem esquerda (linhas e cabeçalho começam em 42).
+        const celulas = (p) =>
+            p.chamadas.filter((c) => c.op === 'drawRectangle' && c.args[0].x > 42)
+        expect(celulas(paginas[0])).toHaveLength(1)
+        expect(celulas(paginas[1])).toHaveLength(1)
+        const [cel1] = celulas(paginas[0])
+        expect(cel1.args[0].height).toBeCloseTo(15 * 34, 6)
+        expect(cel1.args[0].y).toBeCloseTo(topoLinhas - 15 * 34, 6)
+        const [cel2] = celulas(paginas[1])
+        expect(cel2.args[0].height).toBeCloseTo(2 * 34, 6)
+        for (const p of paginas) {
+            expect(textos(p).filter((x) => x === '2 por ano no grupo')).toHaveLength(1)
+        }
+        const nomes = paginas.flatMap(textos).filter((x) => /^Procedimento 1-\d+$/.test(x))
+        expect(nomes).toEqual(Array.from({ length: 17 }, (_, i) => `Procedimento 1-${i + 1}`))
+        // Na seguinte, a célula mesclada é desenhada antes do bloco.
+        const idxCel = paginas[1].chamadas.indexOf(cel2)
+        const idxInfo = paginas[1].chamadas.findIndex(
+            (c) => c.op === 'drawText' && c.args[0] === 'Informações',
+        )
+        expect(idxInfo).toBeGreaterThan(idxCel)
+        expect(numerosItens(paginas[1])).toEqual([1])
     })
 
     it('limite de grupo mesclado é fechado antes do bloco', async () => {
@@ -229,17 +349,34 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
             titulo: `Regra ${i + 1}`,
             mensagem: i % 2 ? textoLongo : 'Curta.',
         }))
-        for (let n = 1; n <= 40; n += 1) {
-            const paginas = await paginar([categoria(1, 'A', n), categoria(2, 'B', 3)], { 1: obs })
-            expect(paginas.flatMap(numerosItens)).toEqual([1, 2, 3, 4, 5])
-            for (const p of paginas) {
-                for (const c of cartoes(p)) {
-                    expect(c.bottom).toBeGreaterThanOrEqual(MARGIN_BOTTOM - 1e-6)
+        const esperadas = (id, n) => Array.from({ length: n }, (_, i) => `Procedimento ${id}-${i + 1}`)
+        for (const grupo of [false, true]) {
+            for (let n = 1; n <= 40; n += 1) {
+                const extra = grupo
+                    ? { cat: { limiteGrupoValor: '2', textoLimiteGrupo: '2 por ano no grupo' } }
+                    : {}
+                const paginas = await paginar([categoria(1, 'A', n, extra), categoria(2, 'B', 3)], {
+                    1: obs,
+                })
+                expect(paginas.flatMap(numerosItens)).toEqual([1, 2, 3, 4, 5])
+                // Toda linha aparece exatamente uma vez, em ordem.
+                const nomes = paginas.flatMap(textos).filter((x) => /^Procedimento \d-\d+$/.test(x))
+                expect(nomes).toEqual([...esperadas(1, n), ...esperadas(2, 3)])
+                if (grupo) {
+                    // O texto do limite mesclado aparece em toda página com linhas de A.
+                    for (const p of paginas) {
+                        const temA = textos(p).some((x) => /^Procedimento 1-\d+$/.test(x))
+                        expect(textos(p).includes('2 por ano no grupo')).toBe(temA)
+                    }
                 }
+                for (const p of paginas) {
+                    for (const c of cartoes(p)) {
+                        expect(c.bottom).toBeGreaterThanOrEqual(MARGIN_BOTTOM - 1e-6)
+                    }
+                }
+                expect(textos(paginas[paginas.length - 1])).toContain('B')
+                expect(paginas.length).toBeLessThan(10)
             }
-            const ultima = paginas[paginas.length - 1]
-            expect(textos(ultima)).toContain('B')
-            expect(paginas.length).toBeLessThan(10)
         }
     })
 })
