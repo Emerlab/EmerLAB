@@ -83,15 +83,48 @@ describe('escolherSelecao', () => {
         expect(escolherSelecao({ modoSite: null, modoImpressao: impressao }).origem).toBe('impressao')
         expect(escolherSelecao({ modoSite: { selecao: {} }, modoImpressao: impressao }).origem).toBe('impressao')
         const padrao = escolherSelecao({ modoSite: null, modoImpressao: null })
-        expect(padrao).toEqual({ origem: 'padrao', codigos: null })
+        expect(padrao).toEqual({ origem: 'padrao', codigos: null, presentes: null })
     })
 })
 
 describe('montarTabelaPublica', () => {
-    it('com modo salvo marcando A1|base, só A1 aparece', () => {
-        const t = montarTabelaPublica(entradaBase({ modoImpressao: { selecao: { 'A1|base': true } } }))
+    it('com modo salvo, códigos gravados usam o valor salvo e os ausentes a regra padrão (como no PDF)', () => {
+        const t = montarTabelaPublica(
+            entradaBase({ modoImpressao: { selecao: { 'A1|base': true, 'B1|base': false } } }),
+        )
         expect(t.origem_selecao).toBe('impressao')
-        expect(codigosExibidos(t)).toEqual(['A1'])
+        // B1 gravado como false some mesmo com 4 realizadores; B2 (ausente, 3) entra; D1 (ausente, 2) não.
+        expect(codigosExibidos(t)).toEqual(['A1', 'B2'])
+    })
+
+    it('código novo ausente da seleção: 4 realizadores aparece, 2 não; desmarcado com 5 segue oculto', () => {
+        const procedimentos = [
+            { id: 1, codigo: 'A1', nome: 'Consulta clínica', categoria_id: 10, plano_base_id: 1 },
+            { id: 2, codigo: 'B1', nome: 'Radiografia simples', categoria_id: 20, plano_base_id: 1 },
+            { id: 3, codigo: 'C1', nome: 'Novo procedimento', categoria_id: 10, plano_base_id: 1 },
+            { id: 5, codigo: 'D1', nome: 'Pouco realizado', categoria_id: 30, plano_base_id: 1 },
+        ]
+        const e = entradaBase({ procedimentos, modoSite: { selecao: { 'A1|base': true, 'B1|base': false } } })
+        e.realizadoresPorCodigo = new Map([
+            ['A1', [1]],
+            ['B1', [1, 2, 3, 4, 5]],
+            ['C1', [1, 2, 3, 4]],
+            ['D1', [1, 2]],
+        ])
+        const t = montarTabelaPublica(e)
+        expect(t.origem_selecao).toBe('site')
+        expect(codigosExibidos(t)).toEqual(['A1', 'C1'])
+    })
+
+    it('com site e impressão, códigos ausentes do site seguem a regra padrão (não o impressão)', () => {
+        const t = montarTabelaPublica(
+            entradaBase({
+                modoSite: { selecao: { 'A1|base': true } },
+                modoImpressao: { selecao: { 'B1|base': false, 'D1|base': true } },
+            }),
+        )
+        expect(t.origem_selecao).toBe('site')
+        expect(codigosExibidos(t)).toEqual(['A1', 'B1', 'B2'])
     })
 
     it('sem modo, aparece quem tem 3 ou mais realizadores e não quem tem 2', () => {
@@ -102,7 +135,7 @@ describe('montarTabelaPublica', () => {
     })
 
     it('procedimento marcado mas sem realizador não aparece', () => {
-        const e = entradaBase({ modoSite: { selecao: { 'A1|base': true, 'B1|base': true } } })
+        const e = entradaBase({ modoSite: { selecao: { 'A1|base': true, 'B1|base': true, 'B2|base': false } } })
         e.realizadoresPorCodigo.set('B1', [])
         const t = montarTabelaPublica(e)
         expect(codigosExibidos(t)).toEqual(['A1'])
@@ -112,7 +145,8 @@ describe('montarTabelaPublica', () => {
         const t1 = montarTabelaPublica(entradaBase())
         expect(codigosExibidos(t1)).not.toContain('C1')
         const t2 = montarTabelaPublica(entradaBase({ modoSite: { selecao: { 'C1|base': true, 'A1|base': true } } }))
-        expect(codigosExibidos(t2)).toEqual(['A1'])
+        expect(codigosExibidos(t2)).not.toContain('C1')
+        expect(codigosExibidos(t2)).toContain('A1')
     })
 
     it('categoria sem procedimento exibido some; grupos na ordem das categorias e procedimentos por código', () => {
@@ -162,7 +196,12 @@ describe('montarTabelaPublica', () => {
         const observacoes = [
             { id: 8, titulo: 'T', mensagem: 'm', ativa: true, geral: false, ordem: 1, codigosProcedimentos: ['a1', 'B1'] },
         ]
-        const t = montarTabelaPublica(entradaBase({ observacoes, modoSite: { selecao: { 'A1|base': true } } }))
+        const t = montarTabelaPublica(
+            entradaBase({
+                observacoes,
+                modoSite: { selecao: { 'A1|base': true, 'B1|base': false, 'B2|base': false } },
+            }),
+        )
         expect(codigosExibidos(t)).toEqual(['A1'])
         expect(procedimento(t, 'A1').observacoes).toEqual([8])
         expect(Object.keys(t.observacoes)).toEqual(['8'])

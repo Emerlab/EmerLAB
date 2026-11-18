@@ -41,6 +41,19 @@ export function codigosMarcados(selecao) {
     return codigos
 }
 
+/** Códigos (maiúsculos) com alguma chave `COD|…` em `selecao`, marcada ou não; `null` se não houver seleção. */
+export function codigosPresentes(selecao) {
+    if (!selecao || typeof selecao !== 'object' || Array.isArray(selecao)) return null
+    const chaves = Object.keys(selecao)
+    if (!chaves.length) return null
+    const codigos = new Set()
+    for (const chave of chaves) {
+        const cod = normCodigo(String(chave).split('|')[0])
+        if (cod) codigos.add(cod)
+    }
+    return codigos
+}
+
 // Aceita a linha de `impressao_planos_modos` (`{ selecao, ... }`) ou a própria seleção.
 const selecaoDoModo = (modo) => {
     if (!modo || typeof modo !== 'object') return null
@@ -48,13 +61,19 @@ const selecaoDoModo = (modo) => {
     return modo
 }
 
-/** Preset `site` → modo `impressao` → regra padrão. Seleção vazia conta como inexistente. */
+/**
+ * Preset `site` → modo `impressao` → regra padrão. Seleção vazia conta como inexistente.
+ * Só um modo vale por vez: com `site`, códigos ausentes dele seguem a regra padrão
+ * (não caem no `impressao`). `codigos` = marcados; `presentes` = com chave na seleção.
+ */
 export function escolherSelecao({ modoSite, modoImpressao } = {}) {
-    const site = codigosMarcados(selecaoDoModo(modoSite))
-    if (site) return { origem: 'site', codigos: site }
-    const impressao = codigosMarcados(selecaoDoModo(modoImpressao))
-    if (impressao) return { origem: 'impressao', codigos: impressao }
-    return { origem: 'padrao', codigos: null }
+    const selSite = selecaoDoModo(modoSite)
+    const site = codigosMarcados(selSite)
+    if (site) return { origem: 'site', codigos: site, presentes: codigosPresentes(selSite) }
+    const selImpressao = selecaoDoModo(modoImpressao)
+    const impressao = codigosMarcados(selImpressao)
+    if (impressao) return { origem: 'impressao', codigos: impressao, presentes: codigosPresentes(selImpressao) }
+    return { origem: 'padrao', codigos: null, presentes: null }
 }
 
 const ordenarObservacoes = (a, b) =>
@@ -101,7 +120,7 @@ export function montarTabelaPublica(entrada) {
         mapaPlanosPorChave: mapaPlanos,
     }
 
-    const { origem, codigos } = escolherSelecao({ modoSite, modoImpressao })
+    const { origem, codigos, presentes } = escolherSelecao({ modoSite, modoImpressao })
 
     // Observações publicáveis: ativas e com mensagem.
     const observacoesValidas = (observacoes || [])
@@ -128,7 +147,8 @@ export function montarTabelaPublica(entrada) {
 
         const realizadores = new Set(realizadoresPorCodigo.get(cod) || []).size
         if (realizadores <= 0) continue
-        const selecionado = codigos ? codigos.has(cod) : realizadores >= MIN_REALIZADORES_PRE_MARCAR
+        // Como `aplicarSelecaoModo` no PDF: código gravado usa o valor salvo; código novo, a regra padrão.
+        const selecionado = presentes?.has(cod) ? codigos.has(cod) : realizadores >= MIN_REALIZADORES_PRE_MARCAR
         if (!selecionado) continue
 
         const catId = Number(proc.categoria_id) || 0
