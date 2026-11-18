@@ -358,6 +358,74 @@ describe('paginarSecoesPlanos — bloco Informações por grupo', () => {
         expect(vistos.naoLeva).toBeGreaterThan(0)
     })
 
+    it('linhas levadas + bloco longo na seguinte: divide por itens, numeração contínua', async () => {
+        const obs = Array.from({ length: 14 }, (_, i) => ({
+            titulo: `Regra ${i + 1}`,
+            mensagem: textoLongo,
+        }))
+        const paginas = await paginar([categoria(1, 'Consultas', 17)], { 1: obs })
+        // As 2 últimas linhas foram levadas (item 1 cabe com elas na seguinte).
+        expect(nomesLinhas(paginas[0])).toEqual(nomesEsperados(1, 15))
+        expect(nomesLinhas(paginas[1])).toEqual(['Procedimento 1-16', 'Procedimento 1-17'])
+        expect(paginas.length).toBeGreaterThanOrEqual(3)
+        expect(paginas.flatMap(numerosItens)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1))
+        expect(paginas.flatMap(nomesLinhas)).toEqual(nomesEsperados(1, 17))
+    })
+
+    // Célula mesclada = único retângulo fora da margem esquerda (linhas e cabeçalho começam em 42).
+    const celulasMescladas = (p) =>
+        p.chamadas.filter((c) => c.op === 'drawRectangle' && c.args[0].x > 42)
+    const grupoVacinas = { limiteGrupoValor: '2', textoLimiteGrupo: '2 por ano no grupo' }
+
+    it('grupo mesclado pequeno no fim não é partido pelo carry: bloco vai sozinho (b)', async () => {
+        // A (10 linhas) + B (grupo mesclado de 3 linhas): nenhum item cabe após B. Levar 2
+        // partiria o grupo 1/2 e não há linha fora do grupo para ficar: nada é levado.
+        const paginas = await paginar(
+            [categoria(1, 'A', 10), categoria(2, 'B', 3, { cat: grupoVacinas })],
+            { 2: [{ titulo: 'Aviso', mensagem: 'Levar documento.' }] },
+        )
+        expect(paginas).toHaveLength(2)
+        expect(nomesLinhas(paginas[0])).toEqual([...nomesEsperados(1, 10), ...nomesEsperados(2, 3)])
+        expect(celulasMescladas(paginas[0])).toHaveLength(1)
+        expect(celulasMescladas(paginas[0])[0].args[0].height).toBeCloseTo(3 * 34, 6)
+        expect(textos(paginas[0]).filter((x) => x === '2 por ano no grupo')).toHaveLength(1)
+        expect(textos(paginas[0])).not.toContain('Informações')
+        expect(nomesLinhas(paginas[1])).toEqual([])
+        expect(celulasMescladas(paginas[1])).toHaveLength(0)
+        expect(textos(paginas[1])).not.toContain('2 por ano no grupo')
+        expect(numerosItens(paginas[1])).toEqual([1])
+    })
+
+    it('grupo mesclado pequeno no fim é levado inteiro quando sobra linha fora dele (a)', async () => {
+        // B: 1ª linha isenta (procedimento 23, fora do grupo) + 3 linhas do grupo mesclado.
+        const b = categoria(2, 'B', 4, { cat: grupoVacinas })
+        b.linhas[0].procedimentoId = 23
+        const paginas = await paginar([categoria(1, 'A', 9), b], {
+            2: [{ titulo: 'Aviso', mensagem: 'Levar documento.' }],
+        })
+        expect(paginas).toHaveLength(2)
+        expect(nomesLinhas(paginas[0])).toEqual([...nomesEsperados(1, 9), 'Procedimento 2-1'])
+        expect(celulasMescladas(paginas[0])).toHaveLength(0)
+        expect(textos(paginas[0])).not.toContain('2 por ano no grupo')
+        expect(textos(paginas[0])).not.toContain('Informações')
+        expect(nomesLinhas(paginas[1])).toEqual(['Procedimento 2-2', 'Procedimento 2-3', 'Procedimento 2-4'])
+        expect(celulasMescladas(paginas[1])).toHaveLength(1)
+        expect(celulasMescladas(paginas[1])[0].args[0].height).toBeCloseTo(3 * 34, 6)
+        expect(textos(paginas[1]).filter((x) => x === '2 por ano no grupo')).toHaveLength(1)
+        expect(numerosItens(paginas[1])).toEqual([1])
+        const t2 = textos(paginas[1])
+        expect(t2.indexOf('Procedimento 2-4')).toBeLessThan(t2.indexOf('Informações'))
+    })
+
+    it('grupo mesclado com ao menos 5 linhas ficando: carry de 2 continua partindo o grupo', async () => {
+        // Grupo de 17 linhas: ficam 15 (≥ MIN_LINHAS_GRUPO_PARTIDO), levam-se 2.
+        const paginas = await paginar([categoria(1, 'Vacinas', 17, { cat: grupoVacinas })], {
+            1: [{ titulo: 'Aviso', mensagem: 'Texto.' }],
+        })
+        expect(nomesLinhas(paginas[0])).toEqual(nomesEsperados(1, 15))
+        expect(nomesLinhas(paginas[1])).toEqual(['Procedimento 1-16', 'Procedimento 1-17'])
+    })
+
     it('limite mesclado com linhas levadas: célula fechada aqui e reaberta na seguinte', async () => {
         const cat = categoria(1, 'Vacinas', 17, {
             cat: { limiteGrupoValor: '2', textoLimiteGrupo: '2 por ano no grupo' },

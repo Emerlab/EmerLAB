@@ -18,9 +18,6 @@ import {
     linhasALevarComBloco,
     planejarFatiaBlocoInformacoes,
 } from '../pdf/blocoInformacoesPdf.js'
-
-// Reexportadas: a regra "manter junto" é compartilhada com o gerador do Honorários.
-export { LINHAS_QUE_ACOMPANHAM_BLOCO, blocoCabeComLinhasLevadas, linhasALevarComBloco }
 import {
     CARD_PADDING_BOTTOM,
     CARD_RADIUS,
@@ -43,6 +40,9 @@ import {
 } from '../pdf/estiloTabelaPdf.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 
+// Reexportadas: a regra "manter junto" é compartilhada com o gerador do Honorários.
+export { LINHAS_QUE_ACOMPANHAM_BLOCO, blocoCabeComLinhasLevadas, linhasALevarComBloco }
+
 const ICON_CAB_SIZE_PT = 14
 const ICON_CAB_GAP_PT = 4
 const ICON_RASTER_PX = 64
@@ -62,8 +62,6 @@ const SECTION_GAP = 16
 // e sobrarem ao menos M na seguinte (evita linhas órfãs).
 const MIN_LINHAS_GRUPO_PARTIDO = 5
 const MIN_LINHAS_GRUPO_PARTIDO_RESTO = 2
-// Quando nenhum item do bloco Informações cabe após as linhas, as últimas N linhas da seção
-// vão para a página seguinte junto com o bloco (o bloco não fica separado da tabela).
 const LINE_LEADING = 12
 const FONT_SIZE_STAMP = 7
 
@@ -185,6 +183,22 @@ export function montarSecoesImpressao(categorias, observacoesPorGrupo = {}) {
 export function alturaUtilBlocoContinuacao(height) {
     // calcularAlturaUtilPagina desconta LIMITE_LINHAS; o bloco vai até a margem.
     return calcularAlturaUtilPagina(height, true) + (LIMITE_LINHAS - MARGIN_BOTTOM)
+}
+
+/**
+ * O carry não parte grupo de limite mesclado pequeno (mesma regra anti-órfã do
+ * decidirPartirGrupo). Se as linhas levadas [fimProbe − levar, fimProbe) caem dentro do grupo
+ * e ficariam menos de MIN_LINHAS_GRUPO_PARTIDO linhas dele nesta página: (a) leva o grupo
+ * desde a primeira linha, se ainda sobrar ao menos 1 linha da seção nesta página; senão
+ * (b) não leva nada (o bloco vai sozinho para a seguinte). Devolve o novo `levar`.
+ */
+function levarSemPartirGrupoPequeno({ idxGrupo, linhaIdx, fimProbe, levar }) {
+    const corte = fimProbe - levar
+    const ficam = idxGrupo.filter((i) => i >= linhaIdx && i < corte).length
+    const levadas = idxGrupo.filter((i) => i >= corte && i < fimProbe).length
+    if (!ficam || !levadas || ficam >= MIN_LINHAS_GRUPO_PARTIDO) return levar
+    const inicioGrupo = idxGrupo[0]
+    return inicioGrupo > linhaIdx ? fimProbe - inicioGrupo : 0
 }
 
 function indicesGrupoLimite(linhas) {
@@ -602,6 +616,14 @@ function renderizarUmaPagina(
                     linhasNestaPagina: iProbe - linhaIdx,
                     fatiaVazia,
                 })
+                if (levar > 0 && temGrupoPre) {
+                    levar = levarSemPartirGrupoPequeno({
+                        idxGrupo: idxGrupoPre,
+                        linhaIdx,
+                        fimProbe: iProbe,
+                        levar,
+                    })
+                }
                 if (levar > 0) {
                     let alturaLinhasLevadas = 0
                     for (let k = iProbe - levar; k < iProbe; k += 1) {
