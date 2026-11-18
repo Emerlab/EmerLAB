@@ -112,7 +112,30 @@ function municipioCompativel(nomeA, nomeB) {
 // UF ausente de um dos lados não impede o casamento (mesma tolerância do Zap)
 const ufCompativel = (a, b) => !a || !b || a === b
 
-const cidadeCasa = (cidade, nome, uf) => municipioCompativel(cidade.nome, nome) && ufCompativel(cidade.uf, uf)
+export const cidadeCasa = (cidade, nome, uf) => municipioCompativel(cidade.nome, nome) && ufCompativel(cidade.uf, uf)
+
+/** Credenciado conta em algum dos municípios pela cidade principal ou por `cidadesAtende` (mesma regra de `planosAtendidos`). */
+export function atendeMunicipios(credenciado, municipios) {
+    const cidades = [...(credenciado.cidadePrincipal ? [credenciado.cidadePrincipal] : []), ...credenciado.cidadesAtende]
+    return (municipios || []).some((m) => cidades.some((c) => cidadeCasa(c, m.nome, m.uf)))
+}
+
+/** cidade da tabela de valores (id) → municípios: ela mesma + `municipiosVinculo` (ex.: "Gravataí" de Porto Alegre e Região). */
+export function montarMunicipiosPorCidade(base) {
+    const cidadeTabelaPorId = new Map((base.cidades || []).map((c) => [Number(c.id), c]))
+    const municipiosDaCidade = new Map()
+    const addMunicipio = (cidadeId, nome, uf) => {
+        if (!texto(nome)) return
+        if (!municipiosDaCidade.has(cidadeId)) municipiosDaCidade.set(cidadeId, [])
+        municipiosDaCidade.get(cidadeId).push({ nome: String(nome).trim(), uf: siglaUf(uf) })
+    }
+    for (const c of base.cidades || []) addMunicipio(Number(c.id), c.nome, c.uf)
+    for (const v of base.municipiosVinculo || []) {
+        const cid = Number(v.cidade_id)
+        addMunicipio(cid, v.municipio_nome, v.uf || cidadeTabelaPorId.get(cid)?.uf)
+    }
+    return municipiosDaCidade
+}
 
 function agruparPor(linhas, chave) {
     const mapa = new Map()
@@ -197,18 +220,7 @@ export function montarCredenciados(base) {
     const obsDe = new Map((base.beneficiosObs || []).map((o) => [Number(o.prestador_id), texto(o.observacoes)]))
 
     // municípios de cada plano: cidades da tabela de valores com linha em planos_cidade + municípios vinculados
-    const cidadeTabelaPorId = new Map((base.cidades || []).map((c) => [Number(c.id), c]))
-    const municipiosDaCidade = new Map()
-    const addMunicipio = (cidadeId, nome, uf) => {
-        if (!texto(nome)) return
-        if (!municipiosDaCidade.has(cidadeId)) municipiosDaCidade.set(cidadeId, [])
-        municipiosDaCidade.get(cidadeId).push({ nome: String(nome).trim(), uf: siglaUf(uf) })
-    }
-    for (const c of base.cidades || []) addMunicipio(Number(c.id), c.nome, c.uf)
-    for (const v of base.municipiosVinculo || []) {
-        const cid = Number(v.cidade_id)
-        addMunicipio(cid, v.municipio_nome, v.uf || cidadeTabelaPorId.get(cid)?.uf)
-    }
+    const municipiosDaCidade = montarMunicipiosPorCidade(base)
     const cidadesDoPlano = new Map()
     for (const r of base.planosCidade || []) {
         if (r.cidade_id === null || r.cidade_id === undefined) continue
