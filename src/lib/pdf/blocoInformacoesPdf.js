@@ -1,6 +1,5 @@
 import { rgb } from 'pdf-lib'
 import { COR_NAVY } from './estiloTabelaPdf.js'
-import { OBS_ITEM_GAP } from './observacoesModeloPdf.js'
 
 const FONT_SIZE_INFO = 10
 const OBS_PADDING = 12
@@ -19,29 +18,31 @@ function numerar(itens) {
 
 /**
  * Altura total do bloco (0 se não há itens).
- * Os geradores injetam medirItem(item, largura).
+ * Os geradores injetam medirItem(item, largura); a altura devolvida por
+ * medirItem JÁ inclui o espaçamento final do item (OBS_ITEM_GAP), então o
+ * bloco não soma espaçamento próprio entre itens.
  */
 export function medirBlocoInformacoes({ itens, innerW, medirItem }) {
     const lista = numerar(itens)
     if (!lista.length) return 0
     const larguraTexto = innerW - OBS_PADDING * 2
     let h = ALTURA_CABECALHO_BLOCO
-    lista.forEach((item, i) => {
+    lista.forEach((item) => {
         h += medirItem(item, larguraTexto)
-        if (i < lista.length - 1) h += OBS_ITEM_GAP
     })
     return h + PADDING_FINAL_BLOCO
 }
 
 /**
  * Quantos itens iniciais cabem, sem cortar item. alturaDisponivel é o espaço
- * TOTAL (cabeçalho, itens com espaçamento e padding final incluídos).
+ * TOTAL (cabeçalho, itens e padding final incluídos). Cada altura de
+ * alturasItens já inclui o espaçamento do item.
  */
 export function quantosItensCabem({ alturasItens, alturaDisponivel }) {
     let usado = ALTURA_CABECALHO_BLOCO + PADDING_FINAL_BLOCO
     let n = 0
     for (let i = 0; i < (alturasItens || []).length; i += 1) {
-        usado += alturasItens[i] + (i > 0 ? OBS_ITEM_GAP : 0)
+        usado += alturasItens[i]
         if (usado > alturaDisponivel) break
         n += 1
     }
@@ -78,10 +79,9 @@ export function desenharBlocoInformacoes(
 
     const larguraTexto = innerW - OBS_PADDING * 2
     let y = yTop - ALTURA_CABECALHO_BLOCO
-    lista.forEach((item, i) => {
+    lista.forEach((item) => {
         desenharItem(page, fonts, x + OBS_PADDING, y, item, larguraTexto)
         y -= medirItem(item, larguraTexto)
-        if (i < lista.length - 1) y -= OBS_ITEM_GAP
     })
     return y - PADDING_FINAL_BLOCO
 }

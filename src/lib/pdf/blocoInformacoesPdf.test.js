@@ -6,8 +6,8 @@ import {
     medirBlocoInformacoes,
     quantosItensCabem,
 } from './blocoInformacoesPdf.js'
-import { OBS_ITEM_GAP } from './observacoesModeloPdf.js'
 
+// altura do item já inclui o espaçamento final
 const medirItem = () => 30
 
 describe('blocoInformacoesPdf', () => {
@@ -20,10 +20,10 @@ describe('blocoInformacoesPdf', () => {
         expect(medirBlocoInformacoes({ itens: [], innerW: 500, medirItem })).toBe(0)
     })
 
-    it('mede cabeçalho + itens + espaçamento + padding final', () => {
+    it('mede cabeçalho + alturas dos itens + padding final', () => {
         const itens = [{ titulo: 'a', mensagem: 'x' }, { titulo: 'b', mensagem: 'y' }]
         expect(medirBlocoInformacoes({ itens, innerW: 500, medirItem })).toBe(
-            ALTURA_CABECALHO_BLOCO + 2 * 30 + OBS_ITEM_GAP + PADDING_FINAL_BLOCO,
+            ALTURA_CABECALHO_BLOCO + 2 * 30 + PADDING_FINAL_BLOCO,
         )
     })
 
@@ -43,7 +43,7 @@ describe('blocoInformacoesPdf', () => {
     it('quantosItensCabem', () => {
         const base = ALTURA_CABECALHO_BLOCO + PADDING_FINAL_BLOCO
         const alturasItens = [30, 30, 30]
-        expect(quantosItensCabem({ alturasItens, alturaDisponivel: base + 30 + OBS_ITEM_GAP + 30 })).toBe(2)
+        expect(quantosItensCabem({ alturasItens, alturaDisponivel: base + 30 + 30 })).toBe(2)
         expect(quantosItensCabem({ alturasItens, alturaDisponivel: base + 29 })).toBe(0)
         expect(quantosItensCabem({ alturasItens, alturaDisponivel: base + 30 })).toBe(1)
         expect(quantosItensCabem({ alturasItens, alturaDisponivel: 100000 })).toBe(3)
@@ -74,7 +74,7 @@ describe('blocoInformacoesPdf', () => {
         const y0 = 700 - ALTURA_CABECALHO_BLOCO
         expect(chamadas.itens).toEqual([
             [54, y0, 1, 476],
-            [54, y0 - 30 - OBS_ITEM_GAP, 2, 476],
+            [54, y0 - 30, 2, 476],
         ])
     })
 })
