@@ -20,6 +20,12 @@ import {
     yBaselineCentro,
     yPrimeiraLinhaBloco as yPrimeiraLinhaBlocoBase,
 } from '../pdf/estiloTabelaPdf.js'
+import {
+    alturasItensBloco,
+    desenharBlocoInformacoes,
+    planejarFatiaBlocoInformacoes,
+} from '../pdf/blocoInformacoesPdf.js'
+import { chaveGrupoHonorarios } from './honorariosObservacoes.js'
 import urlEstetoscopioSvg from '../../assets/planos/estetoscopio.svg?url'
 import urlHonorariosPdf from '../../assets/honorarios/honorarios.pdf?url'
 
@@ -453,10 +459,21 @@ function medirAlturaLinha(linha, fonts, colNomeW) {
     return Math.max(ROW_BASE_HEIGHT, h)
 }
 
+/** Observações do grupo (Informações no fim do cartão), sem a numeração (o bloco numera). */
+function itensInformacoesDoGrupo(observacoesPorGrupo, chave) {
+    const brutos = observacoesPorGrupo?.[chave]
+    return normalizarListaObservacoes(brutos || []).map(({ titulo, mensagem }) => ({
+        titulo,
+        mensagem,
+    }))
+}
+
 /**
  * @param {Array<{ categoriaNome?: string, nome?: string, linhas: object[] }>} secoes
+ * @param {Record<string, Array<{ titulo?: string, mensagem: string }>>} [observacoesPorGrupo]
+ *   chave = chaveGrupoHonorarios(secao)
  */
-export function montarSecoesImpressao(secoes) {
+export function montarSecoesImpressao(secoes, observacoesPorGrupo = {}) {
     const saida = []
     for (const secao of secoes || []) {
         const linhas = (secao.linhas || [])
@@ -470,8 +487,10 @@ export function montarSecoesImpressao(secoes) {
             }))
             .filter((l) => l.nome && l.nome !== '—')
         if (!linhas.length) continue
+        const chave = chaveGrupoHonorarios(secao)
         saida.push({
-            nome: String(secao.categoriaNome || secao.nome || 'Categoria'),
+            nome: chave,
+            infoItens: itensInformacoesDoGrupo(observacoesPorGrupo, chave),
             linhas,
         })
     }
@@ -931,13 +950,95 @@ async function adicionarPaginasObservacoesDinamicas(
     return paginas
 }
 
-function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio) {
+function medirItemInformacoes(fonts) {
+    return (item, larguraMax) => medirItemObservacaoModelo(item, fonts, larguraMax)
+}
+
+/** Altura (por item, já numerado) do bloco Informações de cada seção; [] sem observações. */
+function calcularAlturasInformacoes(secoes, fonts, innerW) {
+    return secoes.map((secao) =>
+        alturasItensBloco({
+            itens: secao.infoItens || [],
+            innerW,
+            medirItem: medirItemInformacoes(fonts),
+        }),
+    )
+}
+
+/** Desenha os itens [fatia.inicio, fatia.fim) do bloco, numerados a partir de inicio + 1. */
+function desenharFatiaInformacoes(page, fonts, layout, yTop, secao, fatia) {
+    return desenharBlocoInformacoes(page, fonts, {
+        x: MARGIN_X,
+        yTop,
+        innerW: layout.innerW,
+        itens: (secao.infoItens || []).slice(fatia.inicio, fatia.fim),
+        numeroInicial: fatia.inicio + 1,
+        medirItem: medirItemInformacoes(fonts),
+        desenharItem: desenharItemObservacaoModelo,
+    })
+}
+
+function renderizarUmaPagina(
+    page,
+    fonts,
+    width,
+    height,
+    secoes,
+    cursor,
+    iconeEstetoscopio,
+    alturasInformacoes = [],
+) {
     const layout = colunasLayout(width)
     let y = height - MARGIN_TOP
     let { secaoIdx, linhaIdx, zebra } = cursor
     const secaoIdxInicial = secaoIdx
     const linhaIdxInicial = linhaIdx
     let desenhouAlgoNestaPagina = false
+
+    // Continuação do bloco Informações de uma seção: cartão novo com o título do grupo
+    // repetido e o restante dos itens (sem cabeçalho de tabela). O cursor já aponta
+    // para a seção seguinte (secaoIdx = pendente.secaoIdx + 1, linhaIdx = 0).
+    const pendente = cursor.blocoPendente
+    if (pendente && secoes[pendente.secaoIdx]) {
+        const secaoInfo = secoes[pendente.secaoIdx]
+        const cardTop = y - SECTION_GAP
+        const corpoTop = cardTop - TITLE_BAR_HEIGHT
+        // Página nova: ao menos um item entra (item maior que a página não trava a paginação).
+        const fatia = planejarFatiaBlocoInformacoes({
+            alturasItens: alturasInformacoes[pendente.secaoIdx] || [],
+            inicio: pendente.proximoItem,
+            alturaDisponivel: corpoTop - LIMITE_LINHAS,
+            forcarAoMenosUm: true,
+        })
+        const yCardBottom = corpoTop - fatia.altura
+        desenharRetanguloArredondado(page, {
+            x: MARGIN_X,
+            yTop: cardTop,
+            width: layout.innerW,
+            height: cardTop - yCardBottom,
+            raio: CARD_RADIUS,
+            color: COR_BRANCO,
+        })
+        desenharBarraTitulo(page, fonts, {
+            x: MARGIN_X,
+            yTop: cardTop,
+            innerW: layout.innerW,
+            prefixo: 'Grupo de ',
+            destaque: sanitizarTextoPdf(secaoInfo.nome) || 'Categoria',
+        })
+        desenharFatiaInformacoes(page, fonts, layout, corpoTop, secaoInfo, fatia)
+        desenhouAlgoNestaPagina = true
+        if (!fatia.completo) {
+            return {
+                secaoIdx,
+                linhaIdx,
+                zebra,
+                blocoPendente: { secaoIdx: pendente.secaoIdx, proximoItem: fatia.fim },
+                done: false,
+            }
+        }
+        y = yCardBottom - SECTION_GAP
+    }
 
     while (secaoIdx < secoes.length) {
         const secao = secoes[secaoIdx]
@@ -957,13 +1058,15 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
         const alturaPrimeiraLinha = medirAlturaLinha(linhas[linhaIdx], fonts, layout.widths[0])
 
         if (y - overhead < LIMITE_LINHAS + alturaPrimeiraLinha) {
-            return { secaoIdx, linhaIdx, zebra, done: false }
+            return { secaoIdx, linhaIdx, zebra, blocoPendente: null, done: false }
         }
 
         const cardTop = y - (desenharTituloCategoria ? SECTION_GAP : 0)
         const corpoTop = desenharTituloCategoria ? cardTop - TITLE_BAR_HEIGHT : cardTop
 
         let yCardBottom = corpoTop - TABLE_HEADER_HEIGHT
+        // Bloco Informações desta seção nesta página (só quando a seção termina aqui).
+        let fatiaInformacoes = null
         {
             let yProbe = yCardBottom
             let iProbe = linhaIdx
@@ -974,6 +1077,18 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
                 iProbe += 1
             }
             yCardBottom = yProbe - CARD_PADDING_BOTTOM
+            const alturasInfo = alturasInformacoes[secaoIdx] || []
+            if (iProbe >= linhas.length && alturasInfo.length) {
+                fatiaInformacoes = planejarFatiaBlocoInformacoes({
+                    alturasItens: alturasInfo,
+                    inicio: 0,
+                    alturaDisponivel: yProbe - LIMITE_LINHAS,
+                })
+                // O padding final do bloco substitui o CARD_PADDING_BOTTOM.
+                if (fatiaInformacoes.fim > fatiaInformacoes.inicio) {
+                    yCardBottom = yProbe - fatiaInformacoes.altura
+                }
+            }
         }
 
         const topFundo = desenharTituloCategoria ? cardTop : corpoTop
@@ -1008,7 +1123,7 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             const linha = linhas[linhaIdx]
             const h = medirAlturaLinha(linha, fonts, layout.widths[0])
             if (yCursor - h < LIMITE_LINHAS) {
-                return { secaoIdx, linhaIdx, zebra, done: false }
+                return { secaoIdx, linhaIdx, zebra, blocoPendente: null, done: false }
             }
             const { yBottom } = desenharLinhaDados(page, fonts, layout, yCursor, linha, zebra, {
                 semLinhaSuperior: yCursor === yTopoLinhas,
@@ -1018,12 +1133,40 @@ function renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEs
             linhaIdx += 1
         }
 
+        if (fatiaInformacoes) {
+            // Todas as linhas da seção já foram desenhadas.
+            const temItensAqui = fatiaInformacoes.fim > fatiaInformacoes.inicio
+            const yFimCard = temItensAqui
+                ? desenharFatiaInformacoes(page, fonts, layout, yCursor, secao, fatiaInformacoes)
+                : yCursor - CARD_PADDING_BOTTOM
+            if (!fatiaInformacoes.completo) {
+                return {
+                    secaoIdx: secaoIdx + 1,
+                    linhaIdx: 0,
+                    zebra,
+                    blocoPendente: { secaoIdx, proximoItem: fatiaInformacoes.fim },
+                    done: false,
+                }
+            }
+            secaoIdx += 1
+            linhaIdx = 0
+            y = yFimCard - SECTION_GAP
+            continue
+        }
+
         secaoIdx += 1
         linhaIdx = 0
         y = yCursor - CARD_PADDING_BOTTOM - SECTION_GAP
     }
 
-    return { secaoIdx, linhaIdx: 0, zebra, done: true }
+    return { secaoIdx, linhaIdx: 0, zebra, blocoPendente: null, done: true }
+}
+
+/** Assinatura de progresso do cursor (guarda anti-laço). */
+function assinaturaCursor(cursor) {
+    const p = cursor.blocoPendente
+    const bloco = p ? `${p.secaoIdx}:${p.proximoItem}` : '-'
+    return `${cursor.secaoIdx}-${cursor.linhaIdx}-${bloco}`
 }
 
 /**
@@ -1039,19 +1182,43 @@ export async function paginarSecoesHonorarios({
     novaPagina,
     aposPagina = () => {},
 }) {
-    let cursor = { secaoIdx: 0, linhaIdx: 0, zebra: 0, done: false }
+    const alturasInformacoes = calcularAlturasInformacoes(
+        secoes,
+        fonts,
+        colunasLayout(width).innerW,
+    )
+    let cursor = { secaoIdx: 0, linhaIdx: 0, zebra: 0, blocoPendente: null, done: false }
     let guard = 0
-    const maxPaginas = Math.max(30, secoes.reduce((n, s) => n + s.linhas.length, 0) + 4)
+    const totalLinhas = secoes.reduce((n, s) => n + s.linhas.length, 0)
+    // Cada item de Informações ocupa no máximo uma página de continuação.
+    const totalItensInfo = alturasInformacoes.reduce((n, a) => n + a.length, 0)
+    const maxPaginas = Math.max(30, totalLinhas + 4) + totalItensInfo
 
     while (!cursor.done && guard < maxPaginas) {
         guard += 1
-        const antes = `${cursor.secaoIdx}-${cursor.linhaIdx}`
+        const antes = assinaturaCursor(cursor)
         const page = await novaPagina()
-        cursor = renderizarUmaPagina(page, fonts, width, height, secoes, cursor, iconeEstetoscopio)
+        cursor = renderizarUmaPagina(
+            page,
+            fonts,
+            width,
+            height,
+            secoes,
+            cursor,
+            iconeEstetoscopio,
+            alturasInformacoes,
+        )
         aposPagina(page)
-        const depois = `${cursor.secaoIdx}-${cursor.linhaIdx}`
+        const depois = assinaturaCursor(cursor)
         if (!cursor.done && depois === antes) {
-            cursor.linhaIdx += 1
+            if (cursor.blocoPendente) {
+                const total = alturasInformacoes[cursor.blocoPendente.secaoIdx]?.length || 0
+                const proximo = cursor.blocoPendente.proximoItem + 1
+                cursor.blocoPendente =
+                    proximo < total ? { ...cursor.blocoPendente, proximoItem: proximo } : null
+            } else {
+                cursor.linhaIdx += 1
+            }
         }
     }
 }
@@ -1064,7 +1231,10 @@ export async function paginarSecoesHonorarios({
  *   carimboEsquerda?: string,
  *   pdfUrl?: string,
  *   observacoes?: Array<{ titulo?: string, mensagem: string }> | string | string[],
- * }} opts
+ *   observacoesPorGrupo?: Record<string, Array<{ titulo?: string, mensagem: string }>>,
+ * }} opts — observacoes = só as gerais (páginas do fim; sem gerais → página fixa do modelo);
+ *   observacoesPorGrupo = bloco Informações no fim do cartão de cada seção
+ *   (chave chaveGrupoHonorarios(secao)).
  */
 export async function gerarImpressaoHonorariosPdf(opts) {
     const pdfUrl = opts.pdfUrl || urlHonorariosPdf
@@ -1076,7 +1246,7 @@ export async function gerarImpressaoHonorariosPdf(opts) {
         throw new Error('O PDF base de honorários deve conter 3 páginas (capa, listagem, observações).')
     }
 
-    const secoes = montarSecoesImpressao(opts.secoes)
+    const secoes = montarSecoesImpressao(opts.secoes, opts.observacoesPorGrupo || {})
     if (!secoes.length) {
         throw new Error('Selecione ao menos um procedimento para imprimir.')
     }
