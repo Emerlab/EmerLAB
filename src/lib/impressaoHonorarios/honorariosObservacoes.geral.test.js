@@ -148,15 +148,27 @@ describe('resolverObservacoesHonorariosPorSecoes', () => {
         expect(chaveGrupoHonorarios({})).toBe('Categoria')
     })
 
-    it('geral só em gerais; vinculada no primeiro grupo', async () => {
+    it('geral só em gerais; vinculada vai ao grupo dos seus procedimentos', async () => {
         respostas.push({
             data: [linhaRow(1, true, []), linhaRow(2, false, ['A1']), linhaRow(3, false, ['B1'])],
             error: null,
         })
         const r = await resolverObservacoesHonorariosPorSecoes(secoes)
         expect(r.gerais).toEqual([{ titulo: 'T1', mensagem: 'M1' }])
+        // A1 existe nas duas seções → T2 sai nas duas; B1 só na 'Sec B'.
         expect(r.porGrupo['Cat A']).toEqual([{ titulo: 'T2', mensagem: 'M2' }])
-        expect(r.porGrupo['Sec B']).toEqual([{ titulo: 'T3', mensagem: 'M3' }])
+        expect(r.porGrupo['Sec B']).toEqual([
+            { titulo: 'T2', mensagem: 'M2' },
+            { titulo: 'T3', mensagem: 'M3' },
+        ])
+    })
+
+    it('observação ligada a procedimentos de dois grupos aparece nos dois', async () => {
+        respostas.push({ data: [linhaRow(4, false, ['A1', 'B1'])], error: null })
+        const r = await resolverObservacoesHonorariosPorSecoes(secoes)
+        expect(r.porGrupo['Cat A']).toEqual([{ titulo: 'T4', mensagem: 'M4' }])
+        expect(r.porGrupo['Sec B']).toEqual([{ titulo: 'T4', mensagem: 'M4' }])
+        expect(r.gerais).toEqual([])
     })
 
     it('ignora linhas desmarcadas', async () => {

@@ -1,7 +1,8 @@
 /**
  * Decide em qual grupo do PDF cada observação sai.
  * - geral ativa -> só em `gerais` (páginas do fim);
- * - não geral -> só no primeiro grupo (ordem do PDF) com algum código marcado ligado a ela.
+ * - não geral -> em CADA grupo (ordem do PDF) que tenha algum código marcado ligado a ela,
+ *   uma vez por grupo (vários procedimentos do mesmo grupo valem uma única vez).
  */
 
 function normalizarCodigo(codigo) {
@@ -38,10 +39,11 @@ export function distribuirObservacoes({ grupos = [], observacoes = [] } = {}) {
         }
 
         const codigos = (o.codigosProcedimentos || []).map(normalizarCodigo).filter(Boolean)
-        const grupo = gruposNorm.find((g) => codigos.some((c) => g.codigos.has(c)))
-        if (!grupo) continue
-        if (!porGrupo[grupo.chave]) porGrupo[grupo.chave] = []
-        porGrupo[grupo.chave].push(item)
+        for (const grupo of gruposNorm) {
+            if (!codigos.some((c) => grupo.codigos.has(c))) continue
+            if (!porGrupo[grupo.chave]) porGrupo[grupo.chave] = []
+            porGrupo[grupo.chave].push(item)
+        }
     }
 
     return { porGrupo, gerais }

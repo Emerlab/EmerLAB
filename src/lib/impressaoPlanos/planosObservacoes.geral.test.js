@@ -140,15 +140,27 @@ describe('resolverObservacoesPlanosPorGrupo', () => {
         { id: 20, linhas: [{ codigo: 'A1', checked: true }, { codigo: 'B1' }] },
     ]
 
-    it('geral só em gerais; vinculada no primeiro grupo', async () => {
+    it('geral só em gerais; vinculada vai ao grupo dos seus procedimentos', async () => {
         respostas.push({
             data: [linhaRow(1, true, []), linhaRow(2, false, ['A1']), linhaRow(3, false, ['B1'])],
             error: null,
         })
         const r = await resolverObservacoesPlanosPorGrupo(cats)
         expect(r.gerais).toEqual([{ titulo: 'T1', mensagem: 'M1' }])
+        // A1 existe nos dois grupos → T2 sai nos dois; B1 só no grupo 20.
         expect(r.porGrupo['10']).toEqual([{ titulo: 'T2', mensagem: 'M2' }])
-        expect(r.porGrupo['20']).toEqual([{ titulo: 'T3', mensagem: 'M3' }])
+        expect(r.porGrupo['20']).toEqual([
+            { titulo: 'T2', mensagem: 'M2' },
+            { titulo: 'T3', mensagem: 'M3' },
+        ])
+    })
+
+    it('observação ligada a procedimentos de dois grupos aparece nos dois', async () => {
+        respostas.push({ data: [linhaRow(4, false, ['A1', 'B1'])], error: null })
+        const r = await resolverObservacoesPlanosPorGrupo(cats)
+        expect(r.porGrupo['10']).toEqual([{ titulo: 'T4', mensagem: 'M4' }])
+        expect(r.porGrupo['20']).toEqual([{ titulo: 'T4', mensagem: 'M4' }])
+        expect(r.gerais).toEqual([])
     })
 
     it('ignora linhas desmarcadas, apenasLoja e não selecionáveis', async () => {

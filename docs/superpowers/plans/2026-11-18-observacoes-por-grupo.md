@@ -4,7 +4,7 @@
 
 **Goal:** Cadastrar observações como "geral" e imprimir, nos PDFs de Planos e Honorários, um bloco "Informações" no fim do cartão de cada grupo (observações ligadas aos procedimentos marcados daquele grupo), deixando na última página só as gerais.
 
-**Architecture:** Coluna `geral` nas duas tabelas de observações; funções puras de distribuição (primeiro grupo vence) e de medição/partição do bloco; um módulo de desenho compartilhado do bloco; os geradores recebem `observacoesPorGrupo` (por chave de grupo) além das `observacoes` gerais já existentes (páginas dinâmicas do fim).
+**Architecture:** Coluna `geral` nas duas tabelas de observações; funções puras de distribuição (uma vez por grupo em que se aplica) e de medição/partição do bloco; um módulo de desenho compartilhado do bloco; os geradores recebem `observacoesPorGrupo` (por chave de grupo) além das `observacoes` gerais já existentes (páginas dinâmicas do fim).
 
 **Tech Stack:** React, Supabase (migração SQL), pdf-lib, vitest.
 
@@ -15,7 +15,7 @@
 - Trabalhar no worktree `C:/Users/loopy/Documents/GitHub/Emerdog_SFSC_SUPERTOOL-obs` (branch `feat/observacoes-por-grupo`); `node_modules` é junção para a pasta principal — não reinstalar. Testes: `npx vitest run <arquivo>` (no worktree funciona; na pasta principal o vitest está quebrado por motivo ambiental).
 - Coluna `geral boolean not null default false` em `planos_observacoes` e `honorarios_observacoes` (migração em `supabase/migrations/` + `.rollback.sql`). **Não aplicar a migração** nem tocar o Supabase ao vivo — só com aprovação do usuário (Task 7). Antes da migração, tudo deve funcionar com `geral = false`: se o `select` falhar por coluna ausente (código `42703` ou mensagem citando `geral`), refazer o `select` sem `geral` e tratar todas como `geral: false`.
 - Chave de grupo: Planos = `String(categoria.id)`; Honorários = `String(secao.categoriaNome || secao.nome || 'Categoria')` (função `chaveGrupoHonorarios` exportada de `honorariosObservacoes.js` e usada pelo gerador).
-- Cada observação vai só para o **primeiro grupo** (na ordem em que os grupos aparecem no PDF) que tenha algum procedimento **marcado** ligado a ela; observação `geral` nunca vai para um grupo; observação não-geral nunca vai para a última página; inativa não sai; ligada só a procedimentos não impressos não sai.
+- Cada observação vai para **cada grupo** que tenha algum procedimento **marcado** ligado a ela, uma vez por grupo (regra corrigida em 18/11/2026); observação `geral` nunca vai para um grupo; observação não-geral nunca vai para a última página; inativa não sai; ligada só a procedimentos não impressos não sai.
 - Geral: salvar sem exigir procedimentos (e removendo vínculos existentes). Não geral: continua exigindo ao menos um procedimento.
 - Bloco "Informações" dentro do cartão arredondado: separador azul-claro, título "Informações" em negrito centralizado, itens com o formato existente das observações (`N) Título: corpo`, com links), cores/fontes do estilo compartilhado (`src/lib/pdf/estiloTabelaPdf.js`: azul `#1E3148`, raio 14, `CARD_PADDING_BOTTOM`). Sem observações no grupo → cartão idêntico ao atual.
 - Descontos não muda (já tem o próprio bloco). Não unificar as duas telas de cadastro.
@@ -24,7 +24,7 @@
 
 ## Review Focus
 
-- Observação ligada a procedimentos de dois grupos → aparece só no primeiro (teste na Task 1).
+- Observação ligada a procedimentos de dois grupos → aparece em cada um, uma vez por grupo (teste na Task 1).
 - Grupo sem observações → nenhum bloco, altura 0, cartão como hoje (teste na Task 4; verificação manual nas Tasks 5/6).
 - Observação geral inativa, ou ligada só a procedimentos desmarcados/não impressos → não sai (testes nas Tasks 1 e 2).
 - Bloco maior que o espaço restante → quantos itens cabem e continuação na página seguinte sem cortar item (teste na Task 4).
@@ -62,7 +62,7 @@
   - `chaveGrupoHonorarios(secao): string`.
   - As funções antigas `resolverMensagensObservacoesPorCategorias`/`…PorSecoes` permanecem exportadas (usadas até as Tasks 5–6 trocarem os chamadores).
 
-- [ ] **Step 1: Write the failing tests** (cada arquivo, com `vi.mock` do cliente Supabase usado pelo módulo): (a) `listar…` mapeia `geral: true/false` quando a coluna existe; (b) primeiro `select` falha com `{ code: '42703' }` → refaz sem `geral` e devolve `geral: false` em todos; (c) `salvar…({ geral: true, codigosProcedimentos: [] })` não retorna o erro "Vincule ao menos um procedimento", e não-geral com lista vazia continua retornando esse erro; (d) `resolverObservacoes…` devolve geral só em `gerais`, vinculada ao primeiro grupo em `porGrupo`, e `{ porGrupo: {}, gerais: [] }` quando `listar…` falha.
+- [ ] **Step 1: Write the failing tests** (cada arquivo, com `vi.mock` do cliente Supabase usado pelo módulo): (a) `listar…` mapeia `geral: true/false` quando a coluna existe; (b) primeiro `select` falha com `{ code: '42703' }` → refaz sem `geral` e devolve `geral: false` em todos; (c) `salvar…({ geral: true, codigosProcedimentos: [] })` não retorna o erro "Vincule ao menos um procedimento", e não-geral com lista vazia continua retornando esse erro; (d) `resolverObservacoes…` devolve geral só em `gerais`, vinculada ao grupo dos seus procedimentos em `porGrupo`, e `{ porGrupo: {}, gerais: [] }` quando `listar…` falha.
 - [ ] **Step 2: Run** os dois arquivos de teste → FAIL.
 - [ ] **Step 3: Implement** as mudanças das duas bibliotecas (manter o padrão de erros/`isMissingTableError` existente; Honorários e Planos ficam paralelos).
 - [ ] **Step 4: Run** os testes → PASS; `npx eslint src/lib/impressaoPlanos src/lib/impressaoHonorarios`.
@@ -131,5 +131,5 @@
 ### Task 7: Migração, verificação e entrega
 
 - [ ] **Step 1:** **Perguntar ao usuário** antes de aplicar `20261118120000_observacoes_geral.sql` no Supabase Emerdog-SuperTool; aplicar via MCP só com o OK explícito. Conferir depois as colunas nas duas tabelas e que as 14 + 8 observações existentes ficaram com `geral = false`.
-- [ ] **Step 2:** Verificação manual (controlador): cadastrar uma observação geral em cada tela; gerar PDF de Planos e de Honorários com observações em dois grupos, um grupo sem observações, uma geral; conferir bloco dentro do cartão, "só no primeiro grupo", última página só com a geral e as páginas fixas do modelo quando não há geral.
+- [ ] **Step 2:** Verificação manual (controlador): cadastrar uma observação geral em cada tela; gerar PDF de Planos e de Honorários com observações em dois grupos, um grupo sem observações, uma geral; conferir bloco dentro do cartão, "em cada grupo aplicável", última página só com a geral e as páginas fixas do modelo quando não há geral.
 - [ ] **Step 3:** `npx vitest run`, `npx eslint src`, `npx vite build`, `graphify update .`; aplicar os commits na pasta principal do usuário (cherry-pick para `feat/conferencia-lab-memoria`) quando ele aprovar.

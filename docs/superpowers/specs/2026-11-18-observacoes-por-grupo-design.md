@@ -8,7 +8,7 @@ Hoje as observações vinculadas a procedimentos saem todas juntas nas páginas 
 ## Objetivos
 - Campo explícito `geral` no cadastro de observações de **Planos** e de **Honorários** (tabelas `planos_observacoes` e `honorarios_observacoes`).
 - Telas de cadastro: caixa "Observação geral (vai na última página)"; marcada, o vínculo com procedimentos deixa de ser obrigatório/oculta o seletor; a lista mostra a etiqueta "Geral".
-- PDF: bloco "Informações" no fim do cartão de cada grupo, com as observações ativas ligadas a procedimentos **marcados** daquele grupo; cada observação aparece só no **primeiro grupo** (na ordem do PDF) em que se aplica.
+- PDF: bloco "Informações" no fim do cartão de cada grupo, com as observações ativas ligadas a procedimentos **marcados** daquele grupo; cada observação aparece em **cada grupo** em que se aplica (uma vez por grupo; vários procedimentos do mesmo grupo valem uma única vez) — regra corrigida pelo usuário em 18/11/2026.
 - Última página/páginas dinâmicas: apenas observações **gerais** ativas. Sem nenhuma geral → mantém as páginas fixas do modelo (comportamento de hoje quando não há observações).
 - Observação vinculada a procedimentos não impressos continua não saindo (como hoje).
 
@@ -16,7 +16,6 @@ Hoje as observações vinculadas a procedimentos saem todas juntas nas páginas 
 - Não mudar o PDF de Descontos (já tem o bloco).
 - Não unificar as duas telas de cadastro em um componente (edição paralela, nenhuma reescrita).
 - Observação geral **não** aparece dentro dos grupos; observação vinculada **não** aparece na última página.
-- Não repetir o mesmo texto em dois grupos.
 
 ## Abordagens consideradas
 - **A — coluna `geral` + bloco dentro do cartão (escolhida).**
@@ -29,7 +28,7 @@ Hoje as observações vinculadas a procedimentos saem todas juntas nas páginas 
 **Bibliotecas** (`src/lib/impressaoPlanos/planosObservacoes.js`, `src/lib/impressaoHonorarios/honorariosObservacoes.js`):
 - `mapearObservacao` passa a ler `geral`; os selects incluem `geral` (com tolerância se a coluna ainda não existir: tratar como `false`, sem quebrar a tela antes da migração).
 - `salvarPlanosObservacao`/`salvarHonorariosObservacao`: aceita `geral`; se `geral`, **não** exige vínculo e grava sem vínculos (apaga os existentes); se não geral, mantém "vincule ao menos um procedimento".
-- Nova função de resolução por grupo (pura sobre a lista já carregada, com a parte de banco isolada): `resolverObservacoesPorGrupo(grupos, observacoes)` → `{ porGrupo: Array<Array<{titulo, mensagem}>>, gerais: Array<{titulo, mensagem}> }`, na ordem `ordem`/`id`; grupo = categoria (Planos) ou seção (Honorários) com os códigos dos procedimentos marcados; cada observação vai para o primeiro grupo que tiver algum dos códigos vinculados.
+- Nova função de resolução por grupo (pura sobre a lista já carregada, com a parte de banco isolada): `resolverObservacoesPorGrupo(grupos, observacoes)` → `{ porGrupo: Array<Array<{titulo, mensagem}>>, gerais: Array<{titulo, mensagem}> }`, na ordem `ordem`/`id`; grupo = categoria (Planos) ou seção (Honorários) com os códigos dos procedimentos marcados; cada observação vai para cada grupo que tiver algum dos códigos vinculados (uma vez por grupo).
 
 **PDF** (módulo compartilhado `src/lib/pdf/blocoInformacoesPdf.js`, extraído do que o Descontos já faz — `medirBlocoInformacoes`/`desenharInformacoes` — para uso nos três geradores, sem alterar a saída do Descontos): o bloco entra depois da última linha do grupo, dentro do cartão (separador azul-claro, título "Informações" em negrito centralizado, itens numerados "1- …", mesmas fontes/cores do estilo compartilhado). A paginação trata o bloco como parte do grupo: se não couber no resto da página, o cartão continua na página seguinte com o título do grupo repetido e o bloco lá. A cálculo de fim de cartão e o cursor `y` do grupo passam a incluir a altura do bloco.
 - `gerarImpressaoPlanosPdf` recebe `observacoesPorGrupo` e `observacoesGerais`; `gerarImpressaoHonorariosPdf` idem. As páginas dinâmicas do fim (já existentes em `observacoesModeloPdf.js`) recebem só as gerais; sem gerais → páginas fixas do modelo.

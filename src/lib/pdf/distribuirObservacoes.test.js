@@ -21,14 +21,35 @@ function obs(extra) {
 }
 
 describe('distribuirObservacoes', () => {
-    it('observacao ligada a dois grupos vai so ao primeiro', () => {
+    it('observacao ligada a procedimentos de dois grupos aparece em cada um (uma vez por grupo)', () => {
         const r = distribuirObservacoes({
             grupos,
             observacoes: [obs({ codigosProcedimentos: ['B1', 'A1'] })],
         })
-        expect(r.porGrupo.g1).toHaveLength(1)
-        expect(r.porGrupo.g2).toBeUndefined()
+        expect(r.porGrupo.g1).toEqual([{ titulo: 'T', mensagem: 'M' }])
+        expect(r.porGrupo.g2).toEqual([{ titulo: 'T', mensagem: 'M' }])
+        expect(r.porGrupo.g3).toBeUndefined()
         expect(r.gerais).toEqual([])
+    })
+
+    it('varios procedimentos do mesmo grupo valem uma unica vez naquele grupo', () => {
+        const r = distribuirObservacoes({
+            grupos,
+            observacoes: [obs({ codigosProcedimentos: ['A1', 'A2'] })],
+        })
+        expect(r.porGrupo.g1).toHaveLength(1)
+        expect(Object.keys(r.porGrupo)).toEqual(['g1'])
+    })
+
+    it('tres procedimentos em tres grupos: aparece tres vezes, uma por grupo, na ordem dos grupos', () => {
+        const r = distribuirObservacoes({
+            grupos,
+            observacoes: [obs({ codigosProcedimentos: ['C1', 'A1', 'B1'] })],
+        })
+        expect(Object.keys(r.porGrupo)).toEqual(['g1', 'g2', 'g3'])
+        for (const chave of ['g1', 'g2', 'g3']) {
+            expect(r.porGrupo[chave]).toEqual([{ titulo: 'T', mensagem: 'M' }])
+        }
     })
 
     it('geral ativa vai so para gerais, mesmo com codigos', () => {
