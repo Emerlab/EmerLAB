@@ -30,6 +30,7 @@ import { filtrarPorTermoBusca, normalizarTextoBusca } from '../../../lib/prestad
 import '../../Credenciamento/Credenciamento_main/Credenciamento_main.css'
 import '../../Supertabela/Supertabela_planos/Supertabelaplanos.css'
 import './ImpressaoPlanos.css'
+import PainelZipPlanos from './PainelZipPlanos.jsx'
 import CelulaRealizadores, { obterClasseProcedimento } from './CelulaRealizadores.jsx'
 import { procedimentoIsentoLimiteGrupo } from '../../../lib/categoriaLimitesGrupo.js'
 import { SelectDropdown } from '../../../components/ui/Dropdown.jsx'
@@ -93,6 +94,9 @@ export default function ImpressaoPlanos() {
     const [categorias, setCategorias] = useState([])
     const [modoInfo, setModoInfo] = useState(null)
     const [avisoModo, setAvisoModo] = useState('')
+    const [planosDisponiveis, setPlanosDisponiveis] = useState([])
+    const [versaoModos, setVersaoModos] = useState(0)
+    const [revisarPlanoId, setRevisarPlanoId] = useState('')
     const [ordenColuna, setOrdenColuna] = useState('codigo')
     const [ordenDir, setOrdenDir] = useState('asc')
     const tabelaMobile = useMatchMedia('(max-width: 1023px)')
@@ -166,6 +170,35 @@ export default function ImpressaoPlanos() {
     const cidadeTabelaId = municipioSelecionado?.cidadeTabelaId ?? null
 
     useEffect(() => {
+        let cancelado = false
+        if (!cidadeTabelaId) {
+            setPlanosDisponiveis([])
+            return undefined
+        }
+        const run = async () => {
+            const resultados = await Promise.all(
+                planosImpressao.map(async (p) => {
+                    try {
+                        const ids = await buscarCidadeIdsFiltroPlanoCredenciados(
+                            supabase,
+                            p.id,
+                            buscarTodosPaginado,
+                        )
+                        return ids.has(cidadeTabelaId) ? p : null
+                    } catch {
+                        return null
+                    }
+                }),
+            )
+            if (!cancelado) setPlanosDisponiveis(resultados.filter(Boolean))
+        }
+        void run()
+        return () => {
+            cancelado = true
+        }
+    }, [cidadeTabelaId, planosImpressao])
+
+    useEffect(() => {
         if (!uf) {
             setMunicipiosIbge([])
             setMunicipioNome('')
@@ -207,6 +240,7 @@ export default function ImpressaoPlanos() {
                 const info = await salvarModoImpressaoPlanos(planoId, cidadeTabelaId, cats)
                 setModoInfo(info)
                 setAvisoModo('')
+                setVersaoModos((v) => v + 1)
                 return info
             } catch (e) {
                 if (!silencioso) {
@@ -297,6 +331,19 @@ export default function ImpressaoPlanos() {
         planosTodos,
         cancelarSaveModoPendente,
     ])
+
+    // "Revisar" no painel: define o plano e, quando o estado já reflete a escolha,
+    // dispara o fluxo normal de carregar (carregarLista lê planoId do estado).
+    const revisarPlano = useCallback((id) => {
+        setPlanoId(String(id))
+        setRevisarPlanoId(String(id))
+    }, [])
+
+    useEffect(() => {
+        if (!revisarPlanoId || String(planoId) !== revisarPlanoId) return
+        setRevisarPlanoId('')
+        void carregarLista()
+    }, [revisarPlanoId, planoId, carregarLista])
 
     const toggleLinha = (categoriaId, linhaKey) => {
         setCategorias((prev) =>
@@ -580,6 +627,19 @@ export default function ImpressaoPlanos() {
                 {incluirCidadesParalelas ? ' + paralelas' : ''}). O modo marcado fica salvo para a equipe
                 neste plano e cidade.
             </p>
+
+            {cidadeTabelaId ? (
+                <PainelZipPlanos
+                    cidadeTabelaId={cidadeTabelaId}
+                    municipioNome={municipioNome}
+                    cidadeNome={municipioNome}
+                    incluirCidadesParalelas={incluirCidadesParalelas}
+                    planosLista={planosTodos.length ? planosTodos : planos}
+                    planosDisponiveis={planosDisponiveis}
+                    onRevisar={revisarPlano}
+                    versaoModos={versaoModos}
+                />
+            ) : null}
 
             {erro ? <p className="planos_impressao_erro">{erro}</p> : null}
             {avisoModo ? <p className="planos_impressao_aviso_modo">{avisoModo}</p> : null}
