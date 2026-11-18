@@ -30,6 +30,7 @@ import { filtrarPorTermoBusca, normalizarTextoBusca } from '../../../lib/prestad
 import '../../Credenciamento/Credenciamento_main/Credenciamento_main.css'
 import '../../Supertabela/Supertabela_planos/Supertabelaplanos.css'
 import './ImpressaoPlanos.css'
+import { carregarDisponibilidadePlanos } from '../../../lib/impressaoPlanos/disponibilidadePlanos.js'
 import PainelZipPlanos from './PainelZipPlanos.jsx'
 import CelulaRealizadores, { obterClasseProcedimento } from './CelulaRealizadores.jsx'
 import { procedimentoIsentoLimiteGrupo } from '../../../lib/categoriaLimitesGrupo.js'
@@ -94,7 +95,7 @@ export default function ImpressaoPlanos() {
     const [categorias, setCategorias] = useState([])
     const [modoInfo, setModoInfo] = useState(null)
     const [avisoModo, setAvisoModo] = useState('')
-    const [planosDisponiveis, setPlanosDisponiveis] = useState([])
+    const [disponibilidade, setDisponibilidade] = useState(null)
     const [versaoModos, setVersaoModos] = useState(0)
     const [revisarPlanoId, setRevisarPlanoId] = useState('')
     const [ordenColuna, setOrdenColuna] = useState('codigo')
@@ -171,32 +172,27 @@ export default function ImpressaoPlanos() {
 
     useEffect(() => {
         let cancelado = false
-        if (!cidadeTabelaId) {
-            setPlanosDisponiveis([])
-            return undefined
-        }
+        setDisponibilidade(null)
+        if (!cidadeTabelaId) return undefined
         const run = async () => {
-            const resultados = await Promise.all(
-                planosImpressao.map(async (p) => {
-                    try {
-                        const ids = await buscarCidadeIdsFiltroPlanoCredenciados(
-                            supabase,
-                            p.id,
-                            buscarTodosPaginado,
-                        )
-                        return ids.has(cidadeTabelaId) ? p : null
-                    } catch {
-                        return null
-                    }
-                }),
-            )
-            if (!cancelado) setPlanosDisponiveis(resultados.filter(Boolean))
+            const r = await carregarDisponibilidadePlanos({
+                planos: planosImpressao,
+                cidadeTabelaId,
+                buscarCidadeIds: (idPlano) =>
+                    buscarCidadeIdsFiltroPlanoCredenciados(supabase, idPlano, buscarTodosPaginado),
+            })
+            if (!cancelado) setDisponibilidade({ cidadeId: cidadeTabelaId, ...r })
         }
         void run()
         return () => {
             cancelado = true
         }
     }, [cidadeTabelaId, planosImpressao])
+
+    // Só vale a disponibilidade calculada para a cidade atual (nunca a de outra).
+    const disponibilidadePronta = disponibilidade?.cidadeId === cidadeTabelaId
+    const planosDisponiveis = disponibilidadePronta ? disponibilidade.disponiveis : []
+    const planosComFalha = disponibilidadePronta ? disponibilidade.comFalha : []
 
     useEffect(() => {
         if (!uf) {
@@ -636,6 +632,8 @@ export default function ImpressaoPlanos() {
                     incluirCidadesParalelas={incluirCidadesParalelas}
                     planosLista={planosTodos.length ? planosTodos : planos}
                     planosDisponiveis={planosDisponiveis}
+                    planosComFalha={planosComFalha}
+                    disponibilidadeCarregando={!disponibilidadePronta}
                     onRevisar={revisarPlano}
                     versaoModos={versaoModos}
                 />

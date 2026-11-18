@@ -5,6 +5,7 @@ import {
     registrarGeracaoZip,
 } from '../../../lib/impressaoPlanos/geracoesZipPlanos.js'
 import { calcularStatusZipPlanos } from '../../../lib/impressaoPlanos/statusZipPlanos.js'
+import { decidirBloqueioZip } from '../../../lib/impressaoPlanos/disponibilidadePlanos.js'
 import { gerarZipPlanosCidade } from '../../../lib/impressaoPlanos/gerarZipPlanosCidade.js'
 
 function formatarDataHora(iso) {
@@ -36,6 +37,8 @@ export default function PainelZipPlanos({
     incluirCidadesParalelas,
     planosLista,
     planosDisponiveis,
+    planosComFalha = [],
+    disponibilidadeCarregando = false,
     onRevisar,
     versaoModos = 0,
 }) {
@@ -105,7 +108,14 @@ export default function PainelZipPlanos({
         [planosDisponiveis, modos, ultimaGeracao],
     )
 
-    const bloqueado = !status.podeGerar || Boolean(erroCarga) || carregando
+    const decisao = decidirBloqueioZip({
+        status,
+        carregando,
+        erroCarga,
+        disponibilidadeCarregando,
+        planosComFalha,
+    })
+    const bloqueado = decisao.bloqueado
 
     const baixarTodos = async () => {
         if (gerandoRef.current || bloqueado) return
@@ -154,7 +164,10 @@ export default function PainelZipPlanos({
                 <p className="planos_impressao_erro planos_impressao_zip_msg">{erroCarga}</p>
             ) : null}
 
-            {!carregando && status.linhas.length === 0 ? (
+            {!carregando &&
+            !disponibilidadeCarregando &&
+            planosComFalha.length === 0 &&
+            status.linhas.length === 0 ? (
                 <p className="planos_impressao_zip_info">Nenhum plano disponível nesta cidade.</p>
             ) : null}
 
@@ -211,8 +224,8 @@ export default function PainelZipPlanos({
                     >
                         {gerando ? 'Gerando zip…' : 'Baixar todos (.zip)'}
                     </button>
-                    {!status.podeGerar && status.motivoBloqueio && !carregando ? (
-                        <span className="planos_impressao_zip_motivo">{status.motivoBloqueio}</span>
+                    {decisao.mensagem ? (
+                        <span className="planos_impressao_zip_motivo">{decisao.mensagem}</span>
                     ) : null}
                 </div>
             </div>
