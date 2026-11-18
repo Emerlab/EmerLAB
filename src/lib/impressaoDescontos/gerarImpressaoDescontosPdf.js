@@ -36,6 +36,8 @@ const ROW_TEXT_INSET = 14
 const LINE_LEADING = 12
 const SUB_LEADING = 10
 const TITULO_SUB_GAP = 14
+/** Largura útil de quebra da coluna Serviço: usada na medição e no desenho. */
+const ROW_TEXT_WIDTH_PAD = ROW_TEXT_INSET + 6
 const FONT_SIZE_SUB = 7.5
 const FONT_SIZE_INFO = 10
 const FONT_SIZE_STAMP = 7
@@ -202,8 +204,8 @@ function montarLinhasImpressao(itens = []) {
 
 function medirAlturaLinha(linha, fonts, colServicoW) {
     const corpo = fontCorpo(fonts)
-    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, colServicoW - 12)
-    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, colServicoW - 12)
+    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, colServicoW - ROW_TEXT_WIDTH_PAD)
+    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, colServicoW - ROW_TEXT_WIDTH_PAD)
     const hTexto =
         Math.max(1, linhasTitulo.length) * LINE_LEADING +
         Math.max(1, linhasSub.length) * SUB_LEADING +
@@ -338,8 +340,8 @@ function desenharLinha(page, fonts, layout, yTop, linha, zebra, primeiraDoBloco)
         desenharDivisoria(page, { x: MARGIN_X, innerW, y: yTop })
     }
 
-    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, widths[0] - ROW_TEXT_INSET - 6)
-    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, widths[0] - ROW_TEXT_INSET - 6)
+    const linhasTitulo = quebrarTexto(linha.titulo, corpo, FONT_SIZE_BODY, widths[0] - ROW_TEXT_WIDTH_PAD)
+    const linhasSub = quebrarTexto(linha.subtitulo, fonts.regular, FONT_SIZE_SUB, widths[0] - ROW_TEXT_WIDTH_PAD)
     const tituloDraw = linhasTitulo.length ? linhasTitulo : ['—']
     const subDraw = linhasSub.length ? linhasSub : ['—']
 
