@@ -9,8 +9,8 @@ import { resolverCidadeTabelaRepassesHonorarios } from './resolverCidadeTabelaHo
 import {
     carregarMapaNomesAlternativosPrestador,
     nomeParaHonorariosPdf,
-    resolverVeterinarioIdsParaPrestador,
 } from '../prestadorNomeAlternativo.js'
+import { negociacoesVetDoPrestador } from '../negociacaoVinculo.js'
 
 const CATEGORIA_SERVICO_MIN = 3
 const CATEGORIA_SERVICO_MAX = 25
@@ -40,26 +40,19 @@ async function carregarProcedimentosPorCodigos(codigos) {
     return rows
 }
 
-/** Negociação só pelos veterinarios com prestador_id = cadastro (nunca pelo id do prestador). */
+/** Valores negociados do prestador (filtra por negociacoes_vet.prestador_id). */
 async function temNegociacaoVet(prestadorId) {
-    if (!prestadorId) return false
-    const vetIds = await resolverVeterinarioIdsParaPrestador(prestadorId)
-    if (!vetIds.length) return false
-    const { count, error } = await supabase
-        .from('negociacoes_vet')
-        .select('id', { count: 'exact', head: true })
-        .in('veterinario_id', vetIds)
+    const consulta = negociacoesVetDoPrestador(prestadorId, 'id', { count: 'exact', head: true })
+    if (!consulta) return false
+    const { count, error } = await consulta
     if (error) throw new Error(error.message)
     return (count || 0) > 0
 }
 
 async function mapaValoresNegociacao(prestadorId, procedimentos) {
-    const vetIds = await resolverVeterinarioIdsParaPrestador(prestadorId)
-    if (!vetIds.length) return new Map()
-    const { data, error } = await supabase
-        .from('negociacoes_vet')
-        .select('procedimento_id, porte_id, valor')
-        .in('veterinario_id', vetIds)
+    const consulta = negociacoesVetDoPrestador(prestadorId, 'procedimento_id, porte_id, valor')
+    if (!consulta) return new Map()
+    const { data, error } = await consulta
     if (error) throw new Error(error.message)
 
     const porId = new Map(procedimentos.map((p) => [Number(p.id), p]))

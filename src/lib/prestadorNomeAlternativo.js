@@ -6,6 +6,7 @@ import {
     normalizarPrestadorIdParaQuery,
     setPrestadorProcedimentosTemNomeAlternativo,
 } from './prestadorProcedimentos.js'
+import { negociacoesVetDoPrestador } from './negociacaoVinculo.js'
 
 const normalizarCodigo = (cod) =>
     String(cod || '')
@@ -67,13 +68,10 @@ async function mapaCodigoPorProcedimentoId(ids) {
 
 /** Preenche mapa a partir de `negociacoes_vet` (valores já existentes na negociação). */
 async function mesclarNomesAlternativosNegociacao(mapa, prestadorId) {
-    const vetIds = await resolverVeterinarioIdsParaPrestador(prestadorId)
-    if (!vetIds.length) return
+    const consulta = negociacoesVetDoPrestador(prestadorId, 'procedimento_id, nome_alternativo')
+    if (!consulta) return
 
-    const { data: negRows, error: errNeg } = await supabase
-        .from('negociacoes_vet')
-        .select('procedimento_id, nome_alternativo')
-        .in('veterinario_id', vetIds)
+    const { data: negRows, error: errNeg } = await consulta
     if (errNeg || !negRows?.length) return
 
     const altPorProcId = new Map()
@@ -194,20 +192,12 @@ export async function salvarNomeAlternativoPrestadorProcedimento(prestadorId, pr
 
     if (!procedimento_id) return
 
-    const vetIds = await resolverVeterinarioIdsParaPrestador(pid)
-    for (const vetId of vetIds) {
-        const { count } = await supabase
-            .from('negociacoes_vet')
-            .select('id', { count: 'exact', head: true })
-            .eq('veterinario_id', vetId)
-        if ((count || 0) === 0) continue
-        const { error: errNeg } = await supabase
-            .from('negociacoes_vet')
-            .update({ nome_alternativo: valorDb })
-            .eq('veterinario_id', vetId)
-            .eq('procedimento_id', procedimento_id)
-        if (errNeg) throw new Error(errNeg.message)
-    }
+    const { error: errNeg } = await supabase
+        .from('negociacoes_vet')
+        .update({ nome_alternativo: valorDb })
+        .eq('prestador_id', pid)
+        .eq('procedimento_id', procedimento_id)
+    if (errNeg) throw new Error(errNeg.message)
 }
 
 /** Nome exibido em honorários / PDF: alternativo se houver, senão catálogo. */

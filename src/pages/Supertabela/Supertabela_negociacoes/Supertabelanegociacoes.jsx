@@ -113,7 +113,6 @@ const normalizarNumeroEntrada = (valorTexto) => {
 const Supertabelanegociacoes = () => {
     const telaPequena = useTelaPequena()
     const [somenteLeitura] = useState(() => getReadOnlyFlag() || !hasStoredPermission(PERMISSION_KEYS.SUPERTABELA_EDIT))
-    const mostrarColunaVinculoLista = true
     const [cidades, setCidades] = useState([])
     const [planos, setPlanos] = useState([])
     const [portes, setPortes] = useState([])
@@ -173,7 +172,6 @@ const Supertabelanegociacoes = () => {
     const [confirmacaoExclusao, setConfirmacaoExclusao] = useState(null)
 
     useConfirmacaoExclusaoAutoDismiss(confirmacaoExclusao, setConfirmacaoExclusao)
-    const [salvandoVinculoListaId, setSalvandoVinculoListaId] = useState(null)
 
     const cidadePorId = useMemo(
         () => new Map(cidades.map((cidade) => [String(cidade.id), cidade])),
@@ -451,13 +449,19 @@ const Supertabelanegociacoes = () => {
                     (cidadeIdTabela != null ? mapaCidades.get(String(cidadeIdTabela)) : null) ||
                     '-'
 
+                // Com prestador vinculado, nome e especialidade vêm do cadastro (a cópia em
+                // veterinarios é só fallback para negociações sem vínculo).
+                const especialidadePrestador = prestador
+                    ? mapaEspLista.get(Number(prestador.especialidade_id))
+                    : null
+
                 return {
                     id: item.id,
-                    nome: item.nome,
+                    nome: prestador?.nome || item.nome,
                     cidadeId: item.cidade_id,
                     cidadeIdTabela: cidadeIdTabela ?? item.cidade_id,
                     cidadeNome,
-                    tipo: item.tipo || '-',
+                    tipo: especialidadePrestador || item.tipo || '-',
                     prestadorId: item.prestador_id != null ? Number(item.prestador_id) : null,
                     prestadorVinculoNome: rotuloPrestadorLista(prestador),
                     procedimentosAtivos: mapaProcedimentosAtivos.get(Number(item.id))?.size || 0 }
@@ -593,9 +597,12 @@ const Supertabelanegociacoes = () => {
                 }
             })
 
-            const prestadorIdMapaAlt =
-                negociacaoItem.prestadorId != null ? Number(negociacaoItem.prestadorId) : negociacaoItem.id
-            const mapaAltCadastro = await carregarMapaNomesAlternativosPrestador(prestadorIdMapaAlt)
+            // negociacaoItem.id é veterinarios.id (NEGOCIAÇÃO), nunca prestadores.id:
+            // sem prestador vinculado não há nomes alternativos de cadastro a carregar.
+            const mapaAltCadastro =
+                negociacaoItem.prestadorId != null
+                    ? await carregarMapaNomesAlternativosPrestador(Number(negociacaoItem.prestadorId))
+                    : new Map()
             for (const linha of mapaLinhas.values()) {
                 const cod = String(linha.codigo || '')
                     .trim()
@@ -1198,27 +1205,31 @@ const Supertabelanegociacoes = () => {
     const importarProcedimentosPrestadorNaNegociacao = async (veterinarioId, prestadorId) => {
         const pid = Number(prestadorId)
         const vid = Number(veterinarioId)
-        if (!pid || !vid) return 0
+        const resultado = { inseridos: 0, total: 0, semCatalogo: [], falhou: false }
+        if (!pid || !vid) return resultado
         let codigos = []
         try {
             codigos = await carregarCodigosPrestadorProcedimentos(pid)
         } catch {
-            return 0
+            return { ...resultado, falhou: true }
         }
+        resultado.total = codigos.length
         const mapaProc = new Map(
             procedimentos.map((p) => [normalizarTexto(p.codigo), p])
         )
-        let inseridos = 0
         for (const cod of codigos) {
             const proc = mapaProc.get(normalizarTexto(cod))
-            if (!proc) continue
+            if (!proc) {
+                resultado.semCatalogo.push(cod)
+                continue
+            }
             const r = await inserirProcedimentoNaNegociacao(proc, {
                 silencioso: true,
                 semRecarregar: true,
                 veterinarioId: vid })
-            if (r.status === 'ok') inseridos += 1
+            if (r.status === 'ok') resultado.inseridos += 1
         }
-        return inseridos
+        return resultado
     }
 
     const criarNegociacao = async () => {
@@ -1240,6 +1251,23 @@ const Supertabelanegociacoes = () => {
 
         setLoading(true)
         try {
+            // Um prestador tem uma única negociação (ativa ou inativa).
+            if (prestadorSel) {
+                const { data: jaExiste } = await supabase
+                    .from('veterinarios')
+                    .select('id, nome, ativo')
+                    .eq('prestador_id', Number(prestadorSel.id))
+                    .limit(1)
+                if (jaExiste?.length) {
+                    mostrarErroToast(
+                        jaExiste[0].ativo === false
+                            ? `Este prestador já tem uma negociação inativa (“${jaExiste[0].nome}”). Reative-a em vez de criar outra.`
+                            : `Este prestador já tem a negociação “${jaExiste[0].nome}”.`,
+                    )
+                    return
+                }
+            }
+
             let payload = {
                 nome,
                 cidade_id: cidadeIdNum,
@@ -1265,9 +1293,15 @@ const Supertabelanegociacoes = () => {
             }
 
             if (prestadorSel) {
-                const qtd = await importarProcedimentosPrestadorNaNegociacao(data.id, prestadorSel.id)
-                if (qtd > 0) {
-                    mostrarErroToast(`${qtd} procedimento(s) importado(s) do perfil do prestador.`)
+                const imp = await importarProcedimentosPrestadorNaNegociacao(data.id, prestadorSel.id)
+                if (imp.falhou) {
+                    mostrarErroToast('Negociação criada, mas não foi possível ler os procedimentos do perfil do prestador.')
+                } else if (imp.total > 0) {
+                    const avisos = [`${imp.inseridos} de ${imp.total} procedimento(s) do perfil importado(s)`]
+                    if (imp.semCatalogo.length > 0) {
+                        avisos.push(`${imp.semCatalogo.length} sem correspondência no catálogo: ${imp.semCatalogo.join(', ')}`)
+                    }
+                    mostrarErroToast(`${avisos.join(' · ')}.`)
                 }
             }
 
@@ -1320,54 +1354,22 @@ const Supertabelanegociacoes = () => {
         }
         setLoading(true)
         try {
-            const qtd = await importarProcedimentosPrestadorNaNegociacao(negociacaoSelecionada.id, pid)
+            const imp = await importarProcedimentosPrestadorNaNegociacao(negociacaoSelecionada.id, pid)
             await carregarDetalheNegociacao(negociacaoSelecionada)
             await carregarBase()
-            if (qtd > 0) {
-                mostrarErroToast(`${qtd} procedimento(s) importado(s) do perfil do prestador.`)
+            if (imp.falhou) {
+                mostrarErroToast('Não foi possível ler os procedimentos do perfil do prestador.')
+            } else if (imp.inseridos > 0) {
+                const avisos = [`${imp.inseridos} procedimento(s) importado(s) do perfil do prestador`]
+                if (imp.semCatalogo.length > 0) {
+                    avisos.push(`${imp.semCatalogo.length} sem correspondência no catálogo: ${imp.semCatalogo.join(', ')}`)
+                }
+                mostrarErroToast(`${avisos.join(' · ')}.`)
             } else {
                 mostrarErroToast('Nenhum procedimento novo foi importado (perfil vazio ou já na tabela).')
             }
         } finally {
             setLoading(false)
-        }
-    }
-
-    const salvarVinculoPrestadorNaLista = async (negociacaoItem, prestadorSelecionado) => {
-        if (bloquearSeSomenteLeitura(mostrarErroToast)) return
-        if (!suportaPrestadorId) {
-            mostrarErroToast('Execute o script SQL veterinarios_prestador_id no Supabase para vincular prestadores.')
-            return
-        }
-        const novoId = prestadorSelecionado ? Number(prestadorSelecionado.id) : null
-        if (Number(negociacaoItem.prestadorId) === novoId) return
-
-        setSalvandoVinculoListaId(negociacaoItem.id)
-        try {
-            let { error } = await supabase
-                .from('veterinarios')
-                .update({ prestador_id: novoId })
-                .eq('id', negociacaoItem.id)
-
-            if (error && /prestador_id/i.test(error.message || '')) {
-                mostrarErroToast(`Erro ao salvar vínculo: ${error.message}`)
-                return
-            }
-            if (error) {
-                mostrarErroToast(`Erro ao salvar vínculo: ${error.message}`)
-                return
-            }
-
-            const rotulo = prestadorSelecionado ? rotuloOpcaoPrestador(prestadorSelecionado) : ''
-            setNegociacoes((anteriores) =>
-                anteriores.map((n) =>
-                    Number(n.id) === Number(negociacaoItem.id)
-                        ? { ...n, prestadorId: novoId, prestadorVinculoNome: rotulo }
-                        : n,
-                ),
-            )
-        } finally {
-            setSalvandoVinculoListaId(null)
         }
     }
 
@@ -1380,21 +1382,25 @@ const Supertabelanegociacoes = () => {
         }
 
         let cidadeIdSalvar = Number(editarCidadeId)
+        let nomeSalvar = nome
         if (suportaPrestadorId && editarPrestadorId) {
             const prestadorEd =
                 prestadoresParaVinculo.find((p) => String(p.id) === String(editarPrestadorId)) || null
             const cidTab = resolverIdTabelaCidade(prestadorEd, editarCidadeId)
             if (cidTab) cidadeIdSalvar = cidTab
+            // O nome do cadastro do prestador prevalece sobre o digitado.
+            if (prestadorEd?.nome) nomeSalvar = String(prestadorEd.nome).trim() || nome
         }
 
         setLoading(true)
         try {
             let payload = {
-                nome,
+                nome: nomeSalvar,
                 cidade_id: cidadeIdSalvar }
             if (suportaTipo) payload = { ...payload, tipo: String(editarTipo || '').trim() || '-' }
-            if (suportaPrestadorId) {
-                payload.prestador_id = editarPrestadorId ? Number(editarPrestadorId) : null
+            // Negociação que já tem prestador nunca troca de vínculo; só vincula se ainda não houver.
+            if (suportaPrestadorId && negociacaoSelecionada.prestadorId == null && editarPrestadorId) {
+                payload.prestador_id = Number(editarPrestadorId)
             }
 
             let { error } = await supabase.from('veterinarios').update(payload).eq('id', negociacaoSelecionada.id)
@@ -1716,12 +1722,13 @@ const Supertabelanegociacoes = () => {
                     <h3>Gerenciar negociação</h3>
                     <div className='supertabelanegociacoes_form_grid'>
                         <label>
-                            <span>Nome</span>
+                            <span>Nome{editarPrestadorId ? ' (do cadastro do prestador)' : ''}</span>
                             <input
                                 type='text'
                                 value={editarNome}
                                 onChange={(event) => setEditarNome(event.target.value)}
                                 placeholder='Nome da negociação'
+                                readOnly={Boolean(editarPrestadorId)}
                             />
                         </label>
                         <label>
@@ -1740,24 +1747,34 @@ const Supertabelanegociacoes = () => {
                             />
                         </label>
                         <label>
-                            <span>Tipo</span>
+                            <span>Tipo{negociacaoSelecionada.prestadorId != null ? ' (especialidade do cadastro)' : ''}</span>
                             <input
                                 type='text'
                                 value={editarTipo}
                                 onChange={(event) => setEditarTipo(event.target.value)}
                                 placeholder={suportaTipo ? 'Tipo da negociação' : 'Sem suporte a coluna tipo'}
-                                disabled={!suportaTipo}
+                                disabled={!suportaTipo || negociacaoSelecionada.prestadorId != null}
                             />
                         </label>
                         <label className='supertabelanegociacoes_form_full'>
                             <span>Clínica / prestador vinculado</span>
-                            <PrestadorVinculoBusca
-                                prestadores={prestadoresParaVinculo}
-                                prestadorId={editarPrestadorId}
-                                rotuloFn={rotuloOpcaoPrestador}
-                                disabled={!suportaPrestadorId}
-                                onChange={(p) => setEditarPrestadorId(p ? String(p.id) : '')}
-                            />
+                            {negociacaoSelecionada.prestadorId != null ? (
+                                // Vínculo é definido na criação e não pode ser trocado.
+                                <input
+                                    type='text'
+                                    value={negociacaoSelecionada.prestadorVinculoNome || ''}
+                                    readOnly
+                                    disabled
+                                />
+                            ) : (
+                                <PrestadorVinculoBusca
+                                    prestadores={prestadoresParaVinculo}
+                                    prestadorId={editarPrestadorId}
+                                    rotuloFn={rotuloOpcaoPrestador}
+                                    disabled={!suportaPrestadorId}
+                                    onChange={(p) => setEditarPrestadorId(p ? String(p.id) : '')}
+                                />
+                            )}
                             {!suportaPrestadorId && (
                                 <small style={{ opacity: 0.85 }}>
                                     Execute o script SQL `veterinarios_prestador_id` no Supabase para persistir o vínculo.
@@ -1864,26 +1881,9 @@ ou um código por linha`}
                             <div className='supertabelanegociacoes_lista_table_wrap'>
                             <table className='table_main tabela-cartoes'>
                                 <colgroup>
-                                    <col
-                                        style={{
-                                            width: mostrarColunaVinculoLista
-                                                ? '22%'
-                                                : somenteLeitura
-                                                  ? '38%'
-                                                  : '32%' }}
-                                    />
+                                    <col style={{ width: somenteLeitura ? '38%' : '32%' }} />
                                     <col style={{ width: '14%' }} />
-                                    <col
-                                        style={{
-                                            width: mostrarColunaVinculoLista
-                                                ? '18%'
-                                                : somenteLeitura
-                                                  ? '48%'
-                                                  : '46%' }}
-                                    />
-                                    {mostrarColunaVinculoLista && (
-                                        <col style={{ width: somenteLeitura ? '46%' : '38%' }} />
-                                    )}
+                                    <col style={{ width: somenteLeitura ? '48%' : '46%' }} />
                                     {!somenteLeitura && <col style={{ width: '8%' }} />}
                                 </colgroup>
                                 <thead>
@@ -1906,15 +1906,6 @@ ou um código por linha`}
                                     >
                                         Cidade{obterIndicadorOrdenacaoLista('cidadeNome')}
                                     </th>
-                                    {mostrarColunaVinculoLista && (
-                                        <th
-                                            className='table_header'
-                                            onClick={() => handleOrdenarListaNegociacoes('prestadorVinculoNome')}
-                                        >
-                                            Prestador vinculado
-                                            {obterIndicadorOrdenacaoLista('prestadorVinculoNome')}
-                                        </th>
-                                    )}
                                     {!somenteLeitura && (
                                         <th className='table_header table_header_no_sort'>Ações</th>
                                     )}
@@ -1941,44 +1932,6 @@ ou um código por linha`}
                                         >
                                             {item.cidadeNome}
                                         </td>
-                                        {mostrarColunaVinculoLista && (
-                                            <td
-                                                className='table_text_left supertabelanegociacoes_lista_vinculo_cell'
-                                                onClick={(event) => event.stopPropagation()}
-                                            >
-                                                {somenteLeitura ? (
-                                                    <span className='supertabelanegociacoes_vinculo_readonly'>
-                                                        {item.prestadorVinculoNome?.trim()
-                                                            ? item.prestadorVinculoNome
-                                                            : '—'}
-                                                    </span>
-                                                ) : (
-                                                    <PrestadorVinculoBusca
-                                                        usePortal
-                                                        titleValor={item.prestadorVinculoNome || ''}
-                                                        prestadores={prestadoresParaVinculo}
-                                                        prestadorId={
-                                                            item.prestadorId != null
-                                                                ? String(item.prestadorId)
-                                                                : ''
-                                                        }
-                                                        rotuloFn={rotuloOpcaoPrestador}
-                                                        disabled={
-                                                            !suportaPrestadorId ||
-                                                            salvandoVinculoListaId === item.id
-                                                        }
-                                                        placeholder={
-                                                            salvandoVinculoListaId === item.id
-                                                                ? 'A guardar…'
-                                                                : 'Buscar prestador…'
-                                                        }
-                                                        onChange={(p) =>
-                                                            void salvarVinculoPrestadorNaLista(item, p)
-                                                        }
-                                                    />
-                                                )}
-                                            </td>
-                                        )}
                                         {!somenteLeitura && (
                                             <td>
                                                 <button
@@ -1998,10 +1951,7 @@ ou um código por linha`}
                                     {!loading && negociacoesListaPaginada.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={
-                                                    (somenteLeitura ? 3 : 4) +
-                                                    (mostrarColunaVinculoLista ? 1 : 0)
-                                                }
+                                                colSpan={somenteLeitura ? 3 : 4}
                                             >
                                                 Nenhuma negociação encontrada.
                                             </td>
@@ -2035,54 +1985,12 @@ ou um código por linha`}
                                                     <span className='supertabelanegociacoes_card_label'>Cidade</span>
                                                     <span>{item.cidadeNome || '—'}</span>
                                                 </span>
-                                                {mostrarColunaVinculoLista ? (
-                                                    <span className='supertabelanegociacoes_card_meta'>
-                                                        <span className='supertabelanegociacoes_card_label'>
-                                                            Prestador
-                                                        </span>
-                                                        <span>
-                                                            {item.prestadorVinculoNome?.trim()
-                                                                ? item.prestadorVinculoNome
-                                                                : '—'}
-                                                        </span>
-                                                    </span>
-                                                ) : null}
                                             </button>
                                             {!somenteLeitura ? (
                                                 <div
                                                     className='supertabelanegociacoes_card_footer'
                                                     onClick={(event) => event.stopPropagation()}
                                                 >
-                                                    {mostrarColunaVinculoLista ? (
-                                                        <div className='supertabelanegociacoes_card_vinculo'>
-                                                            <span className='supertabelanegociacoes_card_label'>
-                                                                Vincular prestador
-                                                            </span>
-                                                            <PrestadorVinculoBusca
-                                                                usePortal
-                                                                titleValor={item.prestadorVinculoNome || ''}
-                                                                prestadores={prestadoresParaVinculo}
-                                                                prestadorId={
-                                                                    item.prestadorId != null
-                                                                        ? String(item.prestadorId)
-                                                                        : ''
-                                                                }
-                                                                rotuloFn={rotuloOpcaoPrestador}
-                                                                disabled={
-                                                                    !suportaPrestadorId ||
-                                                                    salvandoVinculoListaId === item.id
-                                                                }
-                                                                placeholder={
-                                                                    salvandoVinculoListaId === item.id
-                                                                        ? 'A guardar…'
-                                                                        : 'Buscar prestador…'
-                                                                }
-                                                                onChange={(p) =>
-                                                                    void salvarVinculoPrestadorNaLista(item, p)
-                                                                }
-                                                            />
-                                                        </div>
-                                                    ) : null}
                                                     <button
                                                         type='button'
                                                         className='table_delete_btn supertabelanegociacoes_card_delete'
