@@ -1539,6 +1539,45 @@ body.dark-mode .supertabelaplanos_sugestoes_rede_vazio {
     padding-right: 2px;
 }
 
+/* Valor em até 2 linhas; o que passar vira «…» e o texto inteiro fica na dica (title). */
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid #8ab9d8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.875rem;
+    cursor: text;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel:focus-visible {
+    outline: 2px solid #1f7ec2;
+    outline-offset: 1px;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz textarea.supertabelaplanos_matriz_textarea {
+    height: 42px;
+    padding: 3px 6px;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.25;
+    font-family: inherit;
+}
+
 .supertabelaplanos .supertabelaplanos_matriz .table_cell_input_text {
     width: 100%;
     min-width: 0;
@@ -1642,6 +1681,23 @@ body.dark-mode .supertabelaplanos .supertabelaplanos_matriz.table_main td.supert
 
     .supertabelaplanos .supertabelaplanos_matriz .table_cell_input_text {
         height: 2.75rem;
+        font-size: 1rem;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz textarea.supertabelaplanos_matriz_textarea {
+        height: 3.5rem;
+        max-width: 58%;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor {
+        width: 100%;
+        text-align: center;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel {
+        flex: 1;
+        max-width: 58%;
+        min-height: 2.75rem;
         font-size: 1rem;
     }
 

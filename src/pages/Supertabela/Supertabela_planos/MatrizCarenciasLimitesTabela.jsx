@@ -24,6 +24,7 @@ export default function MatrizCarenciasLimitesTabela({
     classeNome,
 }) {
     const [rascunhos, setRascunhos] = useState({})
+    const [editando, setEditando] = useState(null)
 
     const confirmar = async (linha, chave, campo) => {
         const chaveRascunho = `${linha.codigo}|${chave}|${campo}`
@@ -60,7 +61,9 @@ export default function MatrizCarenciasLimitesTabela({
                         duplicada ? ' supertabelaplanos_celula_acima_dup' : ''
                     }`}
                 >
-                    <span>{celula[campo]}</span>
+                    <span className='supertabelaplanos_matriz_valor' title={celula[campo]}>
+                        {celula[campo]}
+                    </span>
                 </td>
             )
         }
@@ -88,24 +91,60 @@ export default function MatrizCarenciasLimitesTabela({
                 data-label={rotulo}
                 className={`supertabelaplanos_td_centro${vazio ? ' supertabelaplanos_celula_vazia' : ''}`}
             >
-                {edicaoAtiva ? (
-                    <input
-                        className='table_cell_input_text'
-                        type='text'
+                {edicaoAtiva && editando === chaveRascunho ? (
+                    <textarea
+                        className='table_cell_input_text supertabelaplanos_matriz_textarea'
+                        rows={2}
+                        autoFocus
                         aria-label={`${rotuloCampo} ${ROTULO_PLANO[chave]} — ${linha.codigo}`}
                         value={rascunhos[chaveRascunho] ?? valorGravado}
-                        title={rascunhos[chaveRascunho] ?? valorGravado}
                         onChange={(event) =>
-                            setRascunhos((anterior) => ({ ...anterior, [chaveRascunho]: event.target.value }))
+                            setRascunhos((anterior) => ({
+                                ...anterior,
+                                [chaveRascunho]: event.target.value.replace(/\s*\n\s*/g, ' '),
+                            }))
                         }
-                        onBlur={() => confirmar(linha, chave, campo)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault()
+                                event.currentTarget.blur()
+                            } else if (event.key === 'Escape') {
+                                event.preventDefault()
+                                setRascunhos((anterior) => {
+                                    const copia = { ...anterior }
+                                    delete copia[chaveRascunho]
+                                    return copia
+                                })
+                                setEditando(null)
+                            }
+                        }}
+                        onBlur={() => {
+                            const pendente = confirmar(linha, chave, campo)
+                            setEditando(null)
+                            return pendente
+                        }}
                         onPaste={(event) => {
                             event.preventDefault()
                             onColar(secao.linhas, linhaIndex, chave, campo, event.clipboardData?.getData('text') || '')
                         }}
                     />
+                ) : edicaoAtiva ? (
+                    <div
+                        className='supertabelaplanos_matriz_valor_editavel'
+                        role='textbox'
+                        tabIndex={0}
+                        aria-label={`${rotuloCampo} ${ROTULO_PLANO[chave]} — ${linha.codigo}`}
+                        title={rascunhos[chaveRascunho] ?? valorGravado}
+                        onFocus={() => setEditando(chaveRascunho)}
+                    >
+                        <span className='supertabelaplanos_matriz_valor'>
+                            {rascunhos[chaveRascunho] ?? (valorGravado || '\u00a0')}
+                        </span>
+                    </div>
                 ) : (
-                    <span>{valorGravado || ' '}</span>
+                    <span className='supertabelaplanos_matriz_valor' title={valorGravado}>
+                        {valorGravado || '\u00a0'}
+                    </span>
                 )}
             </td>
         )
