@@ -2190,6 +2190,7 @@ ou um código por linha`}
                 aberto={modalPdfHonorariosAberto}
                 onClose={() => setModalPdfHonorariosAberto(false)}
                 cidadeNome={cidadeSelecionada?.nome || ''}
+                cidadeId={cidadeId}
                 secoes={secoesPorCategoria}
                 onErro={(mensagem) => mostrarErroToast(mensagem)}
             />

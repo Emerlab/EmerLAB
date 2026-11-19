@@ -1,9 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
     downloadImpressaoHonorariosPdf,
     gerarImpressaoHonorariosPdf,
 } from '../../lib/impressaoHonorarios/gerarImpressaoHonorariosPdf.js'
 import { resolverObservacoesHonorariosPorSecoes } from '../../lib/impressaoHonorarios/honorariosObservacoes.js'
+import {
+    aplicarSelecaoModo,
+    buscarModoImpressaoHonorarios,
+    rotuloModoImpressaoHonorarios,
+    salvarModoImpressaoHonorarios,
+} from '../../lib/impressaoHonorarios/modoImpressaoHonorarios.js'
 import './ModalImpressaoHonorariosCidade.css'
 
 function formatarValorCelula(valor) {
@@ -66,7 +72,7 @@ function montarCategoriasIniciais(secoes) {
 /**
  * Modal de seleção de procedimentos para PDF de honorários (Supertabela Cidades).
  */
-export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidadeNome, secoes, onErro }) {
+export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidadeNome, cidadeId, secoes, onErro }) {
     const [categorias, setCategorias] = useState(() => montarCategoriasIniciais(secoes))
     const [ordenColuna, setOrdenColuna] = useState('codigo')
     const [ordenDir, setOrdenDir] = useState('asc')
@@ -74,16 +80,37 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
     const [avancadosAberto, setAvancadosAberto] = useState(false)
     const [dragIdx, setDragIdx] = useState(null)
     const [overIdx, setOverIdx] = useState(null)
+    const [modoInfo, setModoInfo] = useState(null)
+    // Contador de edições do usuário desde a abertura: busca tardia não sobrescreve edição.
+    const edicoesRef = useRef(0)
 
     useEffect(() => {
-        if (!aberto) return
+        edicoesRef.current = 0
+        setModoInfo(null)
+        if (!aberto) return undefined
         setCategorias(montarCategoriasIniciais(secoes))
         setOrdenColuna('codigo')
         setOrdenDir('asc')
         setAvancadosAberto(false)
         setDragIdx(null)
         setOverIdx(null)
-    }, [aberto, secoes])
+
+        let cancelado = false
+        if (cidadeId) {
+            void buscarModoImpressaoHonorarios(cidadeId)
+                .then((modo) => {
+                    if (cancelado || !modo || edicoesRef.current !== 0) return
+                    setCategorias(aplicarSelecaoModo(montarCategoriasIniciais(secoes), modo.selecao))
+                    setModoInfo(modo)
+                })
+                .catch(() => {
+                    // Falha na busca: segue sem modo, sem erro visível.
+                })
+        }
+        return () => {
+            cancelado = true
+        }
+    }, [aberto, secoes, cidadeId])
 
     const categoriasOrdenadas = useMemo(
         () =>
@@ -133,6 +160,7 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
     }
 
     const toggleLinha = (categoriaId, codigo) => {
+        edicoesRef.current += 1
         setCategorias((prev) =>
             prev.map((cat) => {
                 if (Number(cat.id) !== Number(categoriaId)) return cat
@@ -147,6 +175,7 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
     }
 
     const toggleTodasCategoria = (categoriaId, marcar) => {
+        edicoesRef.current += 1
         setCategorias((prev) =>
             prev.map((cat) => {
                 if (Number(cat.id) !== Number(categoriaId)) return cat
@@ -159,6 +188,7 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
     }
 
     const toggleGrupoAtivo = (categoriaId) => {
+        edicoesRef.current += 1
         setCategorias((prev) =>
             prev.map((cat) =>
                 Number(cat.id) === Number(categoriaId) ? { ...cat, ativa: cat.ativa === false } : cat,
@@ -168,6 +198,7 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
 
     const onDropCategoria = (paraIdx) => {
         if (dragIdx == null) return
+        edicoesRef.current += 1
         setCategorias((prev) => reordenarLista(prev, dragIdx, paraIdx))
         setDragIdx(null)
         setOverIdx(null)
@@ -197,6 +228,13 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
                 observacoesPorGrupo: porGrupo,
             })
             downloadImpressaoHonorariosPdf(blob, cidadeNome || 'Cidade')
+            if (cidadeId) {
+                try {
+                    await salvarModoImpressaoHonorarios(cidadeId, categorias)
+                } catch {
+                    onErro?.('PDF gerado, mas o modo da cidade não foi salvo.')
+                }
+            }
             onClose?.()
         } catch (error) {
             onErro?.(error?.message || 'Falha ao gerar PDF.')
@@ -233,6 +271,7 @@ export default function ModalImpressaoHonorariosCidade({ aberto, onClose, cidade
                         ? ` · ${totalGruposAtivos}/${categorias.length} grupo(s)`
                         : ''}
                 </p>
+                <p className="sih_modal_sub">{rotuloModoImpressaoHonorarios(modoInfo)}</p>
 
                 <div className={`sih_avancados${avancadosAberto ? ' is-open' : ''}`}>
                     <button
