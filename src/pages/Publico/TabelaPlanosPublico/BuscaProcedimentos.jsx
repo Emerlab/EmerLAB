@@ -4,10 +4,10 @@ import { IconeBusca } from './iconesTabelaPlanos.jsx'
 export default function BuscaProcedimentos({ valor, onChange, termosPopulares = [], desabilitado = false, resumo = '' }) {
     return (
         <div className="tp_busca" role="search">
-            <label className="ek-search tp_busca__campo">
-                <IconeBusca className="ek-search__icon" />
+            <label className="tp_busca__campo">
+                <IconeBusca className="tp_busca__icone" />
                 <input
-                    className="ek-input"
+                    className="tp_busca__input"
                     type="search"
                     inputMode="search"
                     autoComplete="off"

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
     filtrarGrupos,
     formatarReais,
+    contatosDistintos,
     hrefWhatsappTabela,
+    partesTextoObservacao,
     procedimentoBateConsulta,
     totalProcedimentos,
     trechosComDestaque,
@@ -87,5 +89,49 @@ describe('mock no formato da API', () => {
         expect(t.observacoes_gerais.every((id) => t.observacoes[id])).toBe(true)
         await expect(c.tabela({ cidade: 3, plano: 'ultra' })).rejects.toMatchObject({ codigo: 'plano_indisponivel_na_cidade' })
         expect((await c.prestadores({ cidade: 1, procedimento: 'CON001' })).total).toBe(7)
+    })
+})
+
+describe('partesTextoObservacao', () => {
+    it('separa **negrito** do texto, sem os asteriscos', () => {
+        expect(partesTextoObservacao('Cancelamento **sem aviso de 24 horas** gera taxa.')).toEqual([
+            { tipo: 'texto', texto: 'Cancelamento ', negrito: false },
+            { tipo: 'texto', texto: 'sem aviso de 24 horas', negrito: true },
+            { tipo: 'texto', texto: ' gera taxa.', negrito: false },
+        ])
+    })
+
+    it('transforma URL em link e não leva a pontuação final', () => {
+        expect(partesTextoObservacao('Veja em https://emerdog.com.br.')).toEqual([
+            { tipo: 'texto', texto: 'Veja em ', negrito: false },
+            { tipo: 'link', texto: 'https://emerdog.com.br', href: 'https://emerdog.com.br', negrito: false },
+            { tipo: 'texto', texto: '.', negrito: false },
+        ])
+    })
+
+    it('link dentro do negrito continua sendo link e continua em negrito', () => {
+        expect(partesTextoObservacao('**Consulte https://emerdog.com.br**')).toEqual([
+            { tipo: 'texto', texto: 'Consulte ', negrito: true },
+            { tipo: 'link', texto: 'https://emerdog.com.br', href: 'https://emerdog.com.br', negrito: true },
+        ])
+    })
+
+    it('texto vazio ou nulo não gera partes e asterisco solto fica como texto', () => {
+        expect(partesTextoObservacao('')).toEqual([])
+        expect(partesTextoObservacao(null)).toEqual([])
+        expect(partesTextoObservacao('a * b')).toEqual([{ tipo: 'texto', texto: 'a * b', negrito: false }])
+    })
+})
+
+describe('contatosDistintos', () => {
+    it('não repete o mesmo número em telefone e celular', () => {
+        expect(contatosDistintos({ telefone: '(54) 99967-2810', celular: '(54) 99967-2810' })).toEqual(['(54) 99967-2810'])
+    })
+
+    it('mantém dois números diferentes, ignora vazios e formatação', () => {
+        expect(contatosDistintos({ telefone: '(54) 3291-6341', celular: '54 99967-2810' })).toEqual(['(54) 3291-6341', '54 99967-2810'])
+        expect(contatosDistintos({ telefone: '(54) 3000-0000', celular: '54 3000 0000' })).toEqual(['(54) 3000-0000'])
+        expect(contatosDistintos({ telefone: null, celular: '' })).toEqual([])
+        expect(contatosDistintos(undefined)).toEqual([])
     })
 })

@@ -110,7 +110,7 @@ A página mostra poucos prestadores por vez (4 ou 5), sorteados, para dar chance
 
 1. Guarde a lista de `GET /v1/planos/prestadores`.
 2. Embaralhe (Fisher–Yates) e pegue os 5 primeiros (todos, se houver menos de 5).
-3. Em "Sortear outros", exclua os já mostrados e sorteie de novo; quando os não vistos acabarem, recomece do conjunto completo.
+3. Em "Buscar mais", exclua os já mostrados e sorteie de novo; quando os não vistos acabarem, recomece do conjunto completo.
 
 ## Cache
 

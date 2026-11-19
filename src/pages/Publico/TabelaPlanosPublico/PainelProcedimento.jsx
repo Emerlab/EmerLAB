@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { sortearPrestadores } from '../../../lib/apiV1/sortearPrestadores.js'
-import { formatarReais, hrefWhatsappSemResultado } from './logicaTabelaPlanos.js'
-import { IconeFechar } from './iconesTabelaPlanos.jsx'
+import { contatosDistintos, formatarReais, hrefWhatsappSemResultado } from './logicaTabelaPlanos.js'
+import TextoObservacao from './TextoObservacao.jsx'
+import { IconeFechar, IconeWhatsapp } from './iconesTabelaPlanos.jsx'
 
 const FOCAVEIS = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -115,7 +116,9 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                         {obs.map((o) => (
                             <div key={o.id} className="tp_obs">
                                 {o.titulo ? <strong>{o.titulo}</strong> : null}
-                                <p>{o.mensagem}</p>
+                                <p>
+                                    <TextoObservacao texto={o.mensagem} />
+                                </p>
                             </div>
                         ))}
                     </section>
@@ -124,7 +127,7 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                 <section className="tp_painel__sec" aria-label="Onde fazer">
                     <h3 className="tp_painel__sub">
                         Onde fazer em {cidade.nome}
-                        {estado.status === 'ok' && estado.total > 0 ? <span className="ek-badge">{estado.total}</span> : null}
+                        {estado.status === 'ok' && estado.total > 0 ? <span className="tp_contagem">{estado.total}</span> : null}
                     </h3>
 
                     {estado.status === 'carregando' ? (
@@ -138,7 +141,7 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                     {estado.status === 'erro' ? (
                         <div className="tp_aviso" role="alert">
                             <p>{estado.mensagem || 'Não foi possível carregar os prestadores.'}</p>
-                            <button type="button" className="ek-btn ek-btn--secondary" onClick={() => setTentativa((t) => t + 1)}>
+                            <button type="button" className="tp_btn tp_btn--contorno" onClick={() => setTentativa((t) => t + 1)}>
                                 Tentar de novo
                             </button>
                         </div>
@@ -148,7 +151,7 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                         <div className="tp_aviso">
                             <p>Ainda não temos prestador para este procedimento nesta região. Fale com a gente que ajudamos a encontrar.</p>
                             <a
-                                className="ek-btn"
+                                className="tp_btn"
                                 href={hrefWhatsappSemResultado({ cidade, plano, assunto: procedimento.nome })}
                                 target="_blank"
                                 rel="noreferrer"
@@ -168,10 +171,14 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                                         {p.especialidade_principal ? <span className="tp_prestador__esp">{p.especialidade_principal}</span> : null}
                                         {p.endereco?.texto ? <span>{p.endereco.texto}</span> : null}
                                         <span className="tp_prestador__contatos">
-                                            {p.contatos?.telefone ? <span>{p.contatos.telefone}</span> : null}
-                                            {p.contatos?.celular ? <span>{p.contatos.celular}</span> : null}
+                                            {contatosDistintos(p.contatos).map((numero) => (
+                                                <a key={numero} className="tp_tel" href={`tel:+55${numero.replace(/\D/g, '')}`}>
+                                                    {numero}
+                                                </a>
+                                            ))}
                                             {p.contatos?.whatsapp_url ? (
-                                                <a href={p.contatos.whatsapp_url} target="_blank" rel="noreferrer">
+                                                <a className="tp_zap" href={p.contatos.whatsapp_url} target="_blank" rel="noreferrer">
+                                                    <IconeWhatsapp />
                                                     WhatsApp
                                                 </a>
                                             ) : null}
@@ -180,8 +187,8 @@ export default function PainelProcedimento({ procedimento, grupoNome, observacoe
                                 ))}
                             </ul>
                             {podeSortearMais ? (
-                                <button type="button" className="ek-btn ek-btn--secondary tp_sortear" onClick={sortearOutros}>
-                                    Sortear outros
+                                <button type="button" className="tp_btn tp_btn--contorno tp_sortear" onClick={sortearOutros}>
+                                    Buscar mais
                                 </button>
                             ) : null}
                         </>

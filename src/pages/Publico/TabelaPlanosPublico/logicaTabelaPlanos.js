@@ -74,3 +74,56 @@ export function hrefWhatsappSemResultado({ cidade, plano, assunto } = {}) {
     const qual = plano ? ` (plano ${plano.nome})` : ''
     return linkWhatsapp(WHATSAPP_NUMERO, `Olá! Vim pelo site e procurei por "${assunto || 'um procedimento'}"${onde}${qual}. Podem me ajudar?`)
 }
+
+const NEGRITO_OBSERVACAO = /\*\*([^*]+)\*\*/g
+const URL_OBSERVACAO = /https?:\/\/[^\s*]+/g
+
+/** Quebra um trecho em `texto` e `link`; a pontuação no fim da URL fica fora do link. */
+function partesComLinks(trecho, negrito) {
+    const partes = []
+    let fim = 0
+    const texto = (t) => {
+        if (t) partes.push({ tipo: 'texto', texto: t, negrito })
+    }
+    for (const m of trecho.matchAll(URL_OBSERVACAO)) {
+        texto(trecho.slice(fim, m.index))
+        const url = m[0].replace(/[.,;:!?)]+$/, '')
+        partes.push({ tipo: 'link', texto: url, href: url, negrito })
+        texto(m[0].slice(url.length))
+        fim = m.index + m[0].length
+    }
+    texto(trecho.slice(fim))
+    return partes
+}
+
+/**
+ * Quebra o texto de uma observação em partes (`texto` ou `link`), cada uma com `negrito: boolean`, no mesmo
+ * formato do PDF: `**negrito**` e URLs (um link pode estar dentro do negrito). Sem HTML: quem desenha usa só as partes.
+ * @returns {Array<{ tipo: 'texto'|'link', texto: string, href?: string, negrito: boolean }>}
+ */
+export function partesTextoObservacao(texto) {
+    const s = String(texto ?? '')
+    const partes = []
+    let fim = 0
+    for (const m of s.matchAll(NEGRITO_OBSERVACAO)) {
+        partes.push(...partesComLinks(s.slice(fim, m.index), false))
+        partes.push(...partesComLinks(m[1], true))
+        fim = m.index + m[0].length
+    }
+    partes.push(...partesComLinks(s.slice(fim), false))
+    return partes
+}
+
+/** Telefone e celular sem repetir o mesmo número (comparação só pelos dígitos); vazios saem. */
+export function contatosDistintos(contatos) {
+    const vistos = new Set()
+    const saida = []
+    for (const valor of [contatos?.telefone, contatos?.celular]) {
+        const texto = String(valor ?? '').trim()
+        const digitos = texto.replace(/\D/g, '')
+        if (!digitos || vistos.has(digitos)) continue
+        vistos.add(digitos)
+        saida.push(texto)
+    }
+    return saida
+}
