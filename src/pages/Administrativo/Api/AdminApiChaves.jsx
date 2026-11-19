@@ -15,7 +15,7 @@ import { LIMITE_PADRAO } from '../../../lib/apiV1/chavesAdminRegras.js'
 import { confirmarAcao } from '../../../lib/dialogos.js'
 import { useAutoDismiss } from '../../../lib/toastUi.js'
 
-const FORM_VAZIO = { nome: '', tipo: 'rede', origensTexto: '', ipsTexto: '', limite: '', expiraEm: '', escrita: false }
+const FORM_VAZIO = { nome: '', tipo: 'rede', origensTexto: '', ipsTexto: '', limite: '', expiraEm: '', escrita: false, rede: true, planos: false }
 const TONS = { ativa: 'ok', revogada: 'erro', expirada: 'warn' }
 const ROTULOS_ESTADO = { ativa: 'Ativa', revogada: 'Revogada', expirada: 'Expirada' }
 
@@ -25,6 +25,10 @@ function FormChave({ form, setForm, edicao = false, erro = '', onEditar }) {
     const campo = (nome) => (e) => {
         onEditar?.()
         setForm((f) => ({ ...f, [nome]: e.target.value }))
+    }
+    const marcar = (nome) => (e) => {
+        onEditar?.()
+        setForm((f) => ({ ...f, [nome]: e.target.checked }))
     }
     return (
         <div className="admin_api_form">
@@ -39,6 +43,19 @@ function FormChave({ form, setForm, edicao = false, erro = '', onEditar }) {
                     <option value="rede">Rede credenciada (navegador, exige origem)</option>
                     <option value="pagamentos">Pagamentos (servidor a servidor)</option>
                 </Select>
+            ) : null}
+            {form.tipo === 'rede' ? (
+                <fieldset className="admin_api_acessos">
+                    <legend>O que esta chave pode consultar</legend>
+                    <label className="ek-check">
+                        <input type="checkbox" checked={form.rede} onChange={marcar('rede')} />
+                        Rede credenciada (prestadores e filtros)
+                    </label>
+                    <label className="ek-check">
+                        <input type="checkbox" checked={form.planos} onChange={marcar('planos')} />
+                        Tabela de planos (procedimentos, carência, limite e quem realiza)
+                    </label>
+                </fieldset>
             ) : null}
             {form.tipo === 'rede' ? (
                 <Textarea

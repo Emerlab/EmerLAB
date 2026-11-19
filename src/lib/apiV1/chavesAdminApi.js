@@ -13,13 +13,21 @@ export function textoParaLista(texto) {
     return [...new Set(String(texto || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean))]
 }
 
+/** Chave de navegador: rede credenciada (padrão) e/ou tabela de planos. Nenhum marcado vira erro de validação. */
+function escoposDeRede(form) {
+    const escopos = []
+    if (form.rede !== false) escopos.push('rede:ler')
+    if (form.planos) escopos.push('planos:ler')
+    return escopos
+}
+
 /** Estado do formulário "Nova chave" no corpo de POST /admin/chaves. */
 export function montarPayloadChave(form = {}) {
     const tipo = form.tipo === 'pagamentos' ? 'pagamentos' : 'rede'
     const payload = {
         nome: String(form.nome || '').trim(),
         tipo,
-        escopos: tipo === 'rede' ? [ESCOPOS_POR_TIPO.rede[0]] : form.escrita ? [...ESCOPOS_POR_TIPO.pagamentos] : ['pagamentos:ler'],
+        escopos: tipo === 'rede' ? escoposDeRede(form) : form.escrita ? [...ESCOPOS_POR_TIPO.pagamentos] : ['pagamentos:ler'],
         origens_permitidas: tipo === 'rede' ? textoParaLista(form.origensTexto) : [],
     }
     const limite = String(form.limite ?? '').trim()
@@ -61,6 +69,8 @@ export function formDeChave(linha) {
         limite: String(linha.limite_por_minuto ?? ''),
         expiraEm: dataLocal(linha.expira_em),
         escrita: (linha.escopos || []).includes('pagamentos:escrever'),
+        rede: (linha.escopos || []).includes('rede:ler'),
+        planos: (linha.escopos || []).includes('planos:ler'),
     }
 }
 

@@ -119,3 +119,25 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+.admin_api_acessos {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.admin_api_acessos .ek-check {
+    min-width: 0;
+    align-items: flex-start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.admin_api_acessos legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-weight: 600;
+}

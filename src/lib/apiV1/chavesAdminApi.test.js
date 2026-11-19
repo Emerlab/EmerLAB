@@ -46,6 +46,15 @@ describe('montarPayloadChave', () => {
     })
 })
 
+describe('montarPayloadChave: acessos da chave de rede', () => {
+    it('planos:ler junto ou sozinho; nenhum acesso é erro de validação', () => {
+        const base = { nome: 'Site', tipo: 'rede', origensTexto: 'https://a.com' }
+        expect(montarPayloadChave({ ...base, planos: true }).escopos).toEqual(['rede:ler', 'planos:ler'])
+        expect(montarPayloadChave({ ...base, rede: false, planos: true }).escopos).toEqual(['planos:ler'])
+        expect(validarFormChave({ ...base, rede: false, planos: false }, { agora: AGORA }).ok).toBe(false)
+    })
+})
+
 describe('validarFormChave', () => {
     it('devolve o erro da regra compartilhada', () => {
         const r = validarFormChave({ nome: 'Site', tipo: 'rede', origensTexto: '' }, { agora: AGORA })
