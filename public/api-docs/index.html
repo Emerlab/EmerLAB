@@ -50,6 +50,7 @@ footer{padding-bottom:48px;color:var(--mudo);font-size:.9rem}
 <a href="#limites">Limites</a>
 <a href="#erros">Erros</a>
 <a href="#rede-credenciada">Rede credenciada</a>
+<a href="#tabela-de-planos">Tabela de planos</a>
 <a href="#pagamentos">Pagamentos</a>
 </nav>
 </header>
@@ -346,6 +347,136 @@ footer{padding-bottom:48px;color:var(--mudo);font-size:.9rem}
     }
   ]
 }</code></pre></td></tr><tr class="erro"><td><code>401</code></td><td>Chave ausente, desconhecida, revogada ou expirada (todas dão a mesma resposta).</td></tr><tr class="erro"><td><code>403</code></td><td>Chave válida, mas sem permissão para esta chamada: <code>escopo_insuficiente</code>, <code>origem_nao_permitida</code> (chave da rede com <code>Origin</code> ausente ou não cadastrado, ou chave de pagamentos com qualquer <code>Origin</code>) ou <code>ip_nao_permitido</code>.</td></tr><tr class="erro"><td><code>429</code></td><td>Limite de requisições por minuto da chave excedido. Espere <code>Retry-After</code> segundos.</td></tr><tr class="erro"><td><code>500</code></td><td>Falha inesperada no servidor. Sem detalhes na mensagem.</td></tr></tbody></table></div>
+</div>
+</details></section>
+<section id="tabela-de-planos"><h2>Tabela de planos</h2><p>Tabela pública de planos por cidade (valores, carências, limites, observações) e prestadores por procedimento. Escopo <code>planos:ler</code>, na chave da rede.</p><details class="op" id="filtrosplanos">
+<summary><span class="met met-get">GET</span> <code>/v1/planos/filtros</code> <span class="resumo">Cidades e planos disponíveis</span></summary>
+<div class="conteudo">
+<p>Cidades que têm tabela de planos, com os planos de cada uma, e os termos de busca populares. Use para montar os seletores de cidade e plano.</p>
+
+
+<h4>Exemplo</h4>
+<pre><code>curl &quot;https://api.emerlab.com.br/v1/planos/filtros&quot; \
+  -H &quot;Authorization: Bearer emer_rede_EXEMPLO_NAO_E_UMA_CHAVE&quot; \
+  -H &quot;Origin: https://www.exemplo.com.br&quot;</code></pre>
+<h4>Respostas</h4><div class="rolavel"><table><thead><tr><th>HTTP</th><th>Significado</th></tr></thead><tbody><tr class="ok"><td><code>200</code></td><td>Filtros.<p class="mini">Cabeçalhos: <code>Cache-Control</code>, <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code></p><pre><code>{
+  &quot;cidades&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;nome&quot;: &quot;Porto Alegre&quot;,
+      &quot;uf&quot;: &quot;RS&quot;,
+      &quot;planos&quot;: [
+        {
+          &quot;id&quot;: 1,
+          &quot;chave&quot;: &quot;basico&quot;,
+          &quot;nome&quot;: &quot;Básico&quot;
+        },
+        {
+          &quot;id&quot;: 2,
+          &quot;chave&quot;: &quot;classico&quot;,
+          &quot;nome&quot;: &quot;Clássico&quot;
+        }
+      ]
+    }
+  ],
+  &quot;termos_populares&quot;: [
+    &quot;Consulta&quot;,
+    &quot;Vacina&quot;,
+    &quot;Raio X&quot;
+  ]
+}</code></pre></td></tr><tr class="erro"><td><code>401</code></td><td>Chave ausente, desconhecida, revogada ou expirada (todas dão a mesma resposta).</td></tr><tr class="erro"><td><code>403</code></td><td>Chave válida, mas sem permissão para esta chamada: <code>escopo_insuficiente</code>, <code>origem_nao_permitida</code> (chave da rede com <code>Origin</code> ausente ou não cadastrado, ou chave de pagamentos com qualquer <code>Origin</code>) ou <code>ip_nao_permitido</code>.</td></tr><tr class="erro"><td><code>429</code></td><td>Limite de requisições por minuto da chave excedido. Espere <code>Retry-After</code> segundos.</td></tr><tr class="erro"><td><code>500</code></td><td>Falha inesperada no servidor. Sem detalhes na mensagem.</td></tr></tbody></table></div>
+</div>
+</details>
+<details class="op" id="tabelaplanos">
+<summary><span class="met met-get">GET</span> <code>/v1/planos/tabela</code> <span class="resumo">Tabela de um plano em uma cidade</span></summary>
+<div class="conteudo">
+<p>Procedimentos do plano na cidade, agrupados por categoria, com diferença de valor, carência, limite e observações. Só entram procedimentos que têm prestadores na região e que estão na seleção do site (ou da impressão, ou a regra de 3 ou mais prestadores). Cidade com plano mas sem procedimentos devolve <code>grupos: []</code>.</p>
+<h4>Parâmetros</h4><div class="rolavel"><table><thead><tr><th>Nome</th><th>Onde</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody><tr><td><code>cidade</code></td><td>query · obrigatório</td><td>integer</td><td>Id numérico da cidade (campo <code>id</code> de <code>/v1/planos/filtros</code>).</td></tr><tr><td><code>plano</code></td><td>query · obrigatório</td><td>string</td><td>Id do plano ou chave: <code>basico</code>, <code>classico</code>, <code>avancado</code>, <code>ultra</code>.</td></tr></tbody></table></div>
+
+<h4>Exemplo</h4>
+<pre><code>curl &quot;https://api.emerlab.com.br/v1/planos/tabela?cidade=1&amp;plano=basico&quot; \
+  -H &quot;Authorization: Bearer emer_rede_EXEMPLO_NAO_E_UMA_CHAVE&quot; \
+  -H &quot;Origin: https://www.exemplo.com.br&quot;</code></pre>
+<h4>Respostas</h4><div class="rolavel"><table><thead><tr><th>HTTP</th><th>Significado</th></tr></thead><tbody><tr class="ok"><td><code>200</code></td><td>Tabela.<p class="mini">Cabeçalhos: <code>Cache-Control</code>, <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code></p><pre><code>{
+  &quot;cidade&quot;: {
+    &quot;id&quot;: 1,
+    &quot;nome&quot;: &quot;Porto Alegre&quot;,
+    &quot;uf&quot;: &quot;RS&quot;
+  },
+  &quot;plano&quot;: {
+    &quot;id&quot;: 1,
+    &quot;chave&quot;: &quot;basico&quot;,
+    &quot;nome&quot;: &quot;Básico&quot;
+  },
+  &quot;origem_selecao&quot;: &quot;impressao&quot;,
+  &quot;grupos&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;nome&quot;: &quot;Consultas&quot;,
+      &quot;limite_grupo&quot;: null,
+      &quot;procedimentos&quot;: [
+        {
+          &quot;codigo&quot;: &quot;CONS-001&quot;,
+          &quot;nome&quot;: &quot;Consulta&quot;,
+          &quot;carencia&quot;: &quot;30 dias&quot;,
+          &quot;limite&quot;: &quot;2 por ano&quot;,
+          &quot;diferenca&quot;: 50,
+          &quot;realizadores&quot;: 12,
+          &quot;termos&quot;: [
+            &quot;consulta&quot;
+          ],
+          &quot;observacoes&quot;: [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  &quot;observacoes&quot;: {
+    &quot;1&quot;: {
+      &quot;id&quot;: 1,
+      &quot;titulo&quot;: &quot;Aviso&quot;,
+      &quot;mensagem&quot;: &quot;Texto de exemplo.&quot;,
+      &quot;geral&quot;: false
+    }
+  },
+  &quot;observacoes_gerais&quot;: []
+}</code></pre></td></tr><tr class="erro"><td><code>400</code></td><td>Parâmetro inválido (<code>cidade_invalida</code> ou <code>plano_invalido</code>).</td></tr><tr class="erro"><td><code>401</code></td><td>Chave ausente, desconhecida, revogada ou expirada (todas dão a mesma resposta).</td></tr><tr class="erro"><td><code>403</code></td><td>Chave válida, mas sem permissão para esta chamada: <code>escopo_insuficiente</code>, <code>origem_nao_permitida</code> (chave da rede com <code>Origin</code> ausente ou não cadastrado, ou chave de pagamentos com qualquer <code>Origin</code>) ou <code>ip_nao_permitido</code>.</td></tr><tr class="erro"><td><code>404</code></td><td>O plano não está disponível nesta cidade (<code>plano_indisponivel_na_cidade</code>).</td></tr><tr class="erro"><td><code>429</code></td><td>Limite de requisições por minuto da chave excedido. Espere <code>Retry-After</code> segundos.</td></tr><tr class="erro"><td><code>500</code></td><td>Falha inesperada no servidor. Sem detalhes na mensagem.</td></tr></tbody></table></div>
+</div>
+</details>
+<details class="op" id="prestadoresplanos">
+<summary><span class="met met-get">GET</span> <code>/v1/planos/prestadores</code> <span class="resumo">Prestadores de um procedimento na cidade</span></summary>
+<div class="conteudo">
+<p>Prestadores credenciados que realizam o procedimento e atendem a cidade (incluindo cidades vinculadas), ordenados por nome, no máximo 100. <code>total</code> informa quantos existem. Endereço só para estabelecimentos (tipo Local).</p>
+<h4>Parâmetros</h4><div class="rolavel"><table><thead><tr><th>Nome</th><th>Onde</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody><tr><td><code>cidade</code></td><td>query · obrigatório</td><td>integer</td><td>Id numérico da cidade (campo <code>id</code> de <code>/v1/planos/filtros</code>).</td></tr><tr><td><code>procedimento</code></td><td>query · obrigatório</td><td>string</td><td>Código do procedimento (maiúsculas e espaços são ignorados).</td></tr></tbody></table></div>
+
+<h4>Exemplo</h4>
+<pre><code>curl &quot;https://api.emerlab.com.br/v1/planos/prestadores?cidade=1&quot; \
+  -H &quot;Authorization: Bearer emer_rede_EXEMPLO_NAO_E_UMA_CHAVE&quot; \
+  -H &quot;Origin: https://www.exemplo.com.br&quot;</code></pre>
+<h4>Respostas</h4><div class="rolavel"><table><thead><tr><th>HTTP</th><th>Significado</th></tr></thead><tbody><tr class="ok"><td><code>200</code></td><td>Prestadores.<p class="mini">Cabeçalhos: <code>Cache-Control</code>, <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code></p><pre><code>{
+  &quot;total&quot;: 1,
+  &quot;prestadores&quot;: [
+    {
+      &quot;id&quot;: 123,
+      &quot;nome&quot;: &quot;Clínica Veterinária Exemplo&quot;,
+      &quot;especialidade_principal&quot;: &quot;Clínica&quot;,
+      &quot;cidade_principal&quot;: {
+        &quot;nome&quot;: &quot;Porto Alegre&quot;,
+        &quot;uf&quot;: &quot;RS&quot;
+      },
+      &quot;contatos&quot;: {
+        &quot;telefone&quot;: &quot;(51) 3000-0000&quot;,
+        &quot;celular&quot;: null,
+        &quot;whatsapp_url&quot;: null
+      },
+      &quot;endereco&quot;: {
+        &quot;texto&quot;: &quot;Rua das Flores, 100 - Centro&quot;
+      },
+      &quot;nome_alternativo&quot;: null
+    }
+  ]
+}</code></pre></td></tr><tr class="erro"><td><code>400</code></td><td>Parâmetro inválido (<code>cidade_invalida</code> ou <code>procedimento_invalido</code>).</td></tr><tr class="erro"><td><code>401</code></td><td>Chave ausente, desconhecida, revogada ou expirada (todas dão a mesma resposta).</td></tr><tr class="erro"><td><code>403</code></td><td>Chave válida, mas sem permissão para esta chamada: <code>escopo_insuficiente</code>, <code>origem_nao_permitida</code> (chave da rede com <code>Origin</code> ausente ou não cadastrado, ou chave de pagamentos com qualquer <code>Origin</code>) ou <code>ip_nao_permitido</code>.</td></tr><tr class="erro"><td><code>404</code></td><td>Procedimento não encontrado (<code>procedimento_nao_encontrado</code>).</td></tr><tr class="erro"><td><code>429</code></td><td>Limite de requisições por minuto da chave excedido. Espere <code>Retry-After</code> segundos.</td></tr><tr class="erro"><td><code>500</code></td><td>Falha inesperada no servidor. Sem detalhes na mensagem.</td></tr></tbody></table></div>
 </div>
 </details></section>
 <section id="pagamentos"><h2>Pagamentos</h2><p>Repasses a prestadores, para uso entre servidores. Escopos <code>pagamentos:ler</code> e <code>pagamentos:escrever</code>.</p><details class="op" id="listarregistros">

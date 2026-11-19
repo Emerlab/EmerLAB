@@ -74,7 +74,7 @@ describe('arquivos de documentação', () => {
     const docs = [...arquivos('docs/api'), ...arquivos('public/api-docs')]
 
     it('existem os guias e a página', () => {
-        for (const f of ['docs/api/README.md', 'docs/api/rede-credenciada.md', 'docs/api/pagamentos.md', 'public/api-docs/index.html']) {
+        for (const f of ['docs/api/README.md', 'docs/api/rede-credenciada.md', 'docs/api/planos.md', 'docs/api/pagamentos.md', 'public/api-docs/index.html']) {
             expect(existsSync(join(raiz, f)), f).toBe(true)
         }
     })

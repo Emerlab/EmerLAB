@@ -18,6 +18,10 @@
       "description": "Leitura pública da rede de credenciados. Escopo `rede:ler`."
     },
     {
+      "name": "Tabela de planos",
+      "description": "Tabela pública de planos por cidade (valores, carências, limites, observações) e prestadores por procedimento. Escopo `planos:ler`, na chave da rede."
+    },
+    {
       "name": "Pagamentos",
       "description": "Repasses a prestadores, para uso entre servidores. Escopos `pagamentos:ler` e `pagamentos:escrever`."
     }
@@ -1445,6 +1449,400 @@
           }
         }
       }
+    },
+    "/v1/planos/filtros": {
+      "get": {
+        "tags": [
+          "Tabela de planos"
+        ],
+        "operationId": "filtrosPlanos",
+        "summary": "Cidades e planos disponíveis",
+        "description": "Cidades que têm tabela de planos, com os planos de cada uma, e os termos de busca populares. Use para montar os seletores de cidade e plano.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtros.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre `public, s-maxage=300, stale-while-revalidate=3600`. Toda resposta traz `Vary: Origin, Authorization, X-Api-Key`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Limite de requisições por minuto desta chave.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 120
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requisições que ainda restam na janela atual de 1 minuto.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 117
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiltrosPlanos"
+                },
+                "example": {
+                  "cidades": [
+                    {
+                      "id": 1,
+                      "nome": "Porto Alegre",
+                      "uf": "RS",
+                      "planos": [
+                        {
+                          "id": 1,
+                          "chave": "basico",
+                          "nome": "Básico"
+                        },
+                        {
+                          "id": 2,
+                          "chave": "classico",
+                          "nome": "Clássico"
+                        }
+                      ]
+                    }
+                  ],
+                  "termos_populares": [
+                    "Consulta",
+                    "Vacina",
+                    "Raio X"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ChaveInvalida"
+          },
+          "403": {
+            "$ref": "#/components/responses/Proibido"
+          },
+          "429": {
+            "$ref": "#/components/responses/LimiteExcedido"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErroInterno"
+          }
+        }
+      }
+    },
+    "/v1/planos/tabela": {
+      "get": {
+        "tags": [
+          "Tabela de planos"
+        ],
+        "operationId": "tabelaPlanos",
+        "summary": "Tabela de um plano em uma cidade",
+        "description": "Procedimentos do plano na cidade, agrupados por categoria, com diferença de valor, carência, limite e observações. Só entram procedimentos que têm prestadores na região e que estão na seleção do site (ou da impressão, ou a regra de 3 ou mais prestadores). Cidade com plano mas sem procedimentos devolve `grupos: []`.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cidade",
+            "in": "query",
+            "required": true,
+            "description": "Id numérico da cidade (campo `id` de `/v1/planos/filtros`).",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          },
+          {
+            "name": "plano",
+            "in": "query",
+            "required": true,
+            "description": "Id do plano ou chave: `basico`, `classico`, `avancado`, `ultra`.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "basico"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tabela.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre `public, s-maxage=300, stale-while-revalidate=3600`. Toda resposta traz `Vary: Origin, Authorization, X-Api-Key`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Limite de requisições por minuto desta chave.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 120
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requisições que ainda restam na janela atual de 1 minuto.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 117
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TabelaPlanos"
+                },
+                "example": {
+                  "cidade": {
+                    "id": 1,
+                    "nome": "Porto Alegre",
+                    "uf": "RS"
+                  },
+                  "plano": {
+                    "id": 1,
+                    "chave": "basico",
+                    "nome": "Básico"
+                  },
+                  "origem_selecao": "impressao",
+                  "grupos": [
+                    {
+                      "id": 1,
+                      "nome": "Consultas",
+                      "limite_grupo": null,
+                      "procedimentos": [
+                        {
+                          "codigo": "CONS-001",
+                          "nome": "Consulta",
+                          "carencia": "30 dias",
+                          "limite": "2 por ano",
+                          "diferenca": 50,
+                          "realizadores": 12,
+                          "termos": [
+                            "consulta"
+                          ],
+                          "observacoes": [
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "observacoes": {
+                    "1": {
+                      "id": 1,
+                      "titulo": "Aviso",
+                      "mensagem": "Texto de exemplo.",
+                      "geral": false
+                    }
+                  },
+                  "observacoes_gerais": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetro inválido (`cidade_invalida` ou `plano_invalido`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "erro": {
+                    "codigo": "plano_invalido",
+                    "mensagem": "Parâmetro inválido (`cidade_invalida` ou `plano_invalido`)."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "O plano não está disponível nesta cidade (`plano_indisponivel_na_cidade`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "erro": {
+                    "codigo": "plano_indisponivel_na_cidade",
+                    "mensagem": "O plano não está disponível nesta cidade (`plano_indisponivel_na_cidade`)."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ChaveInvalida"
+          },
+          "403": {
+            "$ref": "#/components/responses/Proibido"
+          },
+          "429": {
+            "$ref": "#/components/responses/LimiteExcedido"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErroInterno"
+          }
+        }
+      }
+    },
+    "/v1/planos/prestadores": {
+      "get": {
+        "tags": [
+          "Tabela de planos"
+        ],
+        "operationId": "prestadoresPlanos",
+        "summary": "Prestadores de um procedimento na cidade",
+        "description": "Prestadores credenciados que realizam o procedimento e atendem a cidade (incluindo cidades vinculadas), ordenados por nome, no máximo 100. `total` informa quantos existem. Endereço só para estabelecimentos (tipo Local).",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cidade",
+            "in": "query",
+            "required": true,
+            "description": "Id numérico da cidade (campo `id` de `/v1/planos/filtros`).",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          },
+          {
+            "name": "procedimento",
+            "in": "query",
+            "required": true,
+            "description": "Código do procedimento (maiúsculas e espaços são ignorados).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "CONS-001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prestadores.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre `public, s-maxage=300, stale-while-revalidate=3600`. Toda resposta traz `Vary: Origin, Authorization, X-Api-Key`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Limite de requisições por minuto desta chave.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 120
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Requisições que ainda restam na janela atual de 1 minuto.",
+                "schema": {
+                  "type": "integer"
+                },
+                "example": 117
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrestadoresPlanos"
+                },
+                "example": {
+                  "total": 1,
+                  "prestadores": [
+                    {
+                      "id": 123,
+                      "nome": "Clínica Veterinária Exemplo",
+                      "especialidade_principal": "Clínica",
+                      "cidade_principal": {
+                        "nome": "Porto Alegre",
+                        "uf": "RS"
+                      },
+                      "contatos": {
+                        "telefone": "(51) 3000-0000",
+                        "celular": null,
+                        "whatsapp_url": null
+                      },
+                      "endereco": {
+                        "texto": "Rua das Flores, 100 - Centro"
+                      },
+                      "nome_alternativo": null
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetro inválido (`cidade_invalida` ou `procedimento_invalido`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "erro": {
+                    "codigo": "cidade_invalida",
+                    "mensagem": "Parâmetro inválido (`cidade_invalida` ou `procedimento_invalido`)."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Procedimento não encontrado (`procedimento_nao_encontrado`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erro"
+                },
+                "example": {
+                  "erro": {
+                    "codigo": "procedimento_nao_encontrado",
+                    "mensagem": "Procedimento não encontrado (`procedimento_nao_encontrado`)."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ChaveInvalida"
+          },
+          "403": {
+            "$ref": "#/components/responses/Proibido"
+          },
+          "429": {
+            "$ref": "#/components/responses/LimiteExcedido"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErroInterno"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2230,6 +2628,304 @@
           },
           "comprovante": {
             "$ref": "#/components/schemas/ComprovantePublico"
+          }
+        }
+      },
+      "FiltrosPlanos": {
+        "type": "object",
+        "required": [
+          "cidades",
+          "termos_populares"
+        ],
+        "properties": {
+          "cidades": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "nome",
+                "uf",
+                "planos"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "nome": {
+                  "type": "string"
+                },
+                "uf": {
+                  "type": "string"
+                },
+                "planos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "chave",
+                      "nome"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "chave": {
+                        "type": "string",
+                        "enum": [
+                          "basico",
+                          "classico",
+                          "avancado",
+                          "ultra"
+                        ]
+                      },
+                      "nome": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "termos_populares": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TabelaPlanos": {
+        "type": "object",
+        "required": [
+          "cidade",
+          "plano",
+          "origem_selecao",
+          "grupos",
+          "observacoes",
+          "observacoes_gerais"
+        ],
+        "properties": {
+          "cidade": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "type": "string"
+              },
+              "uf": {
+                "type": "string"
+              }
+            }
+          },
+          "plano": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "chave": {
+                "type": "string"
+              },
+              "nome": {
+                "type": "string"
+              }
+            }
+          },
+          "origem_selecao": {
+            "type": "string",
+            "enum": [
+              "site",
+              "impressao",
+              "padrao"
+            ],
+            "description": "De onde veio a seleção de procedimentos."
+          },
+          "grupos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "nome": {
+                  "type": "string"
+                },
+                "limite_grupo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "procedimentos": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "codigo": {
+                        "type": "string"
+                      },
+                      "nome": {
+                        "type": "string"
+                      },
+                      "carencia": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "limite": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "diferenca": {
+                        "type": "number",
+                        "description": "Valor em reais."
+                      },
+                      "realizadores": {
+                        "type": "integer"
+                      },
+                      "termos": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Termos de busca (sinônimos e nomes alternativos), sem acento e em minúsculas."
+                      },
+                      "observacoes": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "description": "Ids no dicionário `observacoes`."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "observacoes": {
+            "type": "object",
+            "description": "Dicionário id → observação.",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "titulo": {
+                  "type": "string"
+                },
+                "mensagem": {
+                  "type": "string"
+                },
+                "geral": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "observacoes_gerais": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Ids das observações que valem para toda a tabela."
+          }
+        }
+      },
+      "PrestadoresPlanos": {
+        "type": "object",
+        "required": [
+          "total",
+          "prestadores"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Quantos prestadores existem (a lista traz no máximo 100)."
+          },
+          "prestadores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "nome": {
+                  "type": "string"
+                },
+                "especialidade_principal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cidade_principal": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "nome": {
+                      "type": "string"
+                    },
+                    "uf": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "contatos": {
+                  "type": "object",
+                  "properties": {
+                    "telefone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "celular": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "whatsapp_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "endereco": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "texto": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "nome_alternativo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       }
