@@ -55,3 +55,48 @@ const isDuplicateConfigError = (error) => {
     const msg = String(error?.message || '').toLowerCase()
     return msg.includes('23505') || msg.includes('duplicate') || msg.includes('unique')
 }
+
+const buscarIdPlanoConfig = async (supabase, planoNum, variantes) => {
+    const { data, error } = await supabase
+        .from('planos_config')
+        .select('id')
+        .eq('plano_id', planoNum)
+        .in('procedimento', variantes)
+        .limit(1)
+
+    if (error) return { id: null, error }
+    return { id: data?.[0]?.id ?? null, error: null }
+}
+
+/** Cria ou atualiza limite/carência de um procedimento num plano (sem upsert/ON CONFLICT). */
+export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limite = '', carencia = '' }) => {
+    const planoNum = Number(planoId)
+    const variantes = variantesProcedimento(procedimento)
+    if (!variantes.length) {
+        return { status: 'erro', error: new Error('Código do procedimento inválido.') }
+    }
+    const procGravar = String(procedimento).trim().toUpperCase()
+
+    const atualizar = async (id) => {
+        const { error } = await supabase.from('planos_config').update({ limite, carencia }).eq('id', id)
+        return error ? { status: 'erro', error } : { status: 'atualizado', error: null }
+    }
+
+    const busca = await buscarIdPlanoConfig(supabase, planoNum, variantes)
+    if (busca.error) return { status: 'erro', error: busca.error }
+    if (busca.id != null) return atualizar(busca.id)
+
+    const { error: errInsert } = await supabase.from('planos_config').insert({
+        plano_id: planoNum,
+        procedimento: procGravar,
+        limite,
+        carencia,
+    })
+    if (!errInsert) return { status: 'criado', error: null }
+
+    if (isDuplicateConfigError(errInsert)) {
+        const nova = await buscarIdPlanoConfig(supabase, planoNum, variantes)
+        if (nova.id != null) return atualizar(nova.id)
+    }
+    return { status: 'erro', error: errInsert }
+}
