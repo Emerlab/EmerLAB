@@ -3,6 +3,7 @@ import {
     ETIQUETAS_POR_PAGINA,
     MODELO_ETIQUETA,
     agruparItensTextoEmEtiquetas,
+    avisosEtiqueta,
     gerarPdfEtiquetasEndereco,
     normalizarEtiquetaRegistro,
     parseArquivoEtiquetas,
@@ -69,6 +70,60 @@ describe('etiquetasEndereco', () => {
         expect(out[0].cep).toBe('95000-000')
         expect(out[1].nome).toMatch(/LUIZA/)
         expect(out[2].nome).toMatch(/GILMAR/)
+    })
+
+    it('PDF com a posição deslocada em relação à grade não embaralha destinatários', () => {
+        // Layout real exportado pelo outro sistema: nome e «Endereço:» caem em fileiras diferentes da grade da folha.
+        const col = (x, y0, nome, endereco, loc, cep) => [
+            { str: nome, x, y: y0 },
+            { str: `Endereço: ${endereco}`, x, y: y0 + 20 },
+            { str: loc, x, y: y0 + 40 },
+            { str: cep, x, y: y0 + 57 },
+        ]
+        const items = [
+            ...col(20, 140, 'AMANDA FACCHIN', 'CARLOS WEBER, 181 - CASA', 'RIO BRANCO - CAXIAS DO SUL - RS', '95097-650'),
+            ...col(330, 140, 'CAMILLA CHIELE BERNARDI', 'DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN...', 'PLANALTO - FARROUPILHA - RS', '95170-356'),
+            ...col(20, 248, 'CAROLINE NOTHEN', 'CARLOS WEBER, 176 - CASA', 'RIO BRANCO - CAXIAS DO SUL - RS', '95097-650'),
+            ...col(330, 248, 'JAINI SIEG RODRIGUES', 'BORGES DE MEDEIROS, 920 - SALA 81', 'CENTRO - CAXIAS DO SUL - RS', '95020-310'),
+        ]
+        const out = agruparItensTextoEmEtiquetas(items)
+        expect(out.map((e) => e.nome)).toEqual(['AMANDA FACCHIN', 'CAMILLA CHIELE BERNARDI', 'CAROLINE NOTHEN', 'JAINI SIEG RODRIGUES'])
+        expect(out[0]).toMatchObject({ endereco: 'CARLOS WEBER, 181 - CASA', cep: '95097-650' })
+        expect(out[1]).toMatchObject({ localidade: 'PLANALTO - FARROUPILHA - RS', cep: '95170-356' })
+        expect(out[3]).toMatchObject({ endereco: 'BORGES DE MEDEIROS, 920 - SALA 81', cep: '95020-310' })
+        expect(out.every((e) => !/^endere[cç]o/i.test(e.nome))).toBe(true)
+    })
+
+    it('qualquer deslocamento vertical dá o mesmo resultado', () => {
+        const base = (dy) => [
+            { str: 'ANA', x: 20, y: 60 + dy },
+            { str: 'Endereço: RUA A, 1', x: 20, y: 80 + dy },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 20, y: 100 + dy },
+            { str: '95000-000', x: 20, y: 117 + dy },
+            { str: 'BIA', x: 330, y: 60 + dy },
+            { str: 'Endereço: RUA B, 2', x: 330, y: 80 + dy },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 330, y: 100 + dy },
+            { str: '95000-001', x: 330, y: 117 + dy },
+        ]
+        for (const dy of [0, 17, 33, 58, 71, 94]) {
+            const out = agruparItensTextoEmEtiquetas(base(dy))
+            expect(out.map((e) => [e.nome, e.cep])).toEqual([['ANA', '95000-000'], ['BIA', '95000-001']])
+        }
+    })
+
+    it('avisosEtiqueta: etiqueta completa não tem aviso, linha vazia também não', () => {
+        const ok = { nome: 'ANA', endereco: 'RUA A, 1', localidade: 'CENTRO - CAXIAS DO SUL - RS', cep: '95000-000' }
+        expect(avisosEtiqueta(ok)).toEqual([])
+        expect(avisosEtiqueta({ nome: '', endereco: '', localidade: '', cep: '' })).toEqual([])
+    })
+
+    it('avisosEtiqueta: pega o embaralhamento visto na importação (nome = «Endereço: …», nome sem endereço)', () => {
+        const trocada = { nome: 'Endereço: CARLOS WEBER, 181 - CASA', endereco: '', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' }
+        expect(avisosEtiqueta(trocada).join(' ')).toMatch(/nome parece ser um endereço/i)
+        expect(avisosEtiqueta(trocada).join(' ')).toMatch(/Sem endereço/)
+        const soNome = { nome: 'AMANDA FACCHIN', endereco: '', localidade: '', cep: '' }
+        expect(avisosEtiqueta(soNome)).toHaveLength(3)
+        expect(avisosEtiqueta({ nome: 'A', endereco: 'R', localidade: 'X - Y - RS', cep: '9500' }).join(' ')).toMatch(/CEP incompleto/)
     })
 
     it('agrupa endereço com quebra de linha na mesma etiqueta', () => {

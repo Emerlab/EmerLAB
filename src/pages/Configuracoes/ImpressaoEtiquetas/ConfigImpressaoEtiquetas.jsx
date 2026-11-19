@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react'
+import { confirmarAcao } from '../../../lib/dialogos.js'
 import CredenciamentoMainAlert from '../../../components/Toast/CredenciamentoMainAlert.jsx'
 import { PageHeader, buttonClassName } from '../../../components/ui'
 import {
     ETIQUETAS_POR_PAGINA,
     MODELO_ETIQUETA,
     baixarBlob,
+    avisosEtiqueta,
     baixarModeloEtiquetasExcel,
     gerarPdfEtiquetasEndereco,
     normalizarEtiquetaRegistro,
@@ -26,6 +28,9 @@ const ConfigImpressaoEtiquetas = () => {
         () => itens.filter((e) => normalizarEtiquetaRegistro(e).nome || e.endereco || e.cep).length,
         [itens],
     )
+
+    const avisosPorItem = useMemo(() => itens.map((e) => avisosEtiqueta(e)), [itens])
+    const comAviso = useMemo(() => avisosPorItem.filter((a) => a.length).length, [avisosPorItem])
 
     const setCampo = (idx, campo, valor) => {
         setItens((prev) => {
@@ -113,6 +118,15 @@ const ConfigImpressaoEtiquetas = () => {
     }
 
     const gerar = async () => {
+        if (comAviso > 0) {
+            const seguir = await confirmarAcao({
+                titulo: 'Há etiquetas para conferir',
+                mensagem: `${comAviso} etiqueta(s) estão marcadas com aviso (dados faltando ou fora do lugar). Gerar o PDF mesmo assim?`,
+                confirmar: 'Gerar mesmo assim',
+                cancelar: 'Voltar e conferir',
+            })
+            if (!seguir) return
+        }
         setBusy('pdf')
         setErro('')
         setFeedback('')
@@ -209,9 +223,14 @@ const ConfigImpressaoEtiquetas = () => {
 
             <section className="config_etiquetas_card">
                 <h2 className="config_etiquetas_h2">Prévia / edição</h2>
+                {comAviso > 0 ? (
+                    <p className="config_etiquetas_alerta" role="alert">
+                        {comAviso} etiqueta(s) com aviso. Confira o nome e o endereço de cada uma contra o arquivo original antes de imprimir.
+                    </p>
+                ) : null}
                 <div className="config_etiquetas_grid" aria-label="Etiquetas">
                     {itens.map((et, idx) => (
-                        <article key={idx} className="config_etiquetas_item">
+                        <article key={idx} className={`config_etiquetas_item${avisosPorItem[idx].length ? ' tem-aviso' : ''}`}>
                             <header className="config_etiquetas_item_head">
                                 <span>#{idx + 1}</span>
                                 <button
@@ -229,6 +248,13 @@ const ConfigImpressaoEtiquetas = () => {
                                     Excluir
                                 </button>
                             </header>
+                            {avisosPorItem[idx].length ? (
+                                <ul className="config_etiquetas_item_avisos">
+                                    {avisosPorItem[idx].map((a) => (
+                                        <li key={a}>{a}</li>
+                                    ))}
+                                </ul>
+                            ) : null}
                             <label>
                                 Nome
                                 <input

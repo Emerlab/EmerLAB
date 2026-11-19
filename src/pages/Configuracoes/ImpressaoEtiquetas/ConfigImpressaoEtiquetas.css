@@ -154,3 +154,29 @@ body.dark-mode .config_etiquetas_file {
     border-color: #3a6a8a;
     color: #9fd0f0;
 }
+
+.config_etiquetas_alerta {
+    margin: 0 0 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #f0d28a;
+    border-radius: 10px;
+    background: #fef6e7;
+    color: #7a4d06;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.config_etiquetas_item.tem-aviso {
+    border: 1px solid #e0a93a;
+    background: #fffaf0;
+}
+
+.config_etiquetas_item_avisos {
+    margin: 0;
+    padding: 0.4rem 0.6rem 0.4rem 1.2rem;
+    border-radius: 8px;
+    background: #fef6e7;
+    color: #7a4d06;
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
