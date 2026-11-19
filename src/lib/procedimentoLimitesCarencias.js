@@ -44,11 +44,19 @@ const nomeDoPlanoBase = (planoBaseId, planos, mapaPlanos) => {
     return chave ? mapaPlanos[chave]?.nome || '' : ''
 }
 
+const temValorReal = (valor) => {
+    const texto = String(valor ?? '').trim()
+    return texto !== '' && !terminaEmAcima(texto)
+}
+
 /**
  * Compara as linhas de planos_config do procedimento com a regra «Acima»:
  * abaixo do plano base = «<base> Acima» nos dois campos; do base para cima não pode sobrar par «Acima» velho.
+ * Linha abaixo do base com valor real (não vazio e não «Acima») é CONFLITO: por padrão nada é proposto
+ * para gravar abaixo do base nesse procedimento (a migração de dados segue a mesma regra);
+ * `sobrescreverValoresReais` trata o conflito como divergência (troca explícita de plano base).
  */
-export const diagnosticarAcima = (proc, { mapaPlanos, planos, indiceConfigs }) => {
+export const diagnosticarAcima = (proc, { mapaPlanos, planos, indiceConfigs }, opcoes = {}) => {
     const porPlano = indiceConfigs.get(String(proc.codigo ?? '').trim().toUpperCase())
     const resultado = []
 
@@ -56,14 +64,28 @@ export const diagnosticarAcima = (proc, { mapaPlanos, planos, indiceConfigs }) =
     const nomeBase = nomeDoPlanoBase(proc.planoBaseId, planos, mapaPlanos)
     if (abaixo.length > 0 && nomeBase) {
         const texto = textoAcima(nomeBase)
-        abaixo.forEach((planoId) => {
-            const config = porPlano?.get(planoId)
-            if (!config) {
-                resultado.push({ planoId, tipo: 'faltando', limite: texto, carencia: texto })
-            } else if (config.limite.trim() !== texto || config.carencia.trim() !== texto) {
-                resultado.push({ planoId, tipo: 'divergente', limite: texto, carencia: texto })
-            }
-        })
+        const conflitos = opcoes.sobrescreverValoresReais
+            ? []
+            : abaixo.filter((planoId) => {
+                  const config = porPlano?.get(planoId)
+                  return Boolean(config) && (temValorReal(config.limite) || temValorReal(config.carencia))
+              })
+
+        if (conflitos.length > 0) {
+            conflitos.forEach((planoId) => {
+                const config = porPlano.get(planoId)
+                resultado.push({ planoId, tipo: 'conflito', limite: config.limite, carencia: config.carencia })
+            })
+        } else {
+            abaixo.forEach((planoId) => {
+                const config = porPlano?.get(planoId)
+                if (!config) {
+                    resultado.push({ planoId, tipo: 'faltando', limite: texto, carencia: texto })
+                } else if (config.limite.trim() !== texto || config.carencia.trim() !== texto) {
+                    resultado.push({ planoId, tipo: 'divergente', limite: texto, carencia: texto })
+                }
+            })
+        }
     }
 
     planoIdsAplicaveis(proc.planoBaseId, mapaPlanos).forEach((planoId) => {
@@ -77,7 +99,10 @@ export const diagnosticarAcima = (proc, { mapaPlanos, planos, indiceConfigs }) =
 }
 
 /** Grava o «Acima» abaixo do plano base e zera «Acima» velho do base para cima; erros por plano. */
-export const sincronizarAcimaProcedimento = async (supabase, { codigo, planoBaseId, mapaPlanos, planos }) => {
+export const sincronizarAcimaProcedimento = async (
+    supabase,
+    { codigo, planoBaseId, mapaPlanos, planos, sobrescreverValoresReais = false }
+) => {
     const limpo = String(codigo ?? '').trim()
     const variantes = [...new Set([limpo, limpo.toUpperCase(), limpo.toLowerCase()])].filter(Boolean)
     if (variantes.length === 0) return { erros: [] }
@@ -90,8 +115,9 @@ export const sincronizarAcimaProcedimento = async (supabase, { codigo, planoBase
 
     const pendencias = diagnosticarAcima(
         { codigo: limpo, planoBaseId },
-        { mapaPlanos, planos, indiceConfigs: indexarPlanosConfig(data || []) }
-    )
+        { mapaPlanos, planos, indiceConfigs: indexarPlanosConfig(data || []) },
+        { sobrescreverValoresReais }
+    ).filter((item) => item.tipo !== 'conflito')
 
     const erros = []
     for (const item of pendencias) {

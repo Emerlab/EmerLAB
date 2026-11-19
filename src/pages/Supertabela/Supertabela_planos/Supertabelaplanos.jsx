@@ -511,7 +511,10 @@ const Supertabelaplanos = () => {
                         .order('codigo', { ascending: true })
                 ),
                 buscarTodosPaginado(() =>
-                    supabase.from('planos_config').select('id, plano_id, procedimento, limite, carencia')
+                    supabase
+                        .from('planos_config')
+                        .select('id, plano_id, procedimento, limite, carencia')
+                        .order('id', { ascending: true })
                 ),
                 buscarCategoriaLimitesGrupo(supabase),
             ])
@@ -634,17 +637,20 @@ const Supertabelaplanos = () => {
     const totalVazios = useMemo(() => linhasLimitacoes.filter(linhaTemPendencia).length, [linhasLimitacoes])
 
     const divergenciasAcima = useMemo(() => {
-        if (!modoLimitacoes) return []
+        const resultado = { corrigiveis: [], conflitos: [] }
+        if (!modoLimitacoes) return resultado
         const indiceConfigs = indexarPlanosConfig(dadosMatriz.configRows)
-        return dadosMatriz.procedimentos
-            .filter(
-                (proc) =>
-                    diagnosticarAcima(
-                        { codigo: proc.codigo, planoBaseId: proc.plano_base_id },
-                        { mapaPlanos: mapaPlanosCompleto, planos: planosTodos, indiceConfigs }
-                    ).length > 0
+        dadosMatriz.procedimentos.forEach((proc) => {
+            const itens = diagnosticarAcima(
+                { codigo: proc.codigo, planoBaseId: proc.plano_base_id },
+                { mapaPlanos: mapaPlanosCompleto, planos: planosTodos, indiceConfigs }
             )
-            .map((proc) => ({ codigo: proc.codigo, planoBaseId: proc.plano_base_id }))
+            if (itens.some((item) => item.tipo !== 'conflito')) {
+                resultado.corrigiveis.push({ codigo: proc.codigo, planoBaseId: proc.plano_base_id })
+            }
+            if (itens.some((item) => item.tipo === 'conflito')) resultado.conflitos.push(proc.codigo)
+        })
+        return resultado
     }, [modoLimitacoes, dadosMatriz, mapaPlanosCompleto, planosTodos])
 
     const linhasFiltradas = useMemo(() => {
@@ -1408,7 +1414,7 @@ const Supertabelaplanos = () => {
         setCorrigindoAcima(true)
         try {
             const falhas = []
-            for (const item of divergenciasAcima) {
+            for (const item of divergenciasAcima.corrigiveis) {
                 const { erros } = await sincronizarAcimaProcedimento(supabase, {
                     codigo: item.codigo,
                     planoBaseId: item.planoBaseId,
@@ -2336,10 +2342,10 @@ ou um código por linha`}
                 />
             )}
 
-            {modoLimitacoes && divergenciasAcima.length > 0 && (
+            {modoLimitacoes && divergenciasAcima.corrigiveis.length > 0 && (
                 <div className='supertabelaplanos_aviso_acima' role='status'>
                     <span>
-                        {divergenciasAcima.length} procedimento(s) com o «Acima» desatualizado nos planos abaixo do plano base.
+                        {divergenciasAcima.corrigiveis.length} procedimento(s) com o «Acima» desatualizado nos planos abaixo do plano base.
                     </span>
                     {!somenteLeitura && (
                         <button
@@ -2351,6 +2357,16 @@ ou um código por linha`}
                             {corrigindoAcima ? 'Corrigindo…' : 'Corrigir'}
                         </button>
                     )}
+                </div>
+            )}
+
+            {modoLimitacoes && divergenciasAcima.conflitos.length > 0 && (
+                <div className='supertabelaplanos_aviso_acima' role='status'>
+                    <span>
+                        {divergenciasAcima.conflitos.length} procedimento(s) com valor real num plano abaixo do plano base
+                        (não corrigidos automaticamente; revise o plano base ou os valores):{' '}
+                        {divergenciasAcima.conflitos.join(', ')}.
+                    </span>
                 </div>
             )}
 

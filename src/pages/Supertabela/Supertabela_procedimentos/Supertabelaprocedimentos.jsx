@@ -805,7 +805,8 @@ const Supertabelaprocedimentos = () => {
             codigo: linha.codigo,
             planoBaseId,
             mapaPlanos,
-            planos })
+            planos,
+            sobrescreverValoresReais: true })
         if (errosAcima.length > 0) {
             mostrarErroToast(
                 `Plano base salvo, mas não foi possível atualizar o "Acima" em: ${nomesPlanosComErro(errosAcima)}. Corrija na matriz de carências e limites.`

@@ -162,3 +162,43 @@ describe('sincronizarAcimaProcedimento', () => {
         expect(tab('planos_config').map((x) => x.plano_id)).toEqual([2])
     })
 })
+
+describe('conflito: valor real abaixo do plano base (Important 1)', () => {
+    const procUltra = { codigo: 'GAST-013', planoBaseId: 4 }
+    const rows = [
+        cfg(1, 'GAST-013', 'Avançado Acima', 'Avançado Acima'),
+        cfg(2, 'GAST-013', 'Avançado Acima', 'Avançado Acima'),
+        cfg(3, 'GAST-013', '3', '150 Dias'),
+    ]
+
+    it('diagnosticarAcima só aponta o conflito e não propõe gravar nos outros planos', () => {
+        expect(diagnosticarAcima(procUltra, ctxAcima(rows))).toEqual([
+            { planoId: 3, tipo: 'conflito', limite: '3', carencia: '150 Dias' },
+        ])
+    })
+
+    it('com sobrescreverValoresReais o valor real vira divergente (troca explícita de plano base)', () => {
+        const r = diagnosticarAcima(procUltra, ctxAcima(rows), { sobrescreverValoresReais: true })
+        expect(r.map((x) => [x.planoId, x.tipo])).toEqual([[1, 'divergente'], [2, 'divergente'], [3, 'divergente']])
+    })
+
+    it('sincronizarAcimaProcedimento não grava nada quando há conflito', async () => {
+        const { supabase, tab, db } = criarBancoFalso()
+        tab('planos_config').push(...rows.map((r) => ({ ...r })))
+        const r = await sincronizarAcimaProcedimento(supabase, {
+            codigo: 'GAST-013', planoBaseId: 4, mapaPlanos, planos: planosLista,
+        })
+        expect(r).toEqual({ erros: [] })
+        expect(tab('planos_config').find((x) => x.plano_id === 3)).toMatchObject({ limite: '3', carencia: '150 Dias' })
+        expect(db.chamadas.filter((c) => c.startsWith('insert') || c.startsWith('update'))).toEqual([])
+    })
+
+    it('sincronizarAcimaProcedimento com sobrescreverValoresReais grava o Acima por cima', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        tab('planos_config').push(...rows.map((r) => ({ ...r })))
+        await sincronizarAcimaProcedimento(supabase, {
+            codigo: 'GAST-013', planoBaseId: 4, mapaPlanos, planos: planosLista, sobrescreverValoresReais: true,
+        })
+        expect(tab('planos_config').find((x) => x.plano_id === 3)).toMatchObject({ limite: 'Ultra Acima', carencia: 'Ultra Acima' })
+    })
+})
