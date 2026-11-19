@@ -834,3 +834,11 @@ body.dark-mode .planos_impressao_zip_motivo {
         width: 100%;
     }
 }
+
+.planos_impressao_finalidade {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ek-s3, 12px);
+    margin: 0 0 var(--ek-s2, 8px);
+}

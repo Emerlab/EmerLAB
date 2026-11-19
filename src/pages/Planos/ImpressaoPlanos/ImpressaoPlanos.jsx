@@ -19,6 +19,10 @@ import { MIN_REALIZADORES_PRE_MARCAR } from '../../../lib/impressaoPlanos/mapaRe
 import {
     aplicarSelecaoModo,
     buscarModoImpressaoPlanos,
+    copiarModoParaFinalidade,
+    ERRO_MIGRACAO_FINALIDADE,
+    FINALIDADE_IMPRESSAO,
+    FINALIDADE_SITE,
     rotuloModoImpressao,
     salvarModoImpressaoPlanos,
 } from '../../../lib/impressaoPlanos/modoImpressaoPlanos.js'
@@ -107,6 +111,12 @@ export default function ImpressaoPlanos() {
     const [zipGerando, setZipGerando] = useState(false)
     const [salvandoPreset, setSalvandoPreset] = useState(false)
     const [avisoPreset, setAvisoPreset] = useState('')
+    // Qual preset está sendo editado: PDF (impressao) ou página pública (site). A geração de PDF/ZIP usa sempre `impressao`.
+    const [finalidadeEdicao, setFinalidadeEdicao] = useState(FINALIDADE_IMPRESSAO)
+    const finalidadeRef = useRef(FINALIDADE_IMPRESSAO) // lida na hora de salvar, para não recriar o autosave ao trocar
+    const categoriasBaseRef = useRef(null) // linhas com a pré-marcação automática (sem modo aplicado)
+    const [siteIndisponivel, setSiteIndisponivel] = useState(false)
+    const [copiandoPdf, setCopiandoPdf] = useState(false)
 
     useEffect(() => {
         const run = async () => {
@@ -240,12 +250,21 @@ export default function ImpressaoPlanos() {
         async (cats, { silencioso = false } = {}) => {
             if (!planoId || !cidadeTabelaId || !(cats || []).length) return null
             try {
-                const info = await salvarModoImpressaoPlanos(planoId, cidadeTabelaId, cats)
+                const finalidade = finalidadeRef.current
+                const info = await salvarModoImpressaoPlanos(planoId, cidadeTabelaId, cats, finalidade)
                 setModoInfo(info)
                 setAvisoModo('')
-                setVersaoModos((v) => v + 1)
+                setSiteIndisponivel(false)
+                // O painel do ZIP só depende do modo de impressão.
+                if (finalidade === FINALIDADE_IMPRESSAO) setVersaoModos((v) => v + 1)
                 return info
             } catch (e) {
+                if (e?.message === ERRO_MIGRACAO_FINALIDADE) {
+                    // Sem a migração o preset do site não salva: avisa sempre, mesmo no autosave silencioso.
+                    setSiteIndisponivel(true)
+                    setAvisoModo(ERRO_MIGRACAO_FINALIDADE)
+                    return null
+                }
                 if (!silencioso) {
                     setAvisoModo(e?.message || 'Não foi possível salvar o modo da equipe.')
                 }
@@ -326,8 +345,9 @@ export default function ImpressaoPlanos() {
             })
 
             let cats = res.categorias
+            categoriasBaseRef.current = res.categorias
             try {
-                const modo = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId)
+                const modo = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId, finalidadeRef.current)
                 if (!ehAtual()) return
                 if (modo?.selecao) {
                     cats = aplicarSelecaoModo(cats, modo.selecao)
@@ -360,6 +380,55 @@ export default function ImpressaoPlanos() {
         planosTodos,
         cancelarSaveModoPendente,
     ])
+
+    // Aplica sobre as linhas-base o modo salvo da finalidade (ou a pré-marcação automática quando não há).
+    const aplicarModoNaTela = useCallback((selecao, info) => {
+        const base = categoriasBaseRef.current
+        if (!base) return
+        ignorarProximoSaveModo.current = true
+        setCategorias(selecao ? aplicarSelecaoModo(base, selecao) : base)
+        setModoInfo(info || null)
+    }, [])
+
+    const trocarFinalidade = useCallback(
+        async (nova) => {
+            if (nova === finalidadeRef.current) return
+            cancelarSaveModoPendente()
+            // Não perde o que já foi marcado: grava no preset de origem antes de trocar.
+            if (categorias.length) await persistirModo(categorias, { silencioso: true })
+            finalidadeRef.current = nova
+            setFinalidadeEdicao(nova)
+            setAvisoModo('')
+            setAvisoPreset('')
+            if (!categoriasBaseRef.current || !planoId || !cidadeTabelaId) return
+            try {
+                const modo = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId, nova)
+                aplicarModoNaTela(modo?.selecao, modo)
+            } catch (e) {
+                setAvisoModo(e?.message || 'Não deu para carregar o modo salvo.')
+                aplicarModoNaTela(null, null)
+            }
+        },
+        [categorias, planoId, cidadeTabelaId, cancelarSaveModoPendente, persistirModo, aplicarModoNaTela],
+    )
+
+    const copiarDoPdf = useCallback(async () => {
+        if (copiandoPdf || !planoId || !cidadeTabelaId) return
+        cancelarSaveModoPendente()
+        setCopiandoPdf(true)
+        setAvisoPreset('')
+        try {
+            const info = await copiarModoParaFinalidade(planoId, cidadeTabelaId, FINALIDADE_IMPRESSAO, FINALIDADE_SITE)
+            aplicarModoNaTela(info.selecao, info)
+            setSiteIndisponivel(false)
+            setAvisoPreset('Marcações do PDF copiadas para o site.')
+        } catch (e) {
+            if (e?.message === ERRO_MIGRACAO_FINALIDADE) setSiteIndisponivel(true)
+            setAvisoModo(e?.message || 'Não foi possível copiar do PDF.')
+        } finally {
+            setCopiandoPdf(false)
+        }
+    }, [copiandoPdf, planoId, cidadeTabelaId, cancelarSaveModoPendente, aplicarModoNaTela])
 
     // "Revisar" no painel: define o plano e, quando o estado já reflete a escolha,
     // dispara o fluxo normal de carregar (carregarLista lê planoId do estado).
@@ -539,10 +608,16 @@ export default function ImpressaoPlanos() {
             // não bloqueia o PDF; aviso já foi setado em persistirModo
         }
         try {
-            const { porGrupo, gerais } = await resolverObservacoesPlanosPorGrupo(categorias)
+            // Em "Site" as marcações da tela são do preset do site: o PDF sai sempre com o modo de impressão.
+            let categoriasPdf = categorias
+            if (finalidadeRef.current === FINALIDADE_SITE && categoriasBaseRef.current) {
+                const modoPdf = await buscarModoImpressaoPlanos(planoId, cidadeTabelaId, FINALIDADE_IMPRESSAO)
+                categoriasPdf = modoPdf?.selecao ? aplicarSelecaoModo(categoriasBaseRef.current, modoPdf.selecao) : categoriasBaseRef.current
+            }
+            const { porGrupo, gerais } = await resolverObservacoesPlanosPorGrupo(categoriasPdf)
             const blob = await gerarImpressaoPlanosPdf({
                 pdfUrl: meta.pdfUrl,
-                categorias,
+                categorias: categoriasPdf,
                 observacoes: gerais,
                 observacoesPorGrupo: porGrupo,
             })
@@ -681,8 +756,50 @@ export default function ImpressaoPlanos() {
 
             {categorias.length > 0 ? (
                 <>
+                    <div className="planos_impressao_finalidade">
+                        <span className="ek-label" id="finalidade-edicao-rotulo">
+                            Editando
+                        </span>
+                        <div className="ek-segmented" role="group" aria-labelledby="finalidade-edicao-rotulo">
+                            <button
+                                type="button"
+                                className="ek-segmented__opt"
+                                aria-pressed={finalidadeEdicao === FINALIDADE_IMPRESSAO}
+                                disabled={carregando || gerandoPdf}
+                                onClick={() => void trocarFinalidade(FINALIDADE_IMPRESSAO)}
+                            >
+                                PDF
+                            </button>
+                            <button
+                                type="button"
+                                className="ek-segmented__opt"
+                                aria-pressed={finalidadeEdicao === FINALIDADE_SITE}
+                                disabled={carregando || gerandoPdf}
+                                onClick={() => void trocarFinalidade(FINALIDADE_SITE)}
+                            >
+                                Site
+                            </button>
+                        </div>
+                        {finalidadeEdicao === FINALIDADE_SITE ? (
+                            <button
+                                type="button"
+                                className="ek-btn ek-btn--secondary"
+                                disabled={copiandoPdf || carregando || gerandoPdf || siteIndisponivel}
+                                onClick={() => void copiarDoPdf()}
+                            >
+                                {copiandoPdf ? 'Copiando…' : 'Copiar do PDF'}
+                            </button>
+                        ) : null}
+                    </div>
+                    {finalidadeEdicao === FINALIDADE_SITE ? (
+                        <p className="planos_impressao_aviso_modo" role="note">
+                            {siteIndisponivel
+                                ? 'O preset do site ainda não pode ser salvo: falta aplicar a migração no banco.'
+                                : 'Estas marcações valem para a página pública. O PDF e o ZIP continuam usando o modo do PDF.'}
+                        </p>
+                    ) : null}
                     <p className="planos_impressao_modo_equipe" role="status">
-                        {rotuloModoImpressao(modoInfo)}
+                        {rotuloModoImpressao(modoInfo, finalidadeEdicao)}
                     </p>
                     {avisoPreset ? (
                         <p className="planos_impressao_aviso_modo" role="status">
