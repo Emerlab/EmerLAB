@@ -168,15 +168,18 @@ export async function exportarTabelaPlanosDiferencasParaExcel(secoes, opcoes = '
 /**
  * @param {{ categoriaNome: string, linhas: object[] }[]} secoes
  */
+/** Matriz de carências e limites: secoes[].linhas são LinhaMatriz (src/lib/matrizCarenciasLimites.js). */
 export async function exportarTabelaPlanosLimitesParaExcel(secoes, nomeArquivoBase = 'supertabela-limites') {
     const { default: ExcelJS } = await import('exceljs')
+    const { CHAVES_PLANOS_MATRIZ, valoresExportacaoLinha } = await import('./matrizCarenciasLimites.js')
+    const { ROTULO_PLANO } = await import('./planosHierarquia.js')
     const workbook = new ExcelJS.Workbook()
     workbook.creator = 'EmerLAB'
-    const ws = workbook.addWorksheet('Limites')
+    const ws = workbook.addWorksheet('Carências e limites')
+    const totalColunas = 2 + CHAVES_PLANOS_MATRIZ.length * 2
     ws.getColumn(1).width = 14
     ws.getColumn(2).width = 48
-    ws.getColumn(3).width = 16
-    ws.getColumn(4).width = 14
+    for (let c = 3; c <= totalColunas; c += 1) ws.getColumn(c).width = 16
 
     let row = 1
     const lista = (secoes || []).filter((s) => (s.linhas || []).length > 0)
@@ -188,29 +191,42 @@ export async function exportarTabelaPlanosLimitesParaExcel(secoes, nomeArquivoBa
 
     lista.forEach((secao, idxSec) => {
         if (idxSec > 0) row += 1
-        ws.mergeCells(row, 1, row, 4)
+        ws.mergeCells(row, 1, row, totalColunas)
         const titulo = ws.getCell(row, 1)
         titulo.value = String(secao.categoriaNome || 'Categoria').trim()
         estiloCabecalho(titulo)
         titulo.alignment = { vertical: 'middle', horizontal: 'left' }
         row += 1
 
-        ;['Código', 'Procedimento', 'Limite', 'Carência'].forEach((t, ci) => {
+        ;['Código', 'Procedimento'].forEach((t, ci) => {
+            ws.mergeCells(row, ci + 1, row + 1, ci + 1)
             const h = ws.getCell(row, ci + 1)
             h.value = t
             estiloCabecalho(h)
         })
-        row += 1
+        CHAVES_PLANOS_MATRIZ.forEach((chave, pi) => {
+            const coluna = 3 + pi * 2
+            ws.mergeCells(row, coluna, row, coluna + 1)
+            const h = ws.getCell(row, coluna)
+            h.value = ROTULO_PLANO[chave]
+            estiloCabecalho(h)
+            ;['Limite', 'Carência'].forEach((t, ci) => {
+                const sub = ws.getCell(row + 1, coluna + ci)
+                sub.value = t
+                estiloCabecalho(sub)
+            })
+        })
+        row += 2
 
         for (const linha of secao.linhas) {
             estiloTexto(ws.getCell(row, 1))
             ws.getCell(row, 1).value = linha.codigo || ''
             estiloTexto(ws.getCell(row, 2))
             ws.getCell(row, 2).value = linha.procedimento || ''
-            estiloTexto(ws.getCell(row, 3))
-            ws.getCell(row, 3).value = linha.limite != null ? String(linha.limite) : ''
-            estiloTexto(ws.getCell(row, 4))
-            ws.getCell(row, 4).value = linha.carencia != null ? String(linha.carencia) : ''
+            valoresExportacaoLinha(linha, secao.categoriaNome).forEach((valor, ci) => {
+                estiloTexto(ws.getCell(row, 3 + ci))
+                ws.getCell(row, 3 + ci).value = valor
+            })
             row += 1
         }
     })
