@@ -1477,33 +1477,153 @@ body.dark-mode .supertabelaplanos_sugestoes_rede_vazio {
 }
 
 
-/* Matriz de carências e limites */
-.supertabelaplanos_matriz th.supertabelaplanos_th_centro,
-.supertabelaplanos_matriz td.supertabelaplanos_td_centro {
+/* Matriz de carências e limites
+ * PC: a tabela tem largura mínima e rola na horizontal dentro de .supertabelaplanos_matriz_scroll (nada é cortado).
+ * Celular (< 640 px): a classe tabela-cartoes (global-styles.css) vira um cartão por procedimento. */
+.supertabelaplanos_matriz_scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.supertabelaplanos .table_main.supertabelaplanos_matriz {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 1320px;
+}
+
+.supertabelaplanos_matriz col.supertabelaplanos_matriz_col_codigo {
+    width: 92px;
+}
+
+.supertabelaplanos_matriz col.supertabelaplanos_matriz_col_limite {
+    width: 136px;
+}
+
+.supertabelaplanos_matriz col.supertabelaplanos_matriz_col_carencia {
+    width: 100px;
+}
+
+.supertabelaplanos_matriz col.supertabelaplanos_matriz_col_acao {
+    width: 60px;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz.table_main th,
+.supertabelaplanos .supertabelaplanos_matriz.table_main td {
+    padding: 6px 5px;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_td_centro {
+    text-align: center;
+    white-space: normal;
+    overflow: hidden;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_matriz_td_codigo {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_td_nome {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_matriz_td_acao {
+    text-align: center;
+    white-space: nowrap;
+    overflow: visible;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+/* Valor em até 2 linhas; o que passar vira «…» e o texto inteiro fica na dica (title). */
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid #8ab9d8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.875rem;
+    cursor: text;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel:focus-visible {
+    outline: 2px solid #1f7ec2;
+    outline-offset: 1px;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz textarea.supertabelaplanos_matriz_textarea {
+    height: 42px;
+    padding: 3px 6px;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.25;
+    font-family: inherit;
+}
+
+.supertabelaplanos .supertabelaplanos_matriz .table_cell_input_text {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    font-size: 0.875rem;
     text-align: center;
 }
 
-.supertabelaplanos_matriz td.supertabelaplanos_celula_acima {
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_acima {
     background: #f3f6f8;
     color: #6b7f8f;
     font-size: 0.75rem;
     font-style: italic;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
 }
 
-.supertabelaplanos_matriz td.supertabelaplanos_celula_vazia {
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_vazia {
     background: #fff8e1;
 }
 
-.supertabelaplanos_matriz .table_cell_input_text {
-    min-width: 0;
-    width: 100%;
-    box-sizing: border-box;
+.supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_limite_grupo_cell {
+    border-left: 0;
+    padding: 4px 5px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: help;
+}
+
+body.dark-mode .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_acima {
+    background: #1b2a3a;
+    color: #8ea6bd;
+}
+
+body.dark-mode .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_vazia {
+    background: #3a3015;
 }
 
 .supertabelaplanos_aviso_acima {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
     margin: 8px 0;
     padding: 8px 12px;
@@ -1512,4 +1632,77 @@ body.dark-mode .supertabelaplanos_sugestoes_rede_vazio {
     background: #fff4d6;
     color: #7a5200;
     font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .supertabelaplanos_matriz_scroll {
+        overflow-x: visible;
+    }
+
+    .supertabelaplanos .table_main.supertabelaplanos_matriz {
+        min-width: 0 !important;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_td_nome {
+        order: -1;
+        justify-content: flex-start;
+        text-align: left !important;
+        font-weight: 700;
+        font-size: 1rem;
+        padding-bottom: 0.5rem !important;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_acima_dup {
+        display: none !important;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_acima,
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_vazia,
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_limite_grupo_cell {
+        background: transparent !important;
+        font-size: 0.875rem;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_celula_vazia::after {
+        content: 'vazio';
+        order: 3;
+        margin-left: 0.5rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        color: #7a5200;
+        background: #fff4d6;
+        border-radius: 999px;
+        padding: 1px 7px;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz.table_main td.supertabelaplanos_matriz_td_acao {
+        justify-content: flex-end;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz .table_cell_input_text {
+        height: 2.75rem;
+        font-size: 1rem;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz textarea.supertabelaplanos_matriz_textarea {
+        height: 3.5rem;
+        max-width: 58%;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor {
+        width: 100%;
+        text-align: center;
+    }
+
+    .supertabelaplanos .supertabelaplanos_matriz .supertabelaplanos_matriz_valor_editavel {
+        flex: 1;
+        max-width: 58%;
+        min-height: 2.75rem;
+        font-size: 1rem;
+    }
+
+    .supertabelaplanos_aviso_acima {
+        flex-direction: column;
+        align-items: stretch;
+    }
 }
