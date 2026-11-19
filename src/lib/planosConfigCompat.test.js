@@ -6,7 +6,7 @@ describe('gravarPlanoConfig', () => {
     it('cria a linha em maiúsculas quando não existe', async () => {
         const { supabase, tab } = criarBancoFalso()
         const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'out2-005', limite: '5', carencia: '30 Dias' })
-        expect(r).toEqual({ status: 'criado', error: null })
+        expect(r).toMatchObject({ status: 'criado', error: null })
         expect(tab('planos_config').map(({ id, ...resto }) => resto)).toEqual([
             { plano_id: 4, procedimento: 'OUT2-005', limite: '5', carencia: '30 Dias' },
         ])
@@ -16,7 +16,7 @@ describe('gravarPlanoConfig', () => {
         const { supabase, tab } = criarBancoFalso()
         tab('planos_config').push({ id: 1, plano_id: 4, procedimento: 'out2-005', limite: '', carencia: '' })
         const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', limite: '8', carencia: '45 Dias' })
-        expect(r).toEqual({ status: 'atualizado', error: null })
+        expect(r).toMatchObject({ status: 'atualizado', error: null })
         expect(tab('planos_config')).toEqual([
             { id: 1, plano_id: 4, procedimento: 'out2-005', limite: '8', carencia: '45 Dias' },
         ])
@@ -52,5 +52,39 @@ describe('gravarPlanoConfig', () => {
         const { supabase, tab } = criarBancoFalso()
         await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', carencia: '45 Dias' })
         expect(tab('planos_config')[0]).toMatchObject({ limite: '', carencia: '45 Dias' })
+    })
+})
+
+describe('gravarPlanoConfig com configId (menos idas ao banco)', () => {
+    it('com configId atualiza direto: só um update, sem buscar antes', async () => {
+        const { supabase, tab, db } = criarBancoFalso()
+        tab('planos_config').push({ id: 7, plano_id: 4, procedimento: 'OUT2-005', limite: '1', carencia: 'x' })
+        const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', carencia: '45 Dias', configId: 7 })
+        expect(r).toEqual({ status: 'atualizado', error: null, configId: 7 })
+        expect(db.chamadas).toEqual(['update:planos_config'])
+        expect(tab('planos_config')[0]).toMatchObject({ limite: '1', carencia: '45 Dias' })
+    })
+
+    it('criar devolve o id da linha criada', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'out2-005', limite: '5' })
+        expect(r.status).toBe('criado')
+        expect(r.configId).toBe(tab('planos_config')[0].id)
+    })
+
+    it('sem configId, atualizar devolve o id da linha encontrada', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        tab('planos_config').push({ id: 9, plano_id: 4, procedimento: 'OUT2-005', limite: '', carencia: '' })
+        const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', limite: '8' })
+        expect(r).toEqual({ status: 'atualizado', error: null, configId: 9 })
+    })
+
+    it('erro no update com configId devolve status erro', async () => {
+        const { supabase, tab, falhar } = criarBancoFalso()
+        tab('planos_config').push({ id: 7, plano_id: 4, procedimento: 'OUT2-005', limite: '', carencia: '' })
+        falhar('planos_config', 'update', () => true, 'sem permissão')
+        const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', limite: '8', configId: 7 })
+        expect(r.status).toBe('erro')
+        expect(r.error.message).toBe('sem permissão')
     })
 })

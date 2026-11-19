@@ -70,9 +70,10 @@ const buscarIdPlanoConfig = async (supabase, planoNum, variantes) => {
 
 /**
  * Cria ou atualiza limite/carência de um procedimento num plano (sem upsert/ON CONFLICT).
+ * Devolve também o `configId` da linha; passando-o de volta (`configId`) a próxima gravação vira um único update.
  * Campo omitido (undefined) não é alterado numa atualização e entra em branco numa criação.
  */
-export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limite, carencia }) => {
+export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limite, carencia, configId }) => {
     const planoNum = Number(planoId)
     const variantes = variantesProcedimento(procedimento)
     if (!variantes.length) {
@@ -84,22 +85,28 @@ export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limit
         const campos = {}
         if (limite !== undefined) campos.limite = limite
         if (carencia !== undefined) campos.carencia = carencia
-        if (Object.keys(campos).length === 0) return { status: 'atualizado', error: null }
+        if (Object.keys(campos).length === 0) return { status: 'atualizado', error: null, configId: id }
         const { error } = await supabase.from('planos_config').update(campos).eq('id', id)
-        return error ? { status: 'erro', error } : { status: 'atualizado', error: null }
+        return error ? { status: 'erro', error } : { status: 'atualizado', error: null, configId: id }
     }
+
+    // id já conhecido pela tela: um único update, sem buscar a linha antes.
+    if (configId != null) return atualizar(Number(configId))
 
     const busca = await buscarIdPlanoConfig(supabase, planoNum, variantes)
     if (busca.error) return { status: 'erro', error: busca.error }
     if (busca.id != null) return atualizar(busca.id)
 
-    const { error: errInsert } = await supabase.from('planos_config').insert({
-        plano_id: planoNum,
-        procedimento: procGravar,
-        limite: limite ?? '',
-        carencia: carencia ?? '',
-    })
-    if (!errInsert) return { status: 'criado', error: null }
+    const { data: criada, error: errInsert } = await supabase
+        .from('planos_config')
+        .insert({
+            plano_id: planoNum,
+            procedimento: procGravar,
+            limite: limite ?? '',
+            carencia: carencia ?? '',
+        })
+        .select('id')
+    if (!errInsert) return { status: 'criado', error: null, configId: criada?.[0]?.id ?? null }
 
     if (isDuplicateConfigError(errInsert)) {
         const nova = await buscarIdPlanoConfig(supabase, planoNum, variantes)
