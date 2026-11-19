@@ -1,110 +1,407 @@
-/* Lista compacta do modal — colunas proporcionais ao conteúdo */
+/* Modal «Gerenciar tabelas» — usa os tokens do kit (--ek-*) e vence o CSS antigo pela especificidade `.manager_modal …`. */
+
+.manager_modal_overlay {
+    background: var(--ek-overlay, rgba(13, 21, 32, 0.45));
+    backdrop-filter: var(--ek-blur-overlay, blur(4px));
+}
+
+.manager_modal {
+    border: 1px solid var(--ek-line, #d8e6ef);
+    border-radius: var(--ek-r-modal, 16px);
+    background: var(--ek-surface, #fff);
+    box-shadow: var(--ek-shadow-pop, 0 12px 32px rgba(20, 32, 51, 0.16));
+    font-family: var(--ek-font, inherit);
+}
+
+.manager_modal.manager_modal_split.manager_modal_list_only {
+    min-width: min(96vw, 30rem);
+    max-width: min(96vw, 38rem);
+}
+
+/* ---------- cabeçalho ---------- */
+.manager_modal .manager_modal_header {
+    padding: 18px 20px 14px;
+    border-bottom: 0;
+    background: var(--ek-surface, #fff);
+    gap: 16px;
+}
+
+.manager_titulo_bloco {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.manager_modal .manager_modal_header h3 {
+    margin: 0;
+    font-size: var(--ek-text-lg, 1.125rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ek-ink, #142033);
+}
+
+.manager_subtitulo {
+    margin: 0;
+    font-size: var(--ek-text-sm, 0.8125rem);
+    color: var(--ek-ink-muted, #5a7488);
+}
+
+.manager_modal .manager_add_city_btn {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--ek-r-control, 10px);
+    background: var(--ek-brand, #1a6fa3);
+    color: var(--ek-on-brand, #fff);
+    font: inherit;
+    font-size: var(--ek-text-md, 0.875rem);
+    font-weight: 700;
+    white-space: nowrap;
+    transition: background-color 0.15s;
+}
+
+.manager_modal .manager_add_city_btn:hover {
+    background: var(--ek-brand-deep, #165f8c);
+}
+
+.manager_modal .manager_close_btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: var(--ek-r-control, 10px);
+    background: transparent;
+    color: var(--ek-ink-muted, #5a7488);
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.manager_modal .manager_close_btn:hover {
+    background: var(--ek-neutro-bg, #eef3f7);
+    color: var(--ek-ink, #142033);
+}
+
+.manager_modal button:focus-visible,
+.manager_modal input:focus-visible,
+.manager_modal select:focus-visible {
+    outline: 2px solid var(--ek-focus, #165f8c);
+    outline-offset: 2px;
+}
+
+/* ---------- busca e filtro por UF ---------- */
+.manager_filtros {
+    display: grid;
+    gap: 10px;
+    padding: 0 20px 12px;
+}
+
+.manager_busca_campo {
+    position: relative;
+    display: block;
+}
+
+.manager_busca_campo svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ek-ink-muted, #5a7488);
+    pointer-events: none;
+}
+
+.manager_modal .manager_busca {
+    width: 100%;
+    box-sizing: border-box;
+    height: var(--ek-control-h, 40px);
+    padding: 0 12px 0 38px;
+    border: 1px solid var(--ek-field-border, #bfd7e8);
+    border-radius: var(--ek-r-control, 10px);
+    background: var(--ek-field, #fff);
+    color: var(--ek-ink, #142033);
+    font: inherit;
+    font-size: var(--ek-text-md, 0.875rem);
+}
+
+.manager_modal .manager_busca::placeholder {
+    color: var(--ek-placeholder, rgba(90, 116, 136, 0.7));
+}
+
+.manager_ufs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.manager_modal .manager_uf_chip {
+    all: unset;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    border: 1px solid var(--ek-line-strong, #bfd7e8);
+    border-radius: var(--ek-r-pill, 999px);
+    font-size: var(--ek-text-sm, 0.8125rem);
+    font-weight: 600;
+    color: var(--ek-ink-soft, #3d5168);
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.manager_modal .manager_uf_chip:hover {
+    background: var(--ek-brand-pale, #e7f4fc);
+}
+
+.manager_modal .manager_uf_chip[aria-pressed='true'] {
+    background: var(--ek-brand, #1a6fa3);
+    border-color: var(--ek-brand, #1a6fa3);
+    color: var(--ek-on-brand, #fff);
+}
+
+.manager_modal .manager_uf_chip:focus-visible {
+    outline: 2px solid var(--ek-focus, #165f8c);
+    outline-offset: 2px;
+}
+
+.manager_uf_n {
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.manager_modal .manager_split_list_title {
+    display: none;
+}
+
+/* ---------- tabela ---------- */
 .manager_table_wrap_inset {
     overflow-x: auto;
     overflow-y: auto;
+    border-top: 1px solid var(--ek-line, #d8e6ef);
 }
 
 .manager_table_wrap_inset .manager_table.manager_table_compact {
     width: max-content;
+    min-width: 100%;
     max-width: 100%;
-    min-width: 0;
     table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
-/* 26px botão + 4px gap → 5 botões ≈ 9.25rem */
 .manager_table_wrap_inset .manager_table.manager_table_compact col.col_uf {
-    width: 3.25rem;
+    width: 4.25rem;
 }
 
 .manager_table_wrap_inset .manager_table.manager_table_compact col.col_nome {
-    width: 11rem;
+    width: 14rem;
 }
 
 .manager_table_wrap_inset .manager_table.manager_table_compact col.col_proc {
-    width: 7.25rem;
+    width: 8.5rem;
 }
 
 .manager_table_wrap_inset .manager_table.manager_table_compact col.col_acoes {
-    width: 9.25rem;
+    width: 7.5rem;
 }
 
-.manager_table_wrap_inset .manager_table.manager_table_compact th {
+.manager_modal .manager_table.manager_table_compact th {
+    padding: 10px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--ek-line, #d8e6ef);
+    background: var(--ek-surface-tint, #f7fbfe);
+    color: var(--ek-ink-muted, #5a7488);
+    font-size: var(--ek-text-xs, 0.75rem);
+    font-weight: 700;
+    letter-spacing: 0.01em;
     overflow: visible;
     text-overflow: clip;
     white-space: nowrap;
+    cursor: default;
 }
 
-.manager_table_wrap_inset .manager_table.manager_table_compact th.col_nome {
+.manager_modal .manager_table.manager_table_compact td {
+    padding: 0 12px;
+    height: 48px;
+    border: 0;
+    border-bottom: 1px solid var(--ek-line, #d8e6ef);
+    font-size: var(--ek-text-md, 0.875rem);
+    color: var(--ek-ink, #142033);
+}
+
+.manager_modal .manager_table.manager_table_compact tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.manager_modal .manager_table.manager_table_compact td.col_nome {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
 }
 
-.manager_table_wrap_inset .manager_table.manager_table_compact td.col_uf {
+.manager_modal .manager_table.manager_table_compact td.col_proc {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--ek-ink-soft, #3d5168);
+}
+
+.manager_modal .manager_table.manager_table_compact th.col_proc .manager_th_btn {
+    justify-content: flex-end;
+    width: 100%;
+}
+
+.manager_modal .manager_table.manager_table_compact td.col_uf,
+.manager_modal .manager_table.manager_table_compact th.col_uf {
+    text-align: left;
+}
+
+.manager_uf_badge {
+    display: inline-block;
+    min-width: 2rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--ek-neutro-bg, #eef3f7);
+    color: var(--ek-ink-soft, #3d5168);
+    font-size: var(--ek-text-xs, 0.75rem);
+    font-weight: 700;
     text-align: center;
 }
 
-.manager_table_wrap_inset .manager_table.manager_table_compact td.col_proc {
+/* Linha: hover leve; selecionada ganha uma barra de acento à esquerda (não só mudança de cor) */
+.manager_modal .manager_table tbody tr {
+    cursor: pointer;
+    background: transparent;
+    transition: background-color 0.12s;
+}
+
+.manager_modal .manager_table tbody tr:hover {
+    background: var(--ek-row-hover, #eef7fd);
+}
+
+.manager_modal .manager_table tbody tr.is-selected,
+.manager_modal .manager_table tbody tr.is-selected:hover {
+    background: var(--ek-brand-pale, #e7f4fc);
+}
+
+.manager_modal .manager_table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 0 var(--ek-brand, #1a6fa3);
+}
+
+.manager_th_btn {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.manager_th_btn:hover {
+    color: var(--ek-ink, #142033);
+}
+
+.manager_th_btn:focus-visible,
+.manager_link_btn:focus-visible {
+    outline: 2px solid var(--ek-focus, #165f8c);
+    outline-offset: 2px;
+}
+
+/* ---------- ações: botões discretos, sem caixa até o hover ---------- */
+.manager_modal .manager_table_compact th.col_acoes {
     text-align: right;
-    padding-right: 10px;
 }
 
-.manager_table_wrap_inset .manager_table.manager_table_compact td.col_nome {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.manager_table_wrap_inset .manager_table.manager_table_compact td.col_acoes,
-.manager_table_wrap_inset .manager_table.manager_table_compact th.col_acoes {
+.manager_modal .manager_table_compact td.col_acoes {
     overflow: visible;
-    text-overflow: clip;
-    width: 9.25rem;
-    max-width: 9.25rem;
-    padding-left: 2px;
-    padding-right: 2px;
-    box-sizing: border-box;
 }
 
-.manager_table_compact .col_acoes .manager_actions {
+.manager_modal .manager_table_compact .col_acoes .manager_actions {
     display: inline-flex;
     flex-wrap: nowrap;
     justify-content: flex-end;
     align-items: center;
-    gap: 0.75rem;
+    gap: 2px;
     width: 100%;
-    box-sizing: border-box;
 }
 
-.manager_table_compact .col_acoes .manager_icon_btn {
-    width: 26px;
-    height: 26px;
-    flex-shrink: 0;
-    font-size: 0.75rem;
-    line-height: 1;
+.manager_modal .manager_table_compact .col_acoes .manager_icon_btn {
+    width: 32px;
+    height: 32px;
     padding: 0;
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ek-ink-muted, #5a7488);
+    transition: background-color 0.12s, color 0.12s;
 }
 
-.manager_table_compact th.col_acoes {
-    text-align: right;
-    font-size: 0.75rem;
-    cursor: default;
-    padding-right: 6px;
+.manager_modal .manager_table_compact .col_acoes .manager_icon_btn:hover:not(:disabled),
+.manager_modal .manager_table_compact .col_acoes .manager_icon_btn[aria-expanded='true'] {
+    background: var(--ek-brand-mist, #cfe8f8);
+    color: var(--ek-brand-deep, #165f8c);
 }
 
-.manager_icon_btn_excel {
-    border-color: #7cb87c;
-    background: #e8f5e9;
+.manager_vazio {
+    text-align: center;
+    padding: 28px 12px;
+    color: var(--ek-ink-muted, #5a7488);
 }
 
-.manager_icon_btn_excel:hover:not(:disabled) {
-    background: #d4edd6;
+.manager_link_btn {
+    all: unset;
+    cursor: pointer;
+    color: var(--ek-brand, #1a6fa3);
+    font-weight: 600;
+    text-decoration: underline;
 }
 
-.manager_icon_btn:disabled {
-    opacity: 0.55;
+/* ---------- menu ⋯ ---------- */
+.manager_menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 180px;
+    padding: 6px;
+    border: 1px solid var(--ek-line, #d8e6ef);
+    border-radius: var(--ek-r-control, 10px);
+    background: var(--ek-surface, #fff);
+    box-shadow: var(--ek-shadow-pop, 0 12px 32px rgba(20, 32, 51, 0.16));
+    display: grid;
+    gap: 2px;
+    font-family: var(--ek-font, inherit);
+}
+
+.manager_menu_item {
+    all: unset;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border-radius: 7px;
+    font-size: var(--ek-text-md, 0.875rem);
+    color: var(--ek-ink, #142033);
+    cursor: pointer;
+}
+
+.manager_menu_item:hover:not(:disabled),
+.manager_menu_item:focus-visible {
+    background: var(--ek-row-hover, #eef7fd);
+}
+
+.manager_menu_item.is-danger {
+    color: var(--ek-erro, #b91c1c);
+}
+
+.manager_menu_item.is-danger:hover,
+.manager_menu_item.is-danger:focus-visible {
+    background: var(--ek-erro-bg, #fef2f2);
+}
+
+.manager_menu_item:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
@@ -120,13 +417,26 @@
 }
 
 @media (max-width: 640px) {
+    .manager_modal .manager_modal_header {
+        padding: 14px 14px 10px;
+    }
+
+    .manager_filtros {
+        padding: 0 14px 10px;
+    }
+
     .manager_table_wrap_inset {
         -webkit-overflow-scrolling: touch;
     }
 
-    .manager_icon_btn {
-        min-width: 40px;
-        min-height: 40px;
+    .manager_modal .manager_table_compact .col_acoes .manager_icon_btn {
+        width: 40px;
+        height: 40px;
     }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .manager_modal * {
+        transition: none !important;
+    }
+}

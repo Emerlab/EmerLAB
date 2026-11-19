@@ -1678,7 +1678,7 @@ const Supertabelaplanos = () => {
         setCidadeEdicao(null)
     }
 
-    const excluirCidadeNoGerenciador = async (cidade, opcoes = {}) => {
+    const excluirCidadeNoGerenciador = async (cidade) => {
         if (bloquearSeSomenteLeitura(mostrarErroToast)) return
         const executarExclusao = async () => {
             const { error: errRepasses } = await supabase.from('repasses').delete().eq('cidade_id', cidade.id)
@@ -1708,12 +1708,9 @@ const Supertabelaplanos = () => {
             }
         }
 
-        if (opcoes.ignorarConfirmacao) {
-            await executarExclusao()
-            return
-        }
-
-        abrirConfirmacaoExclusao(`Excluir a cidade "${cidade.nome}" e os vínculos próprios dela? A tabela de planos da região será mantida.`, executarExclusao)
+        const qtd = Number(cidade.procedimentosAtivos || 0)
+        const detalhe = qtd ? ` Ela tem ${qtd} procedimento${qtd > 1 ? 's' : ''} ativo${qtd > 1 ? 's' : ''}.` : ''
+        abrirConfirmacaoExclusao(`Excluir a cidade "${cidade.nome}" e os vínculos próprios dela?${detalhe} A tabela de planos da região será mantida.`, executarExclusao)
     }
 
     const iniciarDuplicacaoCidade = (cidade) => {
