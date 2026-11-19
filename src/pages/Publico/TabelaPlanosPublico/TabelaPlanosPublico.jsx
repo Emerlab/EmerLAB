@@ -1,177 +1,229 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../../components/ui/Card.jsx'
 import { EmptyState } from '../../../components/ui/States.jsx'
 import { Toolbar } from '../../../components/ui/Toolbar.jsx'
-import { linkWhatsapp } from '../../../lib/repasse/repasseCore.js'
+import { clientePlanosPadrao } from '../../../lib/apiV1/planosPublicosApi.js'
+import BuscaProcedimentos from './BuscaProcedimentos.jsx'
+import { IconeInfo, IconeWhatsapp } from './iconesTabelaPlanos.jsx'
 import {
-    chaveTabela,
-    mensagemWhatsappPlano,
-    MOCK_TABELA_PLANOS,
-    WHATSAPP_NUMERO,
-} from './mockTabelaPlanos.js'
+    filtrarGrupos,
+    formatarReais,
+    hrefWhatsappSemResultado,
+    hrefWhatsappTabela,
+    totalProcedimentos,
+    trechosComDestaque,
+} from './logicaTabelaPlanos.js'
+import { criarClientePlanosMock } from './mockTabelaPlanos.js'
+import PainelProcedimento from './PainelProcedimento.jsx'
 import './TabelaPlanosPublico.css'
 
-function IconeBusca({ className }) {
-    return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-            <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
+const CHAVE_ULTIMA_CIDADE = 'tp_ultima_cidade'
+
+function lerUltimaCidade() {
+    try {
+        return window.localStorage.getItem(CHAVE_ULTIMA_CIDADE) || ''
+    } catch {
+        return ''
+    }
+}
+
+function guardarUltimaCidade(id) {
+    try {
+        window.localStorage.setItem(CHAVE_ULTIMA_CIDADE, String(id))
+    } catch {
+        /* navegação privada ou bloqueio: a página funciona sem lembrar */
+    }
+}
+
+function Destacado({ texto, consulta }) {
+    return trechosComDestaque(texto, consulta).map((t, i) =>
+        t.destaque ? (
+            <mark key={i} className="tp_marca">
+                {t.texto}
+            </mark>
+        ) : (
+            <span key={i}>{t.texto}</span>
+        ),
     )
 }
 
-function IconeWhatsapp() {
-    return (
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12.04 2C6.58 2 2.15 6.4 2.15 11.83c0 1.96.52 3.86 1.5 5.54L2 22l4.8-1.57a10 10 0 0 0 5.24 1.44h.01c5.46 0 9.89-4.4 9.89-9.83C21.93 6.4 17.5 2 12.04 2Zm5.74 13.95c-.24.68-1.4 1.25-1.94 1.33-.5.07-1.13.1-1.82-.11-.42-.13-.96-.31-1.66-.61-2.92-1.26-4.82-4.2-4.97-4.4-.14-.19-1.18-1.57-1.18-3 0-1.42.74-2.12 1.01-2.41.26-.29.58-.36.77-.36h.56c.18 0 .42-.07.66.5.24.58.82 2 .89 2.15.07.14.12.31.02.5-.1.19-.14.31-.28.48-.14.17-.3.38-.42.51-.14.14-.28.29-.12.57.16.28.7 1.15 1.5 1.86 1.03.92 1.9 1.2 2.17 1.34.27.14.43.12.59-.07.16-.19.68-.79.86-1.06.18-.28.36-.23.61-.14.24.1 1.55.73 1.82.86.27.14.45.2.52.31.07.12.07.68-.17 1.36Z" />
-        </svg>
-    )
-}
+/**
+ * Página pública /tabela-planos. `cliente` e `aleatorio` são injetáveis (testes e demonstração).
+ * Estado da escolha na URL: ?cidade=&plano=&q=
+ */
+export default function TabelaPlanosPublico({ cliente: clienteProp, aleatorio }) {
+    const [params, setParams] = useSearchParams()
+    const clienteReal = useMemo(() => clienteProp || clientePlanosPadrao(), [clienteProp])
+    const demo = !clienteReal
+    const cliente = useMemo(() => clienteReal || criarClientePlanosMock(), [clienteReal])
 
-function normalizarBusca(texto) {
-    return String(texto || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
-}
+    const cidadeParam = params.get('cidade') || ''
+    const planoParam = params.get('plano') || ''
+    const consulta = params.get('q') || ''
 
-function linhaBateTermo(linha, termoNorm) {
-    if (!termoNorm) return true
-    const blob = normalizarBusca(`${linha.codigo} ${linha.nome}`)
-    return blob.includes(termoNorm)
-}
+    const [filtros, setFiltros] = useState({ status: 'carregando', data: null, mensagem: '' })
+    const [tabela, setTabela] = useState({ status: 'ocioso', data: null, codigo: '', mensagem: '' })
+    const [tentFiltros, setTentFiltros] = useState(0)
+    const [tentTabela, setTentTabela] = useState(0)
+    const [abertos, setAbertos] = useState(() => new Set())
+    const [painel, setPainel] = useState(null) // { proc, grupoNome }
+    const origemFocoRef = useRef(null)
 
-export default function TabelaPlanosPublico() {
-    const { cidades, planosPorCidade, tabelas } = MOCK_TABELA_PLANOS
-    const [cidadeId, setCidadeId] = useState('')
-    const [planoId, setPlanoId] = useState('')
-    const [grupoIdx, setGrupoIdx] = useState(0)
-    const [buscaAberta, setBuscaAberta] = useState(false)
-    const [termoBusca, setTermoBusca] = useState('')
-    const buscaInputRef = useRef(null)
-
-    const cidade = useMemo(
-        () => cidades.find((c) => String(c.id) === String(cidadeId)) || null,
-        [cidades, cidadeId],
-    )
-
-    const planos = useMemo(() => {
-        if (!cidadeId) return []
-        return planosPorCidade[cidadeId] || []
-    }, [cidadeId, planosPorCidade])
-
-    const plano = useMemo(
-        () => planos.find((p) => String(p.id) === String(planoId)) || null,
-        [planos, planoId],
+    const atualizar = useCallback(
+        (mudancas) => {
+            setParams(
+                (atual) => {
+                    const novo = new URLSearchParams(atual)
+                    for (const [k, v] of Object.entries(mudancas)) {
+                        if (v === '' || v === null || v === undefined) novo.delete(k)
+                        else novo.set(k, String(v))
+                    }
+                    return novo
+                },
+                { replace: true },
+            )
+        },
+        [setParams],
     )
 
-    const categorias = useMemo(() => {
-        if (!cidadeId || !planoId) return []
-        return tabelas[chaveTabela(cidadeId, planoId)]?.categorias || []
-    }, [cidadeId, planoId, tabelas])
-
-    const termoNorm = normalizarBusca(termoBusca)
-
-    const categoriasFiltradas = useMemo(() => {
-        if (!termoNorm) return categorias
-        return categorias
-            .map((cat) => ({
-                ...cat,
-                linhas: (cat.linhas || []).filter((l) => linhaBateTermo(l, termoNorm)),
-            }))
-            .filter((cat) => cat.linhas.length > 0)
-    }, [categorias, termoNorm])
-
+    // Filtros (cidades e planos)
     useEffect(() => {
-        setGrupoIdx(0)
-    }, [cidadeId, planoId, termoNorm])
+        let cancelado = false
+        setFiltros({ status: 'carregando', data: null, mensagem: '' })
+        cliente
+            .filtros()
+            .then((data) => !cancelado && setFiltros({ status: 'ok', data, mensagem: '' }))
+            .catch((e) => !cancelado && setFiltros({ status: 'erro', data: null, mensagem: e?.message || '' }))
+        return () => {
+            cancelado = true
+        }
+    }, [cliente, tentFiltros])
 
-    useEffect(() => {
-        if (!buscaAberta) return undefined
-        const t = window.setTimeout(() => buscaInputRef.current?.focus(), 50)
-        return () => window.clearTimeout(t)
-    }, [buscaAberta])
+    const cidades = filtros.data?.cidades || []
+    const cidade = cidades.find((c) => String(c.id) === cidadeParam) || null
+    const plano = cidade?.planos.find((p) => p.chave === planoParam || String(p.id) === planoParam) || null
 
+    // Última cidade lembrada e plano padrão (o primeiro da cidade)
     useEffect(() => {
-        if (!cidadeId) {
-            setPlanoId('')
+        if (filtros.status !== 'ok') return
+        if (!cidadeParam) {
+            const salva = lerUltimaCidade()
+            if (salva && cidades.some((c) => String(c.id) === salva)) atualizar({ cidade: salva })
             return
         }
-        const lista = planosPorCidade[cidadeId] || []
-        if (!lista.length) {
-            setPlanoId('')
-            return
+        if (cidade && !plano) atualizar({ plano: cidade.planos[0]?.chave || '' })
+    }, [filtros.status, cidadeParam, cidade, plano, cidades, atualizar])
+
+    // Tabela
+    useEffect(() => {
+        if (!cidade || !plano) {
+            setTabela({ status: 'ocioso', data: null, codigo: '', mensagem: '' })
+            return undefined
         }
-        if (!lista.some((p) => String(p.id) === String(planoId))) {
-            setPlanoId(String(lista[0].id))
+        let cancelado = false
+        setTabela({ status: 'carregando', data: null, codigo: '', mensagem: '' })
+        cliente
+            .tabela({ cidade: cidade.id, plano: plano.chave })
+            .then((data) => {
+                if (cancelado) return
+                setTabela({ status: 'ok', data, codigo: '', mensagem: '' })
+                setAbertos(new Set(data.grupos?.length ? [data.grupos[0].id] : []))
+            })
+            .catch((e) => !cancelado && setTabela({ status: 'erro', data: null, codigo: e?.codigo || '', mensagem: e?.message || '' }))
+        return () => {
+            cancelado = true
         }
-    }, [cidadeId, planoId, planosPorCidade])
+    }, [cliente, cidade, plano, tentTabela])
 
-    const totalGrupos = categoriasFiltradas.length
-    const idxSeguro = totalGrupos > 0 ? Math.min(grupoIdx, totalGrupos - 1) : 0
-    const grupoAtual = totalGrupos > 0 ? categoriasFiltradas[idxSeguro] : null
-    const indiceExibido = totalGrupos > 0 ? idxSeguro + 1 : 0
-    const totalResultados = categoriasFiltradas.reduce((s, c) => s + c.linhas.length, 0)
+    const gruposFiltrados = useMemo(() => filtrarGrupos(tabela.data?.grupos, consulta), [tabela.data, consulta])
+    const buscando = Boolean(consulta.trim())
+    const total = totalProcedimentos(gruposFiltrados)
+    const resumo = buscando
+        ? total === 0
+            ? 'Nenhum procedimento encontrado.'
+            : `${total} procedimento${total === 1 ? '' : 's'} em ${gruposFiltrados.length} grupo${gruposFiltrados.length === 1 ? '' : 's'}.`
+        : ''
 
-    const podeWhats = Boolean(cidade && plano)
-    const hrefWhats = podeWhats
-        ? linkWhatsapp(
-            WHATSAPP_NUMERO,
-            mensagemWhatsappPlano(plano.nome, cidade.label, cidade.uf),
-        )
-        : undefined
-
-    function onChangeCidade(e) {
-        setCidadeId(e.target.value)
-        setTermoBusca('')
-        setBuscaAberta(false)
+    function escolherCidade(id) {
+        if (id) guardarUltimaCidade(id)
+        atualizar({ cidade: id, plano: '', q: '' })
     }
 
-    function onEscolherPlano(id) {
-        setPlanoId(String(id))
-        setTermoBusca('')
-        setBuscaAberta(false)
+    function alternarGrupo(id) {
+        setAbertos((atual) => {
+            const novo = new Set(atual)
+            if (novo.has(id)) novo.delete(id)
+            else novo.add(id)
+            return novo
+        })
     }
+
+    function irParaGrupo(id) {
+        setAbertos((atual) => new Set(atual).add(id))
+        window.requestAnimationFrame(() => document.getElementById(`tp-grupo-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
+    }
+
+    function abrirPainel(proc, grupoNome, elemento) {
+        origemFocoRef.current = elemento
+        setPainel({ proc, grupoNome })
+    }
+
+    function fecharPainel() {
+        setPainel(null)
+        const alvo = origemFocoRef.current
+        window.requestAnimationFrame(() => alvo?.focus?.())
+    }
+
+    const hrefWhats = hrefWhatsappTabela({ cidade, plano, procedimento: painel?.proc })
+    const observacoes = tabela.data?.observacoes || {}
+    const gerais = (tabela.data?.observacoes_gerais || []).map((id) => observacoes[id]).filter(Boolean)
 
     return (
         <main className="ek-page tp_page">
             <PageHeader
                 kicker="Emerdog"
                 title="Tabela de planos"
-                description="Escolha a cidade com cobertura, veja o plano e fale conosco no WhatsApp."
+                description="Escolha a cidade e o plano, busque o procedimento e veja onde fazer."
             />
+
+            {demo ? (
+                <p className="tp_faixa_demo" role="status">
+                    Dados de exemplo: a API ainda não está configurada neste ambiente.
+                </p>
+            ) : null}
 
             <Toolbar title="Cobertura" sticky={false}>
                 <label className="ek-field ek-field--grow">
                     <span className="ek-label">Cidade</span>
                     <select
                         className="ek-select"
-                        value={cidadeId}
-                        onChange={onChangeCidade}
-                        aria-label="Filtrar por cidade com cobertura"
+                        value={cidade ? String(cidade.id) : ''}
+                        onChange={(e) => escolherCidade(e.target.value)}
+                        disabled={filtros.status !== 'ok'}
+                        aria-label="Cidade com cobertura"
                     >
-                        <option value="">Selecione a cidade</option>
+                        <option value="">{filtros.status === 'carregando' ? 'Carregando cidades…' : 'Selecione a cidade'}</option>
                         {cidades.map((c) => (
                             <option key={c.id} value={c.id}>
-                                {c.label} ({c.uf})
+                                {c.nome} ({c.uf})
                             </option>
                         ))}
                     </select>
                 </label>
 
-                {cidadeId && planos.length > 0 ? (
+                {cidade ? (
                     <div className="ek-field ek-field--grow">
                         <span className="ek-label">Plano</span>
                         <div className="tp_planos_scroll">
                             <div className="ek-segmented" role="group" aria-label="Planos disponíveis">
-                                {planos.map((p) => (
+                                {cidade.planos.map((p) => (
                                     <button
                                         key={p.id}
                                         type="button"
                                         className="ek-segmented__opt"
-                                        aria-pressed={String(p.id) === String(planoId)}
-                                        onClick={() => onEscolherPlano(p.id)}
+                                        aria-pressed={plano?.id === p.id}
+                                        onClick={() => atualizar({ plano: p.chave, q: '' })}
                                     >
                                         {p.nome}
                                     </button>
@@ -182,133 +234,174 @@ export default function TabelaPlanosPublico() {
                 ) : null}
             </Toolbar>
 
-            {!cidadeId ? (
-                <EmptyState
-                    title="Comece pela cidade"
-                    description="Escolha onde há cobertura para ver os planos e os procedimentos."
-                />
-            ) : null}
-
-            {cidadeId && plano && !grupoAtual ? (
-                <EmptyState
-                    title={termoNorm ? 'Nada encontrado' : 'Sem procedimentos'}
-                    description={
-                        termoNorm
-                            ? 'Tente outro termo ou limpe a busca.'
-                            : 'Não há procedimentos neste plano para a cidade selecionada.'
-                    }
-                />
-            ) : null}
-
-            {grupoAtual ? (
-                <section className="ek-card" aria-labelledby="tp-grupo-titulo">
-                    <div className="tp_grupo_head">
-                        <h2 id="tp-grupo-titulo" className="ek-card__title">
-                            {grupoAtual.nome}
-                        </h2>
-                        <span className="ek-badge">
-                            {grupoAtual.linhas.length} item{grupoAtual.linhas.length === 1 ? '' : 's'}
-                        </span>
-                    </div>
-
-                    <div className="ek-table-wrap">
-                        <table className="ek-table ek-table--stack">
-                            <thead>
-                                <tr>
-                                    <th>Procedimento</th>
-                                    <th className="ek-num">Diferença</th>
-                                    <th>Carência</th>
-                                    <th>Limite</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {grupoAtual.linhas.map((linha) => (
-                                    <tr key={`${linha.codigo}-${linha.nome}`}>
-                                        <td data-label="Procedimento">
-                                            <span className="tp_proc">
-                                                <span className="tp_proc__nome">{linha.nome}</span>
-                                                <span className="tp_proc__cod">{linha.codigo}</span>
-                                            </span>
-                                        </td>
-                                        <td data-label="Diferença" className="ek-num">
-                                            {linha.diferenca}
-                                        </td>
-                                        <td data-label="Carência">{linha.carencia}</td>
-                                        <td data-label="Limite">{linha.limite}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {totalGrupos > 1 ? (
-                        <nav className="tp_paginacao" aria-label="Paginação de grupos">
-                            <button
-                                type="button"
-                                className="ek-btn ek-btn--secondary"
-                                disabled={indiceExibido <= 1}
-                                onClick={() => setGrupoIdx((i) => Math.max(0, i - 1))}
-                            >
-                                Anterior
-                            </button>
-                            <span className="tp_paginacao__meta">
-                                Grupo {indiceExibido} de {totalGrupos}
-                            </span>
-                            <button
-                                type="button"
-                                className="ek-btn ek-btn--secondary"
-                                disabled={indiceExibido >= totalGrupos}
-                                onClick={() => setGrupoIdx((i) => Math.min(totalGrupos - 1, i + 1))}
-                            >
-                                Próximo
-                            </button>
-                        </nav>
-                    ) : null}
-                </section>
-            ) : null}
-
-            {buscaAberta ? (
-                <div className="tp_busca_painel" role="search">
-                    <span className="ek-search">
-                        <IconeBusca className="ek-search__icon" />
-                        <input
-                            ref={buscaInputRef}
-                            className="ek-input"
-                            type="search"
-                            placeholder="Código ou procedimento"
-                            value={termoBusca}
-                            onChange={(e) => setTermoBusca(e.target.value)}
-                            aria-label="Buscar procedimento"
-                        />
-                    </span>
-                    {termoNorm ? (
-                        <p className="tp_busca_hint">
-                            {totalGrupos === 0
-                                ? 'Sem resultados neste plano.'
-                                : `${totalResultados} resultado(s) em ${totalGrupos} grupo(s).`}
-                        </p>
-                    ) : null}
+            {filtros.status === 'erro' ? (
+                <div className="tp_aviso" role="alert">
+                    <p>{filtros.mensagem || 'Não foi possível carregar as cidades.'}</p>
+                    <button type="button" className="ek-btn ek-btn--secondary" onClick={() => setTentFiltros((t) => t + 1)}>
+                        Tentar de novo
+                    </button>
                 </div>
             ) : null}
 
-            <div className="tp_fabs">
-                <button
-                    type="button"
-                    className={`tp_fab tp_fab--busca${buscaAberta ? ' is-open' : ''}`}
-                    aria-label={buscaAberta ? 'Fechar busca' : 'Abrir busca'}
-                    aria-expanded={buscaAberta}
-                    disabled={!plano}
-                    onClick={() => {
-                        setBuscaAberta((v) => {
-                            if (v) setTermoBusca('')
-                            return !v
-                        })
-                    }}
-                >
-                    <IconeBusca />
-                </button>
+            <BuscaProcedimentos
+                valor={consulta}
+                onChange={(v) => atualizar({ q: v })}
+                termosPopulares={filtros.data?.termos_populares || []}
+                desabilitado={!plano}
+                resumo={resumo}
+            />
 
-                {podeWhats ? (
+            {filtros.status === 'ok' && !cidade ? (
+                <EmptyState title="Comece pela cidade" description="Escolha onde há cobertura para ver os planos e os procedimentos." />
+            ) : null}
+
+            {tabela.status === 'carregando' ? (
+                <div className="tp_esqueleto tp_esqueleto--tabela" aria-busy="true" aria-label="Carregando tabela">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                </div>
+            ) : null}
+
+            {tabela.status === 'erro' && tabela.codigo === 'plano_indisponivel_na_cidade' ? (
+                <EmptyState title="Plano indisponível nesta cidade" description="Escolha outro plano ou outra cidade." />
+            ) : null}
+
+            {tabela.status === 'erro' && tabela.codigo !== 'plano_indisponivel_na_cidade' ? (
+                <div className="tp_aviso" role="alert">
+                    <p>{tabela.mensagem || 'Não foi possível carregar a tabela.'}</p>
+                    <button type="button" className="ek-btn ek-btn--secondary" onClick={() => setTentTabela((t) => t + 1)}>
+                        Tentar de novo
+                    </button>
+                </div>
+            ) : null}
+
+            {tabela.status === 'ok' && (tabela.data.grupos || []).length === 0 ? (
+                <div className="tp_aviso">
+                    <p>Ainda não há procedimentos publicados para este plano nesta cidade. Fale com a gente.</p>
+                    <a className="ek-btn" href={hrefWhatsappSemResultado({ cidade, plano })} target="_blank" rel="noreferrer">
+                        Falar no WhatsApp
+                    </a>
+                </div>
+            ) : null}
+
+            {tabela.status === 'ok' && buscando && gruposFiltrados.length === 0 && (tabela.data.grupos || []).length > 0 ? (
+                <div className="tp_aviso">
+                    <p>Não encontramos “{consulta}” neste plano. Fale com a gente que ajudamos.</p>
+                    <a className="ek-btn" href={hrefWhatsappSemResultado({ cidade, plano, assunto: consulta })} target="_blank" rel="noreferrer">
+                        Falar no WhatsApp
+                    </a>
+                </div>
+            ) : null}
+
+            {tabela.status === 'ok' && gruposFiltrados.length > 0 ? (
+                <>
+                    <nav className="tp_chips_grupos" aria-label="Ir para o grupo">
+                        {gruposFiltrados.map((g) => (
+                            <button key={g.id} type="button" className="tp_chip" onClick={() => irParaGrupo(g.id)}>
+                                {g.nome} <span className="tp_chip__n">{g.procedimentos.length}</span>
+                            </button>
+                        ))}
+                    </nav>
+
+                    {gruposFiltrados.map((g) => {
+                        const aberto = buscando || abertos.has(g.id)
+                        return (
+                            <section key={g.id} id={`tp-grupo-${g.id}`} className="ek-card tp_grupo" aria-labelledby={`tp-grupo-titulo-${g.id}`}>
+                                <h2 id={`tp-grupo-titulo-${g.id}`} className="tp_grupo_titulo">
+                                    <button
+                                        type="button"
+                                        className="tp_grupo_btn"
+                                        aria-expanded={aberto}
+                                        aria-controls={`tp-grupo-corpo-${g.id}`}
+                                        onClick={() => alternarGrupo(g.id)}
+                                        disabled={buscando}
+                                    >
+                                        <span>{g.nome}</span>
+                                        <span className="ek-badge">{g.procedimentos.length}</span>
+                                        {g.limite_grupo ? <span className="tp_limite_grupo">Limite do grupo: {g.limite_grupo}</span> : null}
+                                        <span className="tp_seta" aria-hidden="true" />
+                                    </button>
+                                </h2>
+                                {aberto ? (
+                                    <div id={`tp-grupo-corpo-${g.id}`} className="ek-table-wrap">
+                                        <table className="ek-table ek-table--stack">
+                                            <thead>
+                                                <tr>
+                                                    <th>Procedimento</th>
+                                                    <th className="ek-num">Diferença</th>
+                                                    <th>Carência</th>
+                                                    <th>Limite</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {g.procedimentos.map((p) => (
+                                                    <tr key={p.codigo}>
+                                                        <td data-label="Procedimento">
+                                                            <button
+                                                                type="button"
+                                                                className="tp_proc tp_proc_btn"
+                                                                onClick={(e) => abrirPainel(p, g.nome, e.currentTarget)}
+                                                                aria-haspopup="dialog"
+                                                            >
+                                                                <span className="tp_proc__nome">
+                                                                    <Destacado texto={p.nome} consulta={consulta} />
+                                                                    {p.observacoes?.length ? (
+                                                                        <span className="tp_obs_marca" title="Tem observação" role="img" aria-label="Tem observação">
+                                                                            <IconeInfo />
+                                                                        </span>
+                                                                    ) : null}
+                                                                </span>
+                                                                <span className="tp_proc__cod">{p.codigo}</span>
+                                                            </button>
+                                                        </td>
+                                                        <td data-label="Diferença" className="ek-num">
+                                                            {p.diferenca ? formatarReais(p.diferenca) : 'Incluso'}
+                                                        </td>
+                                                        <td data-label="Carência">{p.carencia || '—'}</td>
+                                                        <td data-label="Limite">{p.limite || '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : null}
+                            </section>
+                        )
+                    })}
+
+                    {gerais.length > 0 ? (
+                        <aside className="ek-card tp_gerais" aria-label="Observações gerais">
+                            <h2 className="tp_gerais__titulo">Informações</h2>
+                            <ol>
+                                {gerais.map((o) => (
+                                    <li key={o.id}>
+                                        {o.titulo ? <strong>{o.titulo}. </strong> : null}
+                                        {o.mensagem}
+                                    </li>
+                                ))}
+                            </ol>
+                        </aside>
+                    ) : null}
+                </>
+            ) : null}
+
+            {painel ? (
+                <PainelProcedimento
+                    procedimento={painel.proc}
+                    grupoNome={painel.grupoNome}
+                    observacoes={observacoes}
+                    cidade={cidade}
+                    plano={plano}
+                    cliente={cliente}
+                    aleatorio={aleatorio}
+                    onFechar={fecharPainel}
+                />
+            ) : null}
+
+            <div className="tp_fabs">
+                {hrefWhats ? (
                     <a
                         className="tp_fab tp_fab--whats"
                         href={hrefWhats}
@@ -324,7 +417,8 @@ export default function TabelaPlanosPublico() {
                         type="button"
                         className="tp_fab tp_fab--whats is-disabled"
                         disabled
-                        aria-label="WhatsApp (selecione cidade e plano)"
+                        aria-label="WhatsApp (escolha a cidade e o plano)"
+                        title="Escolha a cidade e o plano para falar no WhatsApp"
                     >
                         <IconeWhatsapp />
                     </button>

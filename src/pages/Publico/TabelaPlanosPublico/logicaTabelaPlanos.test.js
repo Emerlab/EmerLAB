@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest'
+import {
+    filtrarGrupos,
+    formatarReais,
+    hrefWhatsappTabela,
+    procedimentoBateConsulta,
+    totalProcedimentos,
+    trechosComDestaque,
+} from './logicaTabelaPlanos.js'
+import { criarClientePlanosMock } from './mockTabelaPlanos.js'
+
+const grupos = [
+    {
+        id: 1,
+        nome: 'Imagem',
+        procedimentos: [
+            { codigo: 'IMG001', nome: 'Radiografia simples', termos: ['radiografia', 'raio x'] },
+            { codigo: 'IMG002', nome: 'Ultrassonografia abdominal', termos: ['ultrassom'] },
+        ],
+    },
+    { id: 2, nome: 'Cirurgias', procedimentos: [{ codigo: 'CIR001', nome: 'Castração macho', termos: ['castracao', 'esterilizacao'] }] },
+]
+
+describe('busca', () => {
+    it('"raio x" acha a radiografia pelos termos (sinônimo)', () => {
+        const r = filtrarGrupos(grupos, 'raio x')
+        expect(r.map((g) => g.nome)).toEqual(['Imagem'])
+        expect(r[0].procedimentos.map((p) => p.codigo)).toEqual(['IMG001'])
+    })
+
+    it('"CASTRACAO" (sem acento, maiúsculas) acha "Castração macho"', () => {
+        expect(totalProcedimentos(filtrarGrupos(grupos, 'CASTRACAO'))).toBe(1)
+    })
+
+    it('acha pelo código e pelo nome com acento digitado sem acento', () => {
+        expect(procedimentoBateConsulta(grupos[0].procedimentos[0], 'img001')).toBe(true)
+        expect(totalProcedimentos(filtrarGrupos(grupos, 'ultrassonografia'))).toBe(1)
+    })
+
+    it('sem consulta devolve tudo; sem acerto devolve []', () => {
+        expect(filtrarGrupos(grupos, '  ')).toBe(grupos)
+        expect(filtrarGrupos(grupos, 'xyz')).toEqual([])
+    })
+})
+
+describe('trechosComDestaque', () => {
+    it('marca o trecho ignorando acento e caixa', () => {
+        expect(trechosComDestaque('Castração macho', 'CASTRACAO')).toEqual([
+            { texto: 'Castração', destaque: true },
+            { texto: ' macho', destaque: false },
+        ])
+    })
+
+    it('acerto por sinônimo não destaca nada e mantém o texto inteiro', () => {
+        expect(trechosComDestaque('Radiografia simples', 'raio x')).toEqual([{ texto: 'Radiografia simples', destaque: false }])
+    })
+
+    it('sem consulta devolve o texto', () => {
+        expect(trechosComDestaque('Consulta', '')).toEqual([{ texto: 'Consulta', destaque: false }])
+    })
+})
+
+describe('formatação e WhatsApp', () => {
+    it('formata reais em pt-BR', () => {
+        expect(formatarReais(1234.5).replace(/\s/g, ' ')).toBe('R$ 1.234,50')
+        expect(formatarReais('x')).toBe('—')
+    })
+
+    it('WhatsApp só existe com cidade e plano e cita o procedimento aberto', () => {
+        const cidade = { nome: 'Caxias do Sul', uf: 'RS' }
+        const plano = { nome: 'Básico' }
+        expect(hrefWhatsappTabela({ cidade })).toBeNull()
+        const sem = decodeURIComponent(hrefWhatsappTabela({ cidade, plano }))
+        expect(sem).toContain('plano Básico de Caxias do Sul-RS')
+        const com = decodeURIComponent(hrefWhatsappTabela({ cidade, plano, procedimento: { nome: 'Radiografia simples' } }))
+        expect(com).toContain('Radiografia simples')
+    })
+})
+
+describe('mock no formato da API', () => {
+    it('devolve filtros, tabela e prestadores como a API; plano fora da cidade dá 404 com codigo', async () => {
+        const c = criarClientePlanosMock()
+        const f = await c.filtros()
+        expect(f.cidades[0].planos[0]).toHaveProperty('chave')
+        const t = await c.tabela({ cidade: 1, plano: 'basico' })
+        expect(t.grupos[0].procedimentos[0]).toHaveProperty('termos')
+        expect(t.observacoes_gerais.every((id) => t.observacoes[id])).toBe(true)
+        await expect(c.tabela({ cidade: 3, plano: 'ultra' })).rejects.toMatchObject({ codigo: 'plano_indisponivel_na_cidade' })
+        expect((await c.prestadores({ cidade: 1, procedimento: 'CON001' })).total).toBe(7)
+    })
+})
