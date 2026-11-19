@@ -143,6 +143,9 @@ const Supertabelaplanos = () => {
     const [filtrarSoVazios, setFiltrarSoVazios] = useState(false)
     const [dadosMatriz, setDadosMatriz] = useState({ procedimentos: [], configRows: [] })
     const [corrigindoAcima, setCorrigindoAcima] = useState(false)
+    // Gravações da matriz: uma por vez por procedimento+plano, e ids das linhas criadas nesta sessão.
+    const filaGravacaoMatrizRef = useRef(new Map())
+    const configIdsMatrizRef = useRef(new Map())
     const [contagemRealizadoresPorCodigo, setContagemRealizadoresPorCodigo] = useState(() => new Map())
     const [nomesRealizadoresPorCodigo, setNomesRealizadoresPorCodigo] = useState(() => new Map())
     const [sugestoesRealizadores, setSugestoesRealizadores] = useState([])
@@ -533,6 +536,7 @@ const Supertabelaplanos = () => {
             const procedimentosLista = procedimentosData || []
             const configRows = configsData || []
             setDadosMatriz({ procedimentos: procedimentosLista, configRows })
+            configIdsMatrizRef.current.clear()
             setLinhasLimitacoes(
                 montarLinhasMatriz({
                     procedimentos: procedimentosLista,
@@ -1349,30 +1353,54 @@ const Supertabelaplanos = () => {
         }
     }
 
-    const salvarCelulaMatriz = async (linha, chave, campo, valor) => {
-        if (bloquearSeSomenteLeitura(mostrarErroToast)) return false
-        const celula = linha.celulas[chave]
-        if (!celula || celula.modo !== 'editavel') return false
-
-        const resultado = await gravarPlanoConfig(supabase, {
-            planoId: celula.planoId,
-            procedimento: linha.codigo,
-            [campo]: valor })
-        if (resultado.status === 'erro') {
-            mostrarErroToast(
-                `Erro ao salvar ${campo === 'limite' ? 'limite' : 'carência'} de ${linha.codigo}: ${resultado.error?.message || 'erro desconhecido'}`
-            )
-            return false
-        }
-
+    // Troca só a célula editada (as demais linhas mantêm a identidade e não re-renderizam).
+    const atualizarCelulaMatriz = (codigo, chave, mudancas) =>
         setLinhasLimitacoes((anteriores) =>
             anteriores.map((item) =>
-                item.codigo === linha.codigo
-                    ? { ...item, celulas: { ...item.celulas, [chave]: { ...item.celulas[chave], [campo]: valor } } }
+                item.codigo === codigo
+                    ? { ...item, celulas: { ...item.celulas, [chave]: { ...item.celulas[chave], ...mudancas } } }
                     : item
             )
         )
-        return true
+
+    const salvarCelulaMatriz = (linha, chave, campo, valor) => {
+        if (bloquearSeSomenteLeitura(mostrarErroToast)) return Promise.resolve(false)
+        const celula = linha.celulas[chave]
+        if (!celula || celula.modo !== 'editavel') return Promise.resolve(false)
+
+        const anterior = celula[campo]
+        atualizarCelulaMatriz(linha.codigo, chave, { [campo]: valor }) // a tela muda na hora
+
+        // Uma gravação por vez por procedimento+plano: mantém a ordem e não cria a linha duas vezes.
+        const chaveFila = `${linha.codigo}|${celula.planoId}`
+        const filaAnterior = filaGravacaoMatrizRef.current.get(chaveFila) || Promise.resolve()
+        const atual = filaAnterior.then(async () => {
+            const configId = configIdsMatrizRef.current.get(chaveFila) ?? celula.configId ?? null
+            const resultado = await gravarPlanoConfig(supabase, {
+                planoId: celula.planoId,
+                procedimento: linha.codigo,
+                [campo]: valor,
+                configId })
+            if (resultado.status === 'erro') {
+                atualizarCelulaMatriz(linha.codigo, chave, { [campo]: anterior }) // desfaz
+                mostrarErroToast(
+                    `Erro ao salvar ${campo === 'limite' ? 'limite' : 'carência'} de ${linha.codigo}: ${resultado.error?.message || 'erro desconhecido'}`
+                )
+                return false
+            }
+            if (resultado.configId != null) {
+                configIdsMatrizRef.current.set(chaveFila, resultado.configId)
+                if (resultado.configId !== celula.configId) {
+                    atualizarCelulaMatriz(linha.codigo, chave, { configId: resultado.configId })
+                }
+            }
+            return true
+        })
+        filaGravacaoMatrizRef.current.set(
+            chaveFila,
+            atual.catch(() => false)
+        )
+        return atual
     }
 
     const colarMatriz = async (linhasSecao, linhaIndex, chave, campo, texto) => {
@@ -1383,23 +1411,25 @@ const Supertabelaplanos = () => {
             chaveInicial: chave,
             campoInicial: campo,
             texto })
-        for (const item of itens) {
-            await salvarCelulaMatriz(linhasSecao[item.linhaIndex], item.chave, item.campo, item.valor)
-        }
+        await Promise.all(
+            itens.map((item) => salvarCelulaMatriz(linhasSecao[item.linhaIndex], item.chave, item.campo, item.valor))
+        )
     }
 
     const limparLinhaMatriz = async (linha, opcoes = {}) => {
         if (bloquearSeSomenteLeitura(mostrarErroToast)) return
         const executarLimpeza = async () => {
+            const gravacoes = []
             for (const chave of CHAVES_PLANOS_MATRIZ) {
                 const celula = linha.celulas[chave]
                 if (!celula || celula.modo !== 'editavel') continue
                 for (const campo of ['limite', 'carencia']) {
                     if (!String(celula[campo] ?? '').trim()) continue
                     if (campo === 'limite' && celula.limiteGrupo) continue
-                    await salvarCelulaMatriz(linha, chave, campo, '')
+                    gravacoes.push(salvarCelulaMatriz(linha, chave, campo, ''))
                 }
             }
+            await Promise.all(gravacoes)
         }
 
         if (opcoes.ignorarConfirmacao) {
@@ -1917,13 +1947,14 @@ const Supertabelaplanos = () => {
     }, [erroDetalhe])
 
 
+    // Efeitos separados: mudar algo que só interessa aos valores (cidade, vínculos) não recarrega a matriz inteira.
     useEffect(() => {
-        if (modoLimitacoes) {
-            buscarLinhasLimitacoes()
-        } else {
-            buscarLinhasDiferencas()
-        }
-    }, [cidadeId, modoLimitacoes, buscarLinhasDiferencas, buscarLinhasLimitacoes])
+        if (modoLimitacoes) buscarLinhasLimitacoes()
+    }, [modoLimitacoes, buscarLinhasLimitacoes])
+
+    useEffect(() => {
+        if (!modoLimitacoes) buscarLinhasDiferencas()
+    }, [cidadeId, modoLimitacoes, buscarLinhasDiferencas])
 
     useEffect(() => {
         if (!mostrarGerenciarModal) return
