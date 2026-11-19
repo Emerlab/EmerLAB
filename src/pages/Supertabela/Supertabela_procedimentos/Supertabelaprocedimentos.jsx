@@ -25,6 +25,7 @@ import {
     obterChavePlanoPorId,
     obterPlanoIdsPermitidosDesdeChaveBase } from '../../../lib/planosHierarquia.js'
 import { TOAST_AUTO_DISMISS_MS, useConfirmacaoExclusaoAutoDismiss } from '../../../lib/toastUi.js'
+import { sincronizarAcimaProcedimento } from '../../../lib/procedimentoLimitesCarencias.js'
 import '../Supertabela_main/Supertabelamain.css'
 import './Supertabelaprocedimentos.css'
 import CampoBuscaComLimpar from '../../../components/CampoBuscaComLimpar/CampoBuscaComLimpar'
@@ -672,6 +673,11 @@ const Supertabelaprocedimentos = () => {
         )
     }
 
+    const nomesPlanosComErro = (erros) =>
+        erros
+            .map((erro) => planos.find((plano) => Number(plano.id) === Number(erro.planoId))?.nome || `Plano ${erro.planoId}`)
+            .join(', ')
+
     const atualizarPlanoBaseProcedimento = async (linha, novaChavePlanoBase) => {
         const chaveAnterior = linha.planoBaseChave
         if (!ORDEM_PLANOS_BASE_PROCEDIMENTOS.includes(novaChavePlanoBase)) return
@@ -794,6 +800,18 @@ const Supertabelaprocedimentos = () => {
                 return
             }
         }
+
+        const { erros: errosAcima } = await sincronizarAcimaProcedimento(supabase, {
+            codigo: linha.codigo,
+            planoBaseId,
+            mapaPlanos,
+            planos,
+            sobrescreverValoresReais: true })
+        if (errosAcima.length > 0) {
+            mostrarErroToast(
+                `Plano base salvo, mas não foi possível atualizar o "Acima" em: ${nomesPlanosComErro(errosAcima)}. Corrija na matriz de carências e limites.`
+            )
+        }
     }
 
     const excluirProcedimento = async (linha, opcoes = {}) => {
@@ -887,12 +905,23 @@ const Supertabelaprocedimentos = () => {
                 return
             }
 
+            const { erros: errosAcima } = await sincronizarAcimaProcedimento(supabase, {
+                codigo,
+                planoBaseId,
+                mapaPlanos,
+                planos })
+
             setNovoProcedimento({
                 codigo: '',
                 nome: '',
                 categoriaId: String(categoriaId),
                 planoBaseChave: novoProcedimento.planoBaseChave })
             await carregarBase()
+            if (errosAcima.length > 0) {
+                mostrarErroToast(
+                    `Procedimento criado, mas não foi possível gravar "Acima" em: ${nomesPlanosComErro(errosAcima)}. Corrija na matriz de carências e limites.`
+                )
+            }
         } catch (error) {
             mostrarErroToast(`Falha ao inserir procedimento: ${error.message}`)
         } finally {

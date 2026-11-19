@@ -1476,3 +1476,40 @@ body.dark-mode .supertabelaplanos_sugestoes_rede_vazio {
     color: #9ab0c4;
 }
 
+
+/* Matriz de carências e limites */
+.supertabelaplanos_matriz th.supertabelaplanos_th_centro,
+.supertabelaplanos_matriz td.supertabelaplanos_td_centro {
+    text-align: center;
+}
+
+.supertabelaplanos_matriz td.supertabelaplanos_celula_acima {
+    background: #f3f6f8;
+    color: #6b7f8f;
+    font-size: 0.75rem;
+    font-style: italic;
+}
+
+.supertabelaplanos_matriz td.supertabelaplanos_celula_vazia {
+    background: #fff8e1;
+}
+
+.supertabelaplanos_matriz .table_cell_input_text {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.supertabelaplanos_aviso_acima {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border: 1px solid #d9a441;
+    border-radius: 8px;
+    background: #fff4d6;
+    color: #7a5200;
+    font-weight: 600;
+}

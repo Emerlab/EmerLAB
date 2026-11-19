@@ -63,7 +63,7 @@ function exemploParametro(p) {
 }
 
 function curlDe(spec, caminho, metodo, op) {
-    const rede = op.tags?.includes('Rede credenciada')
+    const rede = op.tags?.includes('Rede credenciada') || op.tags?.includes('Tabela de planos')
     const base = spec.servers[0].url
     let url = base + caminho
     const query = []
@@ -274,6 +274,7 @@ export function gerarHtml(spec) {
         ['limites', 'Limites'],
         ['erros', 'Erros'],
         ['rede-credenciada', 'Rede credenciada'],
+        ['tabela-de-planos', 'Tabela de planos'],
         ['pagamentos', 'Pagamentos'],
     ]
         .map(([id, nome]) => `<a href="#${id}">${nome}</a>`)

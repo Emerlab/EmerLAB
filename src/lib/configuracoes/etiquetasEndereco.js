@@ -38,6 +38,13 @@ const ENDERECO_MAX_LINHAS = 3
 const PAD_BOTTOM = 2.5 * MM
 const COR_TEXTO = rgb(0.05, 0.05, 0.05)
 
+/**
+ * Rótulo «Endereço:» das linhas importadas. Aceita grafias que aparecem nos PDFs do outro sistema,
+ * como «Enderço:» (sem o 2º «e») e «Endereco:» (sem cedilha).
+ */
+const ROTULO_ENDERECO = /^ender[a-zç]{0,4}o\s*:/i
+const ROTULO_ENDERECO_PREFIXO = /^ender[a-zç]{0,4}o\s*:\s*/i
+
 export function normalizarCabecalhoEtiqueta(texto) {
     return String(texto || '')
         .normalize('NFD')
@@ -109,7 +116,7 @@ export function normalizarEtiquetaRegistro(raw = {}) {
     const nome = String(raw.nome || '').trim()
     const enderecoBruto = montarEnderecoLinha(raw)
     const endereco = enderecoBruto
-        ? enderecoBruto.replace(/^endere[cç]o\s*:\s*/i, '').trim()
+        ? enderecoBruto.replace(ROTULO_ENDERECO_PREFIXO, '').trim()
         : ''
     const localidade = String(raw.localidade || '').trim() || montarLinhaLocalidade(raw)
     const cep = formatarCep(raw.cep)
@@ -119,6 +126,29 @@ export function normalizarEtiquetaRegistro(raw = {}) {
 export function etiquetaTemConteudo(et) {
     const e = normalizarEtiquetaRegistro(et)
     return Boolean(e.nome || e.endereco || e.localidade || e.cep)
+}
+
+/**
+ * Avisos de uma etiqueta que parece mal lida ou incompleta (lista vazia = nada suspeito).
+ * Serve para a pessoa conferir a prévia antes de imprimir: um destinatário trocado vira correspondência perdida.
+ * Linha totalmente vazia não gera aviso.
+ * @returns {string[]}
+ */
+export function avisosEtiqueta(raw) {
+    if (!etiquetaTemConteudo(raw)) return []
+    const e = normalizarEtiquetaRegistro(raw)
+    const avisos = []
+    if (!e.nome) avisos.push('Sem nome do destinatário.')
+    else if (ROTULO_ENDERECO.test(e.nome) || pareceCep(e.nome) || pareceLocalidade(e.nome)) {
+        avisos.push('O nome parece ser um endereço ou CEP: confira se não trocou com outra etiqueta.')
+    }
+    if (!e.endereco) avisos.push('Sem endereço (rua e número).')
+    else if (ROTULO_ENDERECO.test(e.endereco)) avisos.push('O endereço começa com «Endereço:».')
+    if (!e.localidade) avisos.push('Sem bairro, cidade e UF.')
+    else if (!pareceLocalidade(e.localidade)) avisos.push('Bairro - Cidade - UF fora do formato esperado.')
+    if (!e.cep) avisos.push('Sem CEP.')
+    else if (e.cep.replace(/\D/g, '').length !== 8) avisos.push('CEP incompleto.')
+    return avisos
 }
 
 function pareceCep(texto) {
@@ -131,7 +161,7 @@ function pareceCep(texto) {
 /** Ex.: CENTRO - CAXIAS DO SUL - RS (bairro - cidade - UF) */
 function pareceLocalidade(texto) {
     const t = String(texto || '').trim()
-    if (!t || /^endere[cç]o\s*:/i.test(t) || pareceCep(t)) return false
+    if (!t || ROTULO_ENDERECO.test(t) || pareceCep(t)) return false
     return /\s-\s.+\s-\s*[A-Za-z]{2}\s*$/.test(t)
 }
 
@@ -151,7 +181,7 @@ function juntarTextoCampo(a, b) {
 export function etiquetaPareceCompleta(et) {
     const e = normalizarEtiquetaRegistro(et)
     if (!e.nome) return false
-    if (pareceCep(e.nome) || /^endere[cç]o\s*:/i.test(e.nome) || pareceLocalidade(e.nome)) {
+    if (pareceCep(e.nome) || ROTULO_ENDERECO.test(e.nome) || pareceLocalidade(e.nome)) {
         return false
     }
     // Sem CEP = incompleta (fonte costuma cortar o CEP para a folha seguinte)
@@ -166,7 +196,7 @@ export function etiquetaPareceFragmento(et) {
     if (!etiquetaTemConteudo(e)) return false
     if (etiquetaPareceCompleta(e)) return false
     if (!e.nome && (e.endereco || e.localidade || e.cep)) return true
-    if (pareceCep(e.nome) || /^endere[cç]o\s*:/i.test(e.nome) || pareceLocalidade(e.nome)) {
+    if (pareceCep(e.nome) || ROTULO_ENDERECO.test(e.nome) || pareceLocalidade(e.nome)) {
         return true
     }
     if (e.nome && e.endereco && !e.cep) return true
@@ -178,7 +208,7 @@ export function etiquetaPareceFragmento(et) {
 /** Só sobra CEP/localidade/endereço — remanescente do card cortado na folha anterior. */
 export function ehRemanescenteDeCorte(et) {
     const e = reclassificarCamposSoltos(et)
-    if (e.nome && !pareceCep(e.nome) && !pareceLocalidade(e.nome) && !/^endere[cç]o\s*:/i.test(e.nome)) {
+    if (e.nome && !pareceCep(e.nome) && !pareceLocalidade(e.nome) && !ROTULO_ENDERECO.test(e.nome)) {
         return false
     }
     return Boolean(e.cep || e.localidade || e.endereco)
@@ -207,15 +237,15 @@ function reclassificarCamposSoltos(e) {
             nome = m[2].trim()
         }
     }
-    if (nome && !endereco && /^endere[cç]o\s*:/i.test(nome)) {
-        endereco = nome.replace(/^endere[cç]o\s*:\s*/i, '').trim()
+    if (nome && !endereco && ROTULO_ENDERECO.test(nome)) {
+        endereco = nome.replace(ROTULO_ENDERECO_PREFIXO, '').trim()
         nome = ''
     }
     if (nome && !localidade && pareceLocalidade(nome)) {
         localidade = nome
         nome = ''
     }
-    if (endereco && !localidade && pareceLocalidade(endereco) && !/^endere[cç]o/i.test(String(e.endereco || ''))) {
+    if (endereco && !localidade && pareceLocalidade(endereco) && !/^ender[a-zç]{0,4}o\b/i.test(String(e.endereco || ''))) {
         if (!nome) {
             localidade = endereco
             endereco = ''
@@ -290,9 +320,9 @@ function separarCepsOrfaosDoInicio(texts) {
     const orfaos = []
     while (linhas.length >= 2 && pareceCep(linhas[0])) {
         const restoTemNome =
-            linhas.slice(1).some((t) => /^endere[cç]o\s*:/i.test(t)) ||
+            linhas.slice(1).some((t) => ROTULO_ENDERECO.test(t)) ||
             linhas.slice(1).some(
-                (t) => !pareceCep(t) && !pareceLocalidade(t) && !/^endere[cç]o\s*:/i.test(t),
+                (t) => !pareceCep(t) && !pareceLocalidade(t) && !ROTULO_ENDERECO.test(t),
             )
         if (!restoTemNome) break
         orfaos.push(linhas.shift())
@@ -423,7 +453,7 @@ export function parseLinhasEmEtiquetas(textsIn) {
             continue
         }
 
-        const idxEnd = texts.findIndex((t) => /^endere[cç]o\s*:/i.test(t))
+        const idxEnd = texts.findIndex((t) => ROTULO_ENDERECO.test(t))
         let nome = ''
         let endereco = ''
         let localidade = ''
@@ -453,7 +483,7 @@ export function parseLinhasEmEtiquetas(textsIn) {
             }
             nome = nomeLimpo
 
-            const endParts = [texts[idxEnd].replace(/^endere[cç]o\s*:\s*/i, '').trim()]
+            const endParts = [texts[idxEnd].replace(ROTULO_ENDERECO_PREFIXO, '').trim()]
             let viuLocalidade = false
             let i = idxEnd + 1
 
@@ -486,8 +516,8 @@ export function parseLinhasEmEtiquetas(textsIn) {
         } else {
             nome = texts[0] || ''
             let i = 1
-            if (texts[i] && /^endere[cç]o\s*:/i.test(texts[i])) {
-                endereco = texts[i].replace(/^endere[cç]o\s*:\s*/i, '').trim()
+            if (texts[i] && ROTULO_ENDERECO.test(texts[i])) {
+                endereco = texts[i].replace(ROTULO_ENDERECO_PREFIXO, '').trim()
                 i += 1
             }
             if (texts[i] && pareceLocalidade(texts[i])) {
@@ -516,9 +546,75 @@ export function parseLinhasEmEtiquetas(textsIn) {
     return out
 }
 
+/** Diferença de y (pt) abaixo da qual duas etiquetas de colunas diferentes estão na mesma fileira. */
+const TOLERANCIA_FILEIRA = 10
+
+/** Junta itens de texto na mesma linha visual (|dy| < 4) e devolve as linhas de cima para baixo. */
+function linhasDaColuna(itens) {
+    const linhas = []
+    for (const it of [...itens].sort((a, b) => a.y - b.y || a.x - b.x)) {
+        const ultima = linhas[linhas.length - 1]
+        if (ultima && Math.abs(it.y - ultima.y) < 4) ultima.text = `${ultima.text} ${it.str}`.trim()
+        else linhas.push({ y: it.y, text: it.str })
+    }
+    return linhas.filter((l) => l.text)
+}
+
+/**
+ * Onde termina o resto da etiqueta anterior dentro do trecho entre dois «Endereço:».
+ * O que vem depois é o nome da próxima. Ordem: depois do CEP, depois da localidade, senão no maior vão vertical.
+ * Devolve o índice da primeira linha do nome (0 = o trecho todo é nome).
+ */
+function inicioDoNome(trecho) {
+    const idxCep = trecho.findIndex((l) => pareceCep(l.text))
+    if (idxCep >= 0) return idxCep + 1
+    const idxLoc = trecho.findIndex((l) => pareceLocalidade(l.text))
+    if (idxLoc >= 0) return idxLoc + 1
+    let melhor = 0
+    let maiorVao = 0
+    for (let i = 1; i < trecho.length; i += 1) {
+        const vao = trecho[i].y - trecho[i - 1].y
+        if (vao > maiorVao) {
+            maiorVao = vao
+            melhor = i
+        }
+    }
+    return melhor
+}
+
+/**
+ * Divide as linhas de UMA coluna em etiquetas, ancorando em cada «Endereço:». Não depende da grade da folha:
+ * PDFs com a posição deslocada continuam certos, porque nome, endereço, localidade e CEP são ligados pela ordem.
+ * @returns {{ y: number, texts: string[] }[]}
+ */
+function etiquetasDaColuna(linhas) {
+    const ancoras = linhas.map((l, i) => (ROTULO_ENDERECO.test(l.text) ? i : -1)).filter((i) => i >= 0)
+    if (!ancoras.length) return linhas.length ? [{ y: linhas[0].y, texts: linhas.map((l) => l.text) }] : []
+
+    // Sobra do topo (cauda de uma etiqueta cortada na folha anterior) + nome da 1ª etiqueta
+    const topo = linhas.slice(0, ancoras[0])
+    const corteTopo = inicioDoNome(topo)
+    const grupos = []
+    if (corteTopo > 0) grupos.push({ y: topo[0].y, texts: topo.slice(0, corteTopo).map((l) => l.text) })
+    let nomeAtual = topo.slice(corteTopo)
+
+    ancoras.forEach((a, k) => {
+        const proxima = ancoras[k + 1] ?? linhas.length
+        const trecho = linhas.slice(a + 1, proxima)
+        // Último trecho: não há próximo nome, tudo é corpo da etiqueta.
+        const corte = k === ancoras.length - 1 ? trecho.length : inicioDoNome(trecho)
+        const corpo = [linhas[a], ...trecho.slice(0, corte)]
+        const inicio = nomeAtual.length ? nomeAtual[0].y : linhas[a].y
+        grupos.push({ y: inicio, texts: [...nomeAtual, ...corpo].map((l) => l.text) })
+        nomeAtual = trecho.slice(corte)
+    })
+    return grupos
+}
+
 /**
  * Agrupa itens de texto de um PDF de etiquetas (2 colunas) em registros.
  * Aceita o layout exportado pelo outro sistema (nome / Endereço / bairro-cidade-UF / CEP).
+ * Cada coluna é lida de cima para baixo ancorando em «Endereço:»; a ordem final é fileira a fileira (esquerda, direita).
  * @param {{ str: string, x: number, y: number }[]} items y=0 no topo da página
  */
 export function agruparItensTextoEmEtiquetas(items, pageWidth = PAGE_W) {
@@ -532,43 +628,27 @@ export function agruparItensTextoEmEtiquetas(items, pageWidth = PAGE_W) {
     if (!lista.length) return []
 
     const mid = pageWidth / 2
-    /** @type {Map<string, typeof lista>} */
-    const porCelula = new Map()
+    const colunas = [lista.filter((it) => it.x < mid), lista.filter((it) => it.x >= mid)]
+    const blocos = []
+    colunas.forEach((itens, col) => {
+        for (const g of etiquetasDaColuna(linhasDaColuna(itens))) blocos.push({ ...g, col })
+    })
 
-    for (const it of lista) {
-        const col = it.x < mid ? 0 : 1
-        let row = Math.floor((it.y - MARGIN_TOP) / LABEL_H)
-        if (!Number.isFinite(row) || row < 0) {
-            row = Math.max(0, Math.floor(it.y / LABEL_H))
+    // Fileiras: blocos com y de início parecido (colunas lado a lado) ficam juntos.
+    blocos.sort((a, b) => a.y - b.y || a.col - b.col)
+    let fileira = -1
+    let yFileira = -Infinity
+    for (const b of blocos) {
+        if (b.y - yFileira > TOLERANCIA_FILEIRA) {
+            fileira += 1
+            yFileira = b.y
         }
-        const key = `${row}|${col}`
-        if (!porCelula.has(key)) porCelula.set(key, [])
-        porCelula.get(key).push(it)
+        b.fileira = fileira
     }
-
-    const células = [...porCelula.entries()]
-        .map(([key, grupo]) => {
-            const [row, col] = key.split('|').map(Number)
-            return { row, col, grupo }
-        })
-        .sort((a, b) => a.row - b.row || a.col - b.col)
+    blocos.sort((a, b) => a.fileira - b.fileira || a.col - b.col)
 
     const out = []
-    for (const { grupo } of células) {
-        const linhas = []
-        const ordenado = [...grupo].sort((a, b) => a.y - b.y || a.x - b.x)
-        for (const it of ordenado) {
-            const last = linhas[linhas.length - 1]
-            if (last && Math.abs(it.y - last.y) < 4) {
-                last.text = `${last.text} ${it.str}`.trim()
-            } else {
-                linhas.push({ y: it.y, text: it.str })
-            }
-        }
-        const texts = linhas.map((l) => l.text).filter(Boolean)
-        if (!texts.length) continue
-        out.push(...parseLinhasEmEtiquetas(texts))
-    }
+    for (const b of blocos) out.push(...parseLinhasEmEtiquetas(b.texts))
     return out
 }
 

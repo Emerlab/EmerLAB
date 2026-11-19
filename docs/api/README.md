@@ -5,6 +5,7 @@ Documentação para quem vai integrar com o EmerLAB e **não conhece o sistema**
 | API                    | Para quê                                                                                   | Quem usa                                | Guia                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------- | ---------------------------------------- |
 | **Rede credenciada**   | Listar os credenciados (clínicas, profissionais, lojas) com contatos, procedimentos e descontos | O site público da Emerdog (navegador)   | [rede-credenciada.md](rede-credenciada.md) |
+| **Tabela de planos**   | Tabela de planos por cidade (valores, carências, limites, observações) e prestadores por procedimento | A página pública de planos (navegador)  | [planos.md](planos.md)                   |
 | **Pagamentos**         | Consultar repasses a prestadores, marcar como pago e anexar o comprovante                  | O sistema financeiro (servidor a servidor) | [pagamentos.md](pagamentos.md)           |
 
 Também há a especificação [OpenAPI 3.1](openapi.json) (para Postman, Swagger/Insomnia e geração de cliente) e a página de consulta rápida em **https://api.emerlab.com.br/docs** (a raiz `https://api.emerlab.com.br/` redireciona para `/docs`), que mostra as mesmas rotas, com parâmetros, exemplos e códigos de erro.
@@ -43,7 +44,7 @@ Há dois tipos de chave, que **não se misturam**:
 
 | Tipo                   | Formato                | Escopos                                  | Onde pode ficar                                          |
 | ---------------------- | ---------------------- | ---------------------------------------- | -------------------------------------------------------- |
-| Chave da rede          | `emer_rede_<32 letras e números>` | `rede:ler`                       | No navegador (é pública por natureza)                    |
+| Chave da rede          | `emer_rede_<32 letras e números>` | `rede:ler`, `planos:ler`         | No navegador (é pública por natureza)                    |
 | Chave de pagamentos    | `emer_pag_<32 letras e números>`  | `pagamentos:ler`, `pagamentos:escrever` | **Somente em servidor.** Nunca no navegador, no app ou no código do site |
 
 ### Chave da rede: pública, mas restrita

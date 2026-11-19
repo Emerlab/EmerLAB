@@ -13,14 +13,8 @@ import {
     contextoPlanosCidadeFromCidades,
     excluirPlanosCidadeCompat,
     upsertPlanosCidadeCompat } from '../../../lib/planosCidadeCompat'
-import { inserirPlanoConfigSeNaoExiste } from '../../../lib/planosConfigCompat'
-import {
-    buscarCategoriaLimitesGrupo,
-    montarMapaLimiteGrupoPorCategoria,
-    montarPlanosChaveDisponiveisPorCategoria,
-    procedimentoIsentoLimiteGrupo,
-    resolverLimiteGrupoExibicao,
-    textoCelulaLimiteGrupo } from '../../../lib/categoriaLimitesGrupo'
+import { gravarPlanoConfig } from '../../../lib/planosConfigCompat'
+import { buscarCategoriaLimitesGrupo, textoCelulaLimiteGrupo } from '../../../lib/categoriaLimitesGrupo'
 import CidadeTabelaIbgeForm from '../../../components/Supertabela/CidadeTabelaIbgeForm.jsx'
 import GerenciarTabelasModal from '../../../components/Supertabela/GerenciarTabelasModal.jsx'
 import SelectMunicipioBusca from '../../../components/SelectMunicipioBusca/SelectMunicipioBusca.jsx'
@@ -50,6 +44,16 @@ import {
     carregarContagemESugestoesRealizadoresPlanos,
     montarCidadesAlvoContagemPrestadores } from '../../../lib/impressaoPlanos/contagemRealizadoresPlanosDev.js'
 import { TOAST_AUTO_DISMISS_MS, useConfirmacaoExclusaoAutoDismiss } from '../../../lib/toastUi.js'
+import {
+    CHAVES_PLANOS_MATRIZ,
+    distribuirColagemMatriz,
+    linhaTemPendencia,
+    montarLinhasMatriz } from '../../../lib/matrizCarenciasLimites.js'
+import {
+    diagnosticarAcima,
+    indexarPlanosConfig,
+    sincronizarAcimaProcedimento } from '../../../lib/procedimentoLimitesCarencias.js'
+import MatrizCarenciasLimitesTabela from './MatrizCarenciasLimitesTabela.jsx'
 import '../Supertabela_main/Supertabelamain.css'
 import './Supertabelaplanos.css'
 import CampoBuscaComLimpar from '../../../components/CampoBuscaComLimpar/CampoBuscaComLimpar'
@@ -65,7 +69,6 @@ const COLUNAS_PLANO = [
 ]
 
 const CAMPOS_DIF_COLAGEM = ['basico', 'classico', 'avancado', 'ultra']
-const CAMPOS_LIM_COLAGEM = ['limite', 'carencia']
 const ORDEM_PLANOS = COLUNAS_PLANO.map((plano) => plano.chave)
 
 const normalizarNome = (texto) =>
@@ -97,12 +100,6 @@ const mapearPlanosPorChave = (planos) => {
     })
 
     return resultado
-}
-
-const obterChavePlanoPorId = (planoId, mapaPlanos) => {
-    const idNumerico = Number(planoId)
-    if (!idNumerico) return null
-    return ORDEM_PLANOS.find((chave) => Number(mapaPlanos[chave]?.id) === idNumerico) || null
 }
 
 /** IDs de planos_cidade (Básico→Ultra) para o procedimento. «Apenas loja» também edita diferenças nestas colunas. */
@@ -143,7 +140,9 @@ const Supertabelaplanos = () => {
 
     const [linhasDiferencas, setLinhasDiferencas] = useState([])
     const [linhasLimitacoes, setLinhasLimitacoes] = useState([])
-    const [limitesGrupoPorCategoriaId, setLimitesGrupoPorCategoriaId] = useState(() => new Map())
+    const [filtrarSoVazios, setFiltrarSoVazios] = useState(false)
+    const [dadosMatriz, setDadosMatriz] = useState({ procedimentos: [], configRows: [] })
+    const [corrigindoAcima, setCorrigindoAcima] = useState(false)
     const [contagemRealizadoresPorCodigo, setContagemRealizadoresPorCodigo] = useState(() => new Map())
     const [nomesRealizadoresPorCodigo, setNomesRealizadoresPorCodigo] = useState(() => new Map())
     const [sugestoesRealizadores, setSugestoesRealizadores] = useState([])
@@ -202,37 +201,7 @@ const Supertabelaplanos = () => {
         [linhasDiferencas],
     )
 
-    const planoDetalheNome = useMemo(() => {
-        const p = planos.find((item) => String(item.id) === String(planoDetalheId))
-        return p?.nome || 'Plano'
-    }, [planos, planoDetalheId])
-
-    const mapaPlanosPorChave = useMemo(() => mapearPlanosPorChave(planos), [planos])
     const mapaPlanosCompleto = useMemo(() => mapearPlanos(planosTodos), [planosTodos])
-
-    const chavePlanoDetalhe = useMemo(
-        () => obterChavePlanoPorId(planoDetalheId, mapaPlanosPorChave),
-        [planoDetalheId, mapaPlanosPorChave]
-    )
-
-    const planosChaveDisponiveisPorCategoria = useMemo(
-        () =>
-            montarPlanosChaveDisponiveisPorCategoria(
-                procedimentos,
-                mapaPlanosPorChave,
-                ORDEM_PLANOS,
-                (planoBaseId) => obterChavePlanoPorId(planoBaseId, mapaPlanosPorChave)
-            ),
-        [procedimentos, mapaPlanosPorChave]
-    )
-
-    const contextoLimiteGrupoPlano = useMemo(
-        () => ({
-            planosChaveDisponiveisPorCategoria,
-            chavePlano: chavePlanoDetalhe,
-            mapaPlanosPorChave }),
-        [planosChaveDisponiveisPorCategoria, chavePlanoDetalhe, mapaPlanosPorChave]
-    )
 
     const percentualProgressoMassa = useMemo(() => {
         if (!progressoMassa.total) return 0
@@ -520,9 +489,9 @@ const Supertabelaplanos = () => {
     }, [buscarPlanosCidadePorCidade, cidadeId, planos, mapaPlanosCompleto, somenteLeitura, contextoPlanosCidade])
 
     const buscarLinhasLimitacoes = useCallback(async () => {
-        if (!planoDetalheId || planos.length === 0) {
+        if (planosTodos.length === 0) {
             setLinhasLimitacoes([])
-            setLimitesGrupoPorCategoriaId(new Map())
+            setDadosMatriz({ procedimentos: [], configRows: [] })
             return
         }
 
@@ -530,20 +499,30 @@ const Supertabelaplanos = () => {
             setLoading(true)
             setErroDetalhe('')
 
-            const [{ data: configs, error: errCfg }, { data: limitesGrupoData, error: errLg }] = await Promise.all([
+            const [
+                { data: procedimentosData, error: errProc },
+                { data: configsData, error: errCfg },
+                { data: limitesGrupoData, error: errLg },
+            ] = await Promise.all([
+                buscarTodosPaginado(() =>
+                    supabase
+                        .from('procedimentos')
+                        .select('id, codigo, nome, categoria_id, plano_base_id')
+                        .order('codigo', { ascending: true })
+                ),
                 buscarTodosPaginado(() =>
                     supabase
                         .from('planos_config')
-                        .select('id, procedimento, limite, carencia')
-                        .eq('plano_id', planoDetalheId)
+                        .select('id, plano_id, procedimento, limite, carencia')
+                        .order('id', { ascending: true })
                 ),
-                buscarCategoriaLimitesGrupo(supabase, { planoId: planoDetalheId }),
+                buscarCategoriaLimitesGrupo(supabase),
             ])
 
-            if (errCfg) {
-                setErroDetalhe(`Erro ao buscar limitações: ${errCfg.message}`)
+            if (errProc || errCfg) {
+                setErroDetalhe(`Erro ao buscar carências e limites: ${[errProc?.message, errCfg?.message].filter(Boolean).join(' | ')}`)
                 setLinhasLimitacoes([])
-                setLimitesGrupoPorCategoriaId(new Map())
+                setDadosMatriz({ procedimentos: [], configRows: [] })
                 return
             }
 
@@ -551,72 +530,25 @@ const Supertabelaplanos = () => {
                 setErroDetalhe(`Erro ao buscar limites de grupo: ${errLg.message}`)
             }
 
-            setLimitesGrupoPorCategoriaId(montarMapaLimiteGrupoPorCategoria(limitesGrupoData || [], planoDetalheId))
-
-            const listaCfg = configs || []
-            if (listaCfg.length === 0) {
-                setLinhasLimitacoes([])
-                return
-            }
-
-            const codigos = [...new Set(listaCfg.map((row) => String(row.procedimento)))]
-
-            const { data: procedimentosData, error: errProc } = await supabase
-                .from('procedimentos')
-                .select('id, codigo, nome, categoria_id, plano_base_id')
-                .in('codigo', codigos)
-
-            if (errProc) {
-                setErroDetalhe(`Erro ao carregar procedimentos: ${errProc.message}`)
-                setLinhasLimitacoes([])
-                return
-            }
-
-            const mapaProc = new Map(
-                (procedimentosData || []).map((item) => [
-                    String(item.codigo),
-                    {
-                        nome: String(item.nome),
-                        categoriaId: item.categoria_id,
-                        procedimentoId: item.id != null ? Number(item.id) : null,
-                        planoBaseId: item.plano_base_id },
-                ])
+            const procedimentosLista = procedimentosData || []
+            const configRows = configsData || []
+            setDadosMatriz({ procedimentos: procedimentosLista, configRows })
+            setLinhasLimitacoes(
+                montarLinhasMatriz({
+                    procedimentos: procedimentosLista,
+                    configRows,
+                    planos: planosTodos,
+                    mapaPlanos: mapaPlanosCompleto,
+                    categorias,
+                    limitesGrupoRows: limitesGrupoData || [] })
             )
-
-            const linhas = listaCfg.map((row) => {
-                const cod = String(row.procedimento)
-                const meta = mapaProc.get(cod) || {
-                    nome: cod,
-                    categoriaId: null,
-                    procedimentoId: null,
-                    planoBaseId: null }
-                return {
-                    codigo: cod,
-                    procedimento: meta.nome,
-                    categoriaId: meta.categoriaId,
-                    procedimentoId: meta.procedimentoId,
-                    planoBaseId: meta.planoBaseId,
-                    apenasLoja: procedimentoPlanoBaseApenasLoja(meta.planoBaseId, mapaPlanosCompleto),
-                    planosConfigId: row.id,
-                    limite: row.limite != null ? String(row.limite) : '',
-                    carencia: row.carencia != null ? String(row.carencia) : '' }
-            })
-
-            linhas.sort((a, b) => {
-                const ca = Number(a.categoriaId) || 0
-                const cb = Number(b.categoriaId) || 0
-                if (ca !== cb) return ca - cb
-                return String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { sensitivity: 'base' })
-            })
-
-            setLinhasLimitacoes(linhas)
         } catch (error) {
-            setErroDetalhe(`Falha ao montar limitações: ${error.message}`)
+            setErroDetalhe(`Falha ao montar carências e limites: ${error.message}`)
             setLinhasLimitacoes([])
         } finally {
             setLoading(false)
         }
-    }, [planoDetalheId, planos, mapaPlanosCompleto])
+    }, [planosTodos, mapaPlanosCompleto, categorias])
 
     const inserirPlanosCidadeParaCodigo = async (codigoNormalizado, opcoes = {}) => {
         const reportarErro = (mensagem) => {
@@ -694,37 +626,6 @@ const Supertabelaplanos = () => {
         return { status: 'ok' }
     }
 
-    const inserirPlanoConfigParaCodigo = async (codigoNormalizado, opcoes = {}) => {
-        const reportarErro = (mensagem) => {
-            if (!opcoes.silencioso) mostrarErroToast(mensagem)
-        }
-
-        if (!planoDetalheId) {
-            reportarErro('Selecione um plano.')
-            return { status: 'erro', mensagem: 'Plano não selecionado.' }
-        }
-
-        const resultadoCfg = await inserirPlanoConfigSeNaoExiste(supabase, {
-            planoId: planoDetalheId,
-            procedimento: codigoNormalizado })
-
-        if (resultadoCfg.status === 'ja_existia') {
-            reportarErro('Este procedimento já possui registro para o plano selecionado.')
-            return { status: 'ja_existia' }
-        }
-
-        if (resultadoCfg.status === 'erro') {
-            const error = resultadoCfg.error
-            reportarErro(`Erro ao inserir: ${error.message}`)
-            return { status: 'erro', mensagem: error.message }
-        }
-
-        if (!opcoes.semRecarregar) {
-            await buscarLinhasLimitacoes()
-        }
-        return { status: 'ok' }
-    }
-
     useEffect(() => {
         carregarBase()
         // Carregamento único ao montar (listas globais de filtros).
@@ -733,10 +634,30 @@ const Supertabelaplanos = () => {
 
     const linhasAtivas = modoLimitacoes ? linhasLimitacoes : linhasDiferencas
 
-    const linhasFiltradas = useMemo(() => {
-        if (!termoBusca.trim()) return linhasAtivas
+    const totalVazios = useMemo(() => linhasLimitacoes.filter(linhaTemPendencia).length, [linhasLimitacoes])
 
-        return linhasAtivas.filter((linha) => {
+    const divergenciasAcima = useMemo(() => {
+        const resultado = { corrigiveis: [], conflitos: [] }
+        if (!modoLimitacoes) return resultado
+        const indiceConfigs = indexarPlanosConfig(dadosMatriz.configRows)
+        dadosMatriz.procedimentos.forEach((proc) => {
+            const itens = diagnosticarAcima(
+                { codigo: proc.codigo, planoBaseId: proc.plano_base_id },
+                { mapaPlanos: mapaPlanosCompleto, planos: planosTodos, indiceConfigs }
+            )
+            if (itens.some((item) => item.tipo !== 'conflito')) {
+                resultado.corrigiveis.push({ codigo: proc.codigo, planoBaseId: proc.plano_base_id })
+            }
+            if (itens.some((item) => item.tipo === 'conflito')) resultado.conflitos.push(proc.codigo)
+        })
+        return resultado
+    }, [modoLimitacoes, dadosMatriz, mapaPlanosCompleto, planosTodos])
+
+    const linhasFiltradas = useMemo(() => {
+        const linhasBase = modoLimitacoes && filtrarSoVazios ? linhasAtivas.filter(linhaTemPendencia) : linhasAtivas
+        if (!termoBusca.trim()) return linhasBase
+
+        return linhasBase.filter((linha) => {
             const categoriaNome = categorias.find((c) => Number(c.id) === Number(linha.categoriaId))?.nome || ''
             const partes = [
                 linha.codigo,
@@ -746,24 +667,20 @@ const Supertabelaplanos = () => {
                 ...partesValoresLinhaSupertabela(linha),
             ]
             if (modoLimitacoes) {
-                partes.push(linha.limite, linha.carencia)
-                const limiteGrupo = resolverLimiteGrupoExibicao(
-                    categorias,
-                    limitesGrupoPorCategoriaId,
-                    linha.categoriaId,
-                    contextoLimiteGrupoPlano
-                )
-                if (limiteGrupo) {
-                    partes.push(textoCelulaLimiteGrupo(limiteGrupo, categoriaNome))
-                }
+                CHAVES_PLANOS_MATRIZ.forEach((chave) => {
+                    const celula = linha.celulas?.[chave]
+                    if (!celula) return
+                    partes.push(celula.limite, celula.carencia)
+                    if (celula.limiteGrupo) partes.push(textoCelulaLimiteGrupo(celula.limiteGrupo, categoriaNome))
+                })
             }
             const blob = normalizarTextoBuscaDev(partes.filter(Boolean).join(' '))
             return filtrarLinhaSupertabelaPorBusca(linha, blob, termoBusca)
         })
-    }, [linhasAtivas, termoBusca, categorias, modoLimitacoes, limitesGrupoPorCategoriaId, contextoLimiteGrupoPlano])
+    }, [linhasAtivas, termoBusca, categorias, modoLimitacoes, filtrarSoVazios])
 
     const obterSugestoesProcedimentos = (categoriaId) => {
-        const lista = modoLimitacoes ? linhasLimitacoes : linhasDiferencas
+        const lista = linhasDiferencas
         const codigosPresentes = new Set(
             lista
                 .filter((linha) => Number(linha.categoriaId) === Number(categoriaId))
@@ -897,9 +814,7 @@ const Supertabelaplanos = () => {
 
         const codigoNormalizado = String(encontrado.codigo).toUpperCase()
 
-        const resultado = modoLimitacoes
-            ? await inserirPlanoConfigParaCodigo(codigoNormalizado)
-            : await inserirPlanosCidadeParaCodigo(codigoNormalizado)
+        const resultado = await inserirPlanosCidadeParaCodigo(codigoNormalizado)
         if (resultado.status !== 'ok') return
 
         setCategoriaEmInclusao(null)
@@ -908,12 +823,7 @@ const Supertabelaplanos = () => {
     }
 
     const preencherProcedimentosMassaPlanos = async () => {
-        if (modoLimitacoes) {
-            if (!planoDetalheId) {
-                mostrarErroToast('Selecione um plano.')
-                return
-            }
-        } else if (!cidadeId) {
+        if (!cidadeId) {
             mostrarErroToast('Selecione uma cidade.')
             return
         }
@@ -958,9 +868,7 @@ const Supertabelaplanos = () => {
 
             for (let i = 0; i < codigosValidos.length; i += 1) {
                 const cod = codigosValidos[i]
-                const resultado = modoLimitacoes
-                    ? await inserirPlanoConfigParaCodigo(cod, { semRecarregar: true, silencioso: true })
-                    : await inserirPlanosCidadeParaCodigo(cod, { semRecarregar: true, silencioso: true })
+                const resultado = await inserirPlanosCidadeParaCodigo(cod, { semRecarregar: true, silencioso: true })
                 if (resultado.status === 'ok') totalInseridos += 1
                 else if (resultado.status === 'ja_existia') totalIgnorados += 1
                 else errosDetalhados.push(`${cod}: ${resultado.mensagem || 'erro desconhecido'}`)
@@ -976,11 +884,7 @@ const Supertabelaplanos = () => {
                 atual: codigos.length,
                 total: codigos.length,
                 label: 'Atualizando tabela...' })
-            if (modoLimitacoes) {
-                await buscarLinhasLimitacoes()
-            } else {
-                await buscarLinhasDiferencas()
-            }
+            await buscarLinhasDiferencas()
 
             setCodigosInicializacaoPlanos('')
 
@@ -1281,12 +1185,8 @@ const Supertabelaplanos = () => {
     }
 
     const baixarExcelTelaPlanos = async () => {
-        if (!cidadeId) {
+        if (!modoLimitacoes && !cidadeId) {
             mostrarErroToast('Selecione uma cidade para exportar.')
-            return
-        }
-        if (modoLimitacoes && !planoDetalheId) {
-            mostrarErroToast('Selecione um plano para exportar limites e carências.')
             return
         }
         if (!secoesPorCategoria.length) {
@@ -1295,7 +1195,7 @@ const Supertabelaplanos = () => {
         }
         const cidadeSlug = cidadeSelecionada?.nome || cidadeId
         const nomeBase = modoLimitacoes
-            ? `planos-limites-${cidadeSlug}-${planoDetalheNome}`
+            ? 'planos-carencias-limites'
             : `planos-diferencas-${cidadeSlug}`
         const cidadesValidas = [
             ...new Set(
@@ -1449,129 +1349,84 @@ const Supertabelaplanos = () => {
         }
     }
 
-    const chaveEdicaoLim = (categoriaId, codigo, campo) => `${categoriaId}-${codigo}-${campo}`
+    const salvarCelulaMatriz = async (linha, chave, campo, valor) => {
+        if (bloquearSeSomenteLeitura(mostrarErroToast)) return false
+        const celula = linha.celulas[chave]
+        if (!celula || celula.modo !== 'editavel') return false
 
-    const obterValorInputLim = (linha, campo, categoriaId) => {
-        const chave = chaveEdicaoLim(categoriaId, linha.codigo, campo)
-        if (Object.prototype.hasOwnProperty.call(edicoesLocais, chave)) {
-            return edicoesLocais[chave]
-        }
-        return linha[campo] ?? ''
-    }
-
-    const persistLimiteCarenciaDireto = async (linha, campo, valorTexto, categoriaId) => {
-        if (!linha.planosConfigId) {
-            return false
-        }
-
-        const payload = campo === 'limite' ? { limite: valorTexto } : { carencia: valorTexto }
-        const { error } = await supabase.from('planos_config').update(payload).eq('id', linha.planosConfigId)
-
-        if (error) {
-            mostrarErroToast(`Erro ao salvar: ${error.message}`)
+        const resultado = await gravarPlanoConfig(supabase, {
+            planoId: celula.planoId,
+            procedimento: linha.codigo,
+            [campo]: valor })
+        if (resultado.status === 'erro') {
+            mostrarErroToast(
+                `Erro ao salvar ${campo === 'limite' ? 'limite' : 'carência'} de ${linha.codigo}: ${resultado.error?.message || 'erro desconhecido'}`
+            )
             return false
         }
 
         setLinhasLimitacoes((anteriores) =>
-            anteriores.map((item) => (item.codigo === linha.codigo ? { ...item, [campo]: valorTexto } : item))
+            anteriores.map((item) =>
+                item.codigo === linha.codigo
+                    ? { ...item, celulas: { ...item.celulas, [chave]: { ...item.celulas[chave], [campo]: valor } } }
+                    : item
+            )
         )
-
-        if (categoriaId != null && categoriaId !== '') {
-            const chave = chaveEdicaoLim(categoriaId, linha.codigo, campo)
-            setEdicoesLocais((anterior) => {
-                const c = { ...anterior }
-                delete c[chave]
-                return c
-            })
-        }
-
         return true
     }
 
-    const salvarLimiteCarencia = async (linha, campo, categoriaId) => {
-        const chave = chaveEdicaoLim(categoriaId, linha.codigo, campo)
-        const bruto = edicoesLocais[chave]
-        if (bruto === undefined) return
-
-        if (!linha.planosConfigId) {
-            mostrarErroToast('Sem registro de configuração para este procedimento.')
-            return
-        }
-
-        await persistLimiteCarenciaDireto(linha, campo, bruto, categoriaId)
-    }
-
-    const processarColagemLimCarencia = async (event, secao, linhaIndexInicial, campoInicial) => {
-        event.preventDefault()
+    const colarMatriz = async (linhasSecao, linhaIndex, chave, campo, texto) => {
         if (!edicaoAtiva) return
-
-        const texto = event.clipboardData?.getData('text') || ''
-        const linhasColadas = texto
-            .replace(/\r/g, '')
-            .split('\n')
-            .filter((linha) => linha.length > 0)
-            .map((linha) => linha.split('\t'))
-
-        if (linhasColadas.length === 0) return
-
-        const colunaInicial = CAMPOS_LIM_COLAGEM.indexOf(campoInicial)
-        if (colunaInicial < 0) return
-
-        const limiteGrupoSecao = resolverLimiteGrupoExibicao(
-            categorias,
-            limitesGrupoPorCategoriaId,
-            secao.categoriaId,
-            contextoLimiteGrupoPlano
-        )
-
-        for (let i = 0; i < linhasColadas.length; i += 1) {
-            const linhaTabela = secao.linhas[linhaIndexInicial + i]
-            if (!linhaTabela) break
-
-            const colunas = linhasColadas[i]
-            for (let j = 0; j < colunas.length; j += 1) {
-                const colunaDestino = colunaInicial + j
-                if (colunaDestino > CAMPOS_LIM_COLAGEM.length - 1) break
-
-                const campoDestino = CAMPOS_LIM_COLAGEM[colunaDestino]
-                if (
-                    limiteGrupoSecao &&
-                    campoDestino === 'limite' &&
-                    !procedimentoIsentoLimiteGrupo(linhaTabela)
-                ) {
-                    continue
-                }
-                const valorTexto = String(colunas[j] ?? '')
-                if (!valorTexto.trim()) continue
-
-                if (!linhaTabela.planosConfigId) continue
-
-                await persistLimiteCarenciaDireto(linhaTabela, campoDestino, valorTexto, secao.categoriaId)
-            }
+        const itens = distribuirColagemMatriz({
+            linhas: linhasSecao,
+            linhaInicial: linhaIndex,
+            chaveInicial: chave,
+            campoInicial: campo,
+            texto })
+        for (const item of itens) {
+            await salvarCelulaMatriz(linhasSecao[item.linhaIndex], item.chave, item.campo, item.valor)
         }
     }
 
-    const excluirPlanoConfigRow = async (linha, opcoes = {}) => {
+    const limparLinhaMatriz = async (linha, opcoes = {}) => {
         if (bloquearSeSomenteLeitura(mostrarErroToast)) return
-        const executarExclusao = async () => {
-            if (!linha.planosConfigId) return
-            const { error } = await supabase.from('planos_config').delete().eq('id', linha.planosConfigId)
-            if (error) {
-                mostrarErroToast(`Erro ao excluir registro: ${error.message}`)
-                return
+        const executarLimpeza = async () => {
+            for (const chave of CHAVES_PLANOS_MATRIZ) {
+                const celula = linha.celulas[chave]
+                if (!celula || celula.modo !== 'editavel') continue
+                for (const campo of ['limite', 'carencia']) {
+                    if (!String(celula[campo] ?? '').trim()) continue
+                    if (campo === 'limite' && celula.limiteGrupo) continue
+                    await salvarCelulaMatriz(linha, chave, campo, '')
+                }
             }
-            setLinhasLimitacoes((anteriores) => anteriores.filter((item) => item.codigo !== linha.codigo))
         }
 
         if (opcoes.ignorarConfirmacao) {
-            await executarExclusao()
+            await executarLimpeza()
             return
         }
+        abrirConfirmacaoExclusao(`Limpar limites e carências do procedimento ${linha.codigo}?`, executarLimpeza)
+    }
 
-        abrirConfirmacaoExclusao(
-            `Excluir limite e carência do procedimento ${linha.codigo} neste plano?`,
-            executarExclusao
-        )
+    const corrigirAcimaMatriz = async () => {
+        if (bloquearSeSomenteLeitura(mostrarErroToast)) return
+        setCorrigindoAcima(true)
+        try {
+            const falhas = []
+            for (const item of divergenciasAcima.corrigiveis) {
+                const { erros } = await sincronizarAcimaProcedimento(supabase, {
+                    codigo: item.codigo,
+                    planoBaseId: item.planoBaseId,
+                    mapaPlanos: mapaPlanosCompleto,
+                    planos: planosTodos })
+                if (erros.length > 0) falhas.push(item.codigo)
+            }
+            await buscarLinhasLimitacoes()
+            if (falhas.length > 0) mostrarErroToast(`Não foi possível corrigir o "Acima" de: ${falhas.join(', ')}.`)
+        } finally {
+            setCorrigindoAcima(false)
+        }
     }
 
     const excluirProcedimentoCidadePlanos = async (linha, opcoes = {}) => {
@@ -1678,7 +1533,7 @@ const Supertabelaplanos = () => {
         setCidadeEdicao(null)
     }
 
-    const excluirCidadeNoGerenciador = async (cidade, opcoes = {}) => {
+    const excluirCidadeNoGerenciador = async (cidade) => {
         if (bloquearSeSomenteLeitura(mostrarErroToast)) return
         const executarExclusao = async () => {
             const { error: errRepasses } = await supabase.from('repasses').delete().eq('cidade_id', cidade.id)
@@ -1708,12 +1563,9 @@ const Supertabelaplanos = () => {
             }
         }
 
-        if (opcoes.ignorarConfirmacao) {
-            await executarExclusao()
-            return
-        }
-
-        abrirConfirmacaoExclusao(`Excluir a cidade "${cidade.nome}" e os vínculos próprios dela? A tabela de planos da região será mantida.`, executarExclusao)
+        const qtd = Number(cidade.procedimentosAtivos || 0)
+        const detalhe = qtd ? ` Ela tem ${qtd} procedimento${qtd > 1 ? 's' : ''} ativo${qtd > 1 ? 's' : ''}.` : ''
+        abrirConfirmacaoExclusao(`Excluir a cidade "${cidade.nome}" e os vínculos próprios dela?${detalhe} A tabela de planos da região será mantida.`, executarExclusao)
     }
 
     const iniciarDuplicacaoCidade = (cidade) => {
@@ -2071,7 +1923,7 @@ const Supertabelaplanos = () => {
         } else {
             buscarLinhasDiferencas()
         }
-    }, [cidadeId, modoLimitacoes, planoDetalheId, buscarLinhasDiferencas, buscarLinhasLimitacoes])
+    }, [cidadeId, modoLimitacoes, buscarLinhasDiferencas, buscarLinhasLimitacoes])
 
     useEffect(() => {
         if (!mostrarGerenciarModal) return
@@ -2122,9 +1974,6 @@ const Supertabelaplanos = () => {
         setNovoProcedimentoSelecionadoCodigo('')
         setAdicaoMassaAtiva(false)
         setCodigosInicializacaoPlanos('')
-        if (ativo && planos.length > 0 && !planoDetalheId) {
-            setPlanoDetalheId(String(planos[0].id))
-        }
     }
 
     return (
@@ -2160,22 +2009,6 @@ const Supertabelaplanos = () => {
                 />
                 )}
 
-                {modoLimitacoes && (
-                    <label className="ek-field">
-                        <span className="ek-label">Plano</span>
-                        <SelectDropdown
-                            className="ek-select"
-                            value={planoDetalheId}
-                            onChange={(e) => setPlanoDetalheId(e.target.value)}
-                        >
-                            {planos.map((plano) => (
-                                <option key={plano.id} value={plano.id}>
-                                    {plano.nome}
-                                </option>
-                            ))}
-                        </SelectDropdown>
-                    </label>
-                )}
 
                 <div className="ek-toolbar__actions">
                     {!somenteLeitura && (
@@ -2203,7 +2036,7 @@ const Supertabelaplanos = () => {
                         </label>
                     )}
 
-                    {!somenteLeitura && (
+                    {!somenteLeitura && !modoLimitacoes && (
                         <label className="ek-check">
                             <input
                                 type="checkbox"
@@ -2229,11 +2062,23 @@ const Supertabelaplanos = () => {
                     <button
                         type="button"
                         className="ek-btn ek-btn--secondary"
-                        disabled={!cidadeId || loading || exportandoExcelTela}
+                        disabled={(!modoLimitacoes && !cidadeId) || loading || exportandoExcelTela}
                         onClick={() => void baixarExcelTelaPlanos()}
                     >
                         {exportandoExcelTela ? 'Gerando Excel…' : 'Exportar Excel'}
                     </button>
+
+                    {modoLimitacoes && (
+                        <button
+                            type="button"
+                            className={`ek-btn ek-btn--soft${filtrarSoVazios ? ' is-on' : ''}`}
+                            aria-pressed={filtrarSoVazios}
+                            onClick={() => setFiltrarSoVazios((anterior) => !anterior)}
+                            title="Procedimentos com limite ou carência vazios em algum plano"
+                        >
+                            Só vazios ({totalVazios})
+                        </button>
+                    )}
 
                     <div className="ek-field ek-field--fixed">
                         <span className="ek-label">Visualização</span>
@@ -2259,12 +2104,10 @@ const Supertabelaplanos = () => {
                 </div>
             </Toolbar>
 
-            {adicaoMassaAtiva && (
+            {adicaoMassaAtiva && !modoLimitacoes && (
                 <div className='supertabelaplanos_cidade_vazia_wrap'>
                     <p>
-                        {modoLimitacoes
-                            ? `Adicionar procedimentos em massa no plano «${planoDetalheNome}» (limites/carências).`
-                            : 'Adicionar procedimentos em massa na cidade selecionada (vínculo nos quatro planos mapeados).'}
+                        Adicionar procedimentos em massa na cidade selecionada (vínculo nos quatro planos mapeados).
                     </p>
                     <div className='supertabelaplanos_cidade_vazia_form'>
                         <label htmlFor='codigos-adicao-massa-planos'>
@@ -2499,15 +2342,43 @@ ou um código por linha`}
                 />
             )}
 
+            {modoLimitacoes && divergenciasAcima.corrigiveis.length > 0 && (
+                <div className='supertabelaplanos_aviso_acima' role='status'>
+                    <span>
+                        {divergenciasAcima.corrigiveis.length} procedimento(s) com o «Acima» desatualizado nos planos abaixo do plano base.
+                    </span>
+                    {!somenteLeitura && (
+                        <button
+                            type='button'
+                            className='ek-btn ek-btn--soft'
+                            onClick={corrigirAcimaMatriz}
+                            disabled={corrigindoAcima || loading}
+                        >
+                            {corrigindoAcima ? 'Corrigindo…' : 'Corrigir'}
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {modoLimitacoes && divergenciasAcima.conflitos.length > 0 && (
+                <div className='supertabelaplanos_aviso_acima' role='status'>
+                    <span>
+                        {divergenciasAcima.conflitos.length} procedimento(s) com valor real num plano abaixo do plano base
+                        (não corrigidos automaticamente; revise o plano base ou os valores):{' '}
+                        {divergenciasAcima.conflitos.join(', ')}.
+                    </span>
+                </div>
+            )}
+
             <div className='supertabelaplanos_table_container overflow-x-auto'>
                 {loading && <p>Carregando...</p>}
-                {!loading && secoesPorCategoria.length === 0 ? (
+                {!loading && secoesPorCategoria.length === 0 && modoLimitacoes ? (
                     <div className='supertabelaplanos_cidade_vazia_wrap'>
-                        <p>
-                            {modoLimitacoes
-                                ? `Nenhum procedimento em planos_config para o plano «${planoDetalheNome}» com os filtros atuais.`
-                                : 'Nenhum vínculo em planos_cidade para a cidade selecionada com os filtros atuais.'}
-                        </p>
+                        <p>Nenhum procedimento com os filtros atuais.</p>
+                    </div>
+                ) : !loading && secoesPorCategoria.length === 0 ? (
+                    <div className='supertabelaplanos_cidade_vazia_wrap'>
+                        <p>Nenhum vínculo em planos_cidade para a cidade selecionada com os filtros atuais.</p>
                         <div className='supertabelaplanos_cidade_vazia_form'>
                             <label htmlFor='codigos-planos-vazio'>
                                 Preencha os códigos de procedimentos (separados por vírgula) para criar registros
@@ -2525,7 +2396,7 @@ ou um código por linha`}
                                 onClick={preencherProcedimentosMassaPlanos}
                                 disabled={loading}
                             >
-                                {modoLimitacoes ? 'Inserir na lista do plano' : 'Inserir vínculos na cidade'}
+                                Inserir vínculos na cidade
                             </button>
                             {progressoMassa.ativo && (
                                 <div className='supertabelaplanos_progress_wrap' role='status' aria-live='polite'>
@@ -2743,230 +2614,17 @@ ou um código por linha`}
                                     </tbody>
                                 </table>
                             ) : (
-                                <table className='table_main'>
-                                    <colgroup>
-                                        <col className='supertabelaplanos_col_codigo' style={{ width: '12%' }} />
-                                        <col
-                                            className='supertabelaplanos_col_nome'
-                                            style={{ width: somenteLeitura ? '42%' : '34%' }}
-                                        />
-                                        <col className='supertabelaplanos_col_limite' style={{ width: '22%' }} />
-                                        <col className='supertabelaplanos_col_carencia' style={{ width: '20%' }} />
-                                        {!somenteLeitura && (
-                                            <col className='supertabelaplanos_col_acao' style={{ width: '8%' }} />
-                                        )}
-                                    </colgroup>
-                                    <thead>
-                                        <tr>
-                                            <th className='table_header' onClick={() => handleOrdenarCategoria(secao.categoriaId, 'codigo')}>
-                                                Código{obterIndicadorOrdenacao(secao.categoriaId, 'codigo')}
-                                            </th>
-                                            <th
-                                                className='table_header supertabelaplanos_th_nome'
-                                                onClick={() => handleOrdenarCategoria(secao.categoriaId, 'procedimento')}
-                                            >
-                                                Nome{obterIndicadorOrdenacao(secao.categoriaId, 'procedimento')}
-                                            </th>
-                                            <th
-                                                className='table_header supertabelaplanos_th_centro'
-                                                onClick={() => handleOrdenarCategoria(secao.categoriaId, 'limite')}
-                                            >
-                                                <span className='supertabelaplanos_th_stack'>
-                                                    <span className='supertabelaplanos_th_main'>Limite</span>
-                                                    <span className='supertabelaplanos_th_plan'>{planoDetalheNome}</span>
-                                                </span>
-                                                {obterIndicadorOrdenacao(secao.categoriaId, 'limite')}
-                                            </th>
-                                            <th
-                                                className='table_header supertabelaplanos_th_centro'
-                                                onClick={() => handleOrdenarCategoria(secao.categoriaId, 'carencia')}
-                                            >
-                                                <span className='supertabelaplanos_th_stack'>
-                                                    <span className='supertabelaplanos_th_main'>Carência</span>
-                                                    <span className='supertabelaplanos_th_plan'>{planoDetalheNome}</span>
-                                                </span>
-                                                {obterIndicadorOrdenacao(secao.categoriaId, 'carencia')}
-                                            </th>
-                                            {!somenteLeitura && (
-                                                <th className='table_header table_header_no_sort'>Ação</th>
-                                            )}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(() => {
-                                            const limiteGrupo = resolverLimiteGrupoExibicao(
-                                                categorias,
-                                                limitesGrupoPorCategoriaId,
-                                                secao.categoriaId,
-                                                contextoLimiteGrupoPlano
-                                            )
-                                            const usaLimiteGrupoSecao = Boolean(limiteGrupo)
-                                            const linhasNoGrupo = usaLimiteGrupoSecao
-                                                ? secao.linhas.filter((item) => !procedimentoIsentoLimiteGrupo(item))
-                                                : []
-                                            const rowspanGrupo = linhasNoGrupo.length
-
-                                            const renderCelulaLimiteIndividual = (linha, linhaIndex) => (
-                                                <td className='supertabelaplanos_td_centro'>
-                                                    {edicaoAtiva && linha.planosConfigId ? (
-                                                        <input
-                                                            className='table_cell_input_text'
-                                                            type='text'
-                                                            value={obterValorInputLim(linha, 'limite', secao.categoriaId)}
-                                                            onChange={(e) => {
-                                                                const chave = chaveEdicaoLim(
-                                                                    secao.categoriaId,
-                                                                    linha.codigo,
-                                                                    'limite'
-                                                                )
-                                                                setEdicoesLocais((a) => ({ ...a, [chave]: e.target.value }))
-                                                            }}
-                                                            onBlur={() =>
-                                                                salvarLimiteCarencia(linha, 'limite', secao.categoriaId)
-                                                            }
-                                                            onPaste={(e) =>
-                                                                processarColagemLimCarencia(
-                                                                    e,
-                                                                    secao,
-                                                                    linhaIndex,
-                                                                    'limite'
-                                                                )
-                                                            }
-                                                        />
-                                                    ) : (
-                                                        <span>{linha.limite || '\u00a0'}</span>
-                                                    )}
-                                                </td>
-                                            )
-
-                                            return secao.linhas.map((linha, linhaIndex) => {
-                                                const isentoLimiteGrupo = procedimentoIsentoLimiteGrupo(linha)
-                                                const indiceNoGrupo = linhasNoGrupo.findIndex(
-                                                    (item) => item.codigo === linha.codigo
-                                                )
-
-                                                return (
-                                            <tr key={`${secao.categoriaId}-${linha.codigo}-lim`}>
-                                                <td className='table_text_left'>{linha.codigo}</td>
-                                                <td className={`table_text_left supertabelaplanos_td_nome ${obterClasseProcedimento(linha.procedimento)}`}>
-                                                    <span className='supertabelaplanos_nome_com_flag'>
-                                                        {linha.procedimento}
-                                                        {linha.apenasLoja ? (
-                                                            <span
-                                                                className='supertabelaplanos_flag_loja'
-                                                                title={ROTULO_PLANO[CHAVE_PLANO_APENAS_LOJA]}
-                                                            >
-                                                                Loja
-                                                            </span>
-                                                        ) : null}
-                                                    </span>
-                                                </td>
-                                                {usaLimiteGrupoSecao && isentoLimiteGrupo ? (
-                                                    renderCelulaLimiteIndividual(linha, linhaIndex)
-                                                ) : usaLimiteGrupoSecao && indiceNoGrupo === 0 && rowspanGrupo > 0 ? (
-                                                    <td
-                                                        rowSpan={rowspanGrupo}
-                                                        className='supertabelaplanos_limite_grupo_cell'
-                                                    >
-                                                        {textoCelulaLimiteGrupo(limiteGrupo, secao.categoriaNome)}
-                                                    </td>
-                                                ) : usaLimiteGrupoSecao && indiceNoGrupo > 0 ? null : (
-                                                    renderCelulaLimiteIndividual(linha, linhaIndex)
-                                                )}
-                                                <td className='supertabelaplanos_td_centro'>
-                                                    {edicaoAtiva && linha.planosConfigId ? (
-                                                        <input
-                                                            className='table_cell_input_text'
-                                                            type='text'
-                                                            value={obterValorInputLim(linha, 'carencia', secao.categoriaId)}
-                                                            onChange={(e) => {
-                                                                const chave = chaveEdicaoLim(secao.categoriaId, linha.codigo, 'carencia')
-                                                                setEdicoesLocais((a) => ({ ...a, [chave]: e.target.value }))
-                                                            }}
-                                                            onBlur={() => salvarLimiteCarencia(linha, 'carencia', secao.categoriaId)}
-                                                            onPaste={(e) =>
-                                                                processarColagemLimCarencia(e, secao, linhaIndex, 'carencia')
-                                                            }
-                                                        />
-                                                    ) : (
-                                                        <span>{linha.carencia || '\u00a0'}</span>
-                                                    )}
-                                                </td>
-                                                {!somenteLeitura && (
-                                                    <td>
-                                                        <button
-                                                            type='button'
-                                                            className='table_delete_btn'
-                                                            onClick={(event) =>
-                                                                excluirPlanoConfigRow(linha, {
-                                                                    ignorarConfirmacao: event.shiftKey })
-                                                            }
-                                                            title='Excluir registro, SHIFT = Excluir rápido'
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    </td>
-                                                )}
-                                            </tr>
-                                                )
-                                            })
-                                        })()}
-                                        <tr className='row_add_line'>
-                                            <td colSpan={somenteLeitura ? 4 : 5}>
-                                                {categoriaEmInclusao === secao.categoriaId ? (
-                                                    <div className='row_add_inline'>
-                                                        <div
-                                                            className='row_add_suggest_wrap'
-                                                            ref={categoriaEmInclusao === secao.categoriaId ? sugestoesAnchorRef : null}
-                                                        >
-                                                            <input
-                                                                type='text'
-                                                                className='row_add_input'
-                                                                placeholder='Digite nome ou código do procedimento'
-                                                                value={textoNovoProcedimento}
-                                                                onChange={(e) => {
-                                                                    setTextoNovoProcedimento(e.target.value)
-                                                                    setNovoProcedimentoSelecionadoCodigo('')
-                                                                }}
-                                                            />
-                                                            {renderSugestoesPortal(secao, '-lim')}
-                                                        </div>
-                                                        <button
-                                                            type='button'
-                                                            className='row_add_btn'
-                                                            onClick={() => confirmarNovoProcedimentoCategoria(secao.categoriaId)}
-                                                        >
-                                                            Salvar
-                                                        </button>
-                                                        <button
-                                                            type='button'
-                                                            className='row_add_cancel_btn'
-                                                            onClick={() => {
-                                                                setCategoriaEmInclusao(null)
-                                                                setTextoNovoProcedimento('')
-                                                                setNovoProcedimentoSelecionadoCodigo('')
-                                                            }}
-                                                        >
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
-                                                ) : !somenteLeitura ? (
-                                                    <button
-                                                        type='button'
-                                                        className='row_add_btn'
-                                                        onClick={() => {
-                                                            setCategoriaEmInclusao(secao.categoriaId)
-                                                            setTextoNovoProcedimento('')
-                                                            setNovoProcedimentoSelecionadoCodigo('')
-                                                        }}
-                                                    >
-                                                        ＋ Adicionar procedimento nesta categoria
-                                                    </button>
-                                                ) : null}
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                                <MatrizCarenciasLimitesTabela
+                                    secao={secao}
+                                    somenteLeitura={somenteLeitura}
+                                    edicaoAtiva={edicaoAtiva}
+                                    onSalvarCelula={salvarCelulaMatriz}
+                                    onColar={colarMatriz}
+                                    onLimpar={limparLinhaMatriz}
+                                    onOrdenar={handleOrdenarCategoria}
+                                    indicadorOrdenacao={(coluna) => obterIndicadorOrdenacao(secao.categoriaId, coluna)}
+                                    classeNome={obterClasseProcedimento}
+                                />
                             )}
                         </section>
                             ))}

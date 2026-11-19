@@ -5,6 +5,7 @@
  */
 export const MODULOS_DE_ROTAS = [
     () => import('./redeRotas.js'),
+    () => import('./planosRotas.js'),
     () => import('./pagamentosRotas.js'),
     () => import('./chavesAdminRotas.js'),
 ]

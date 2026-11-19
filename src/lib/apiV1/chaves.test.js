@@ -74,7 +74,15 @@ describe('autorizarChave', () => {
         expect(autorizarChave(l, c)).toEqual({ ok: false, status: 403, codigo: 'ip_nao_permitido' })
         expect(autorizarChave(l, { ...c, ip: '2.2.2.2' })).toEqual({ ok: true })
     })
+    it('planos:ler autoriza chave que tem o escopo, com origem permitida', () => {
+        const l = linhaBase({ escopos: ['rede:ler', 'planos:ler'] })
+        expect(autorizarChave(l, ctx({ escopo: 'planos:ler' }))).toEqual({ ok: true })
+        expect(autorizarChave(l, ctx({ escopo: 'planos:ler', origem: 'https://outro.com' }))).toEqual({ ok: false, status: 403, codigo: 'origem_nao_permitida' })
+    })
+    it('chave só com rede:ler não acessa planos:ler', () => {
+        expect(autorizarChave(linhaBase(), ctx({ escopo: 'planos:ler' }))).toEqual({ ok: false, status: 403, codigo: 'escopo_insuficiente' })
+    })
     it('exporta escopos', () => {
-        expect(ESCOPOS).toEqual(['rede:ler', 'pagamentos:ler', 'pagamentos:escrever'])
+        expect(ESCOPOS).toEqual(['rede:ler', 'planos:ler', 'pagamentos:ler', 'pagamentos:escrever'])
     })
 })

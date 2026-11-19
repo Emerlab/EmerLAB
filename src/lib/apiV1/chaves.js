@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-export const ESCOPOS = Object.freeze(['rede:ler', 'pagamentos:ler', 'pagamentos:escrever'])
+export const ESCOPOS = Object.freeze(['rede:ler', 'planos:ler', 'pagamentos:ler', 'pagamentos:escrever'])
 
 const ALFABETO = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const TIPOS = { rede: 'emer_rede_', pag: 'emer_pag_' }

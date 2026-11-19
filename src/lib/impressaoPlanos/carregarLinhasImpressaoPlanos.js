@@ -2,10 +2,8 @@ import { buscarEmLotesPaginado, buscarTodosPaginado, supabase } from '../supabas
 import { carregarDadosCredenciamentoQuemRealiza } from '../buscarQuemRealizaPrestadores.js'
 import {
     buscarCategoriaLimitesGrupo,
-    categoriaUsaLimiteGrupo,
     montarMapaLimiteGrupoPorCategoria,
     montarPlanosChaveDisponiveisPorCategoria,
-    procedimentoIsentoLimiteGrupo,
     resolverLimiteGrupoExibicao,
     textoCelulaLimiteGrupo,
 } from '../categoriaLimitesGrupo.js'
@@ -19,6 +17,7 @@ import {
 import { resolverUrlPdfPlano } from './mapearPlanoPdfAsset.js'
 import { formatarDiferencaPlano, formatarTextoCampoPlano } from './formatarCamposPlano.js'
 import { expandirLinhasNomeAlternativo } from './expandirLinhasNomeAlternativo.js'
+import { resolverLimiteExibicao } from './limiteExibicaoPlanos.js'
 import { filtrarPrestadorIdsPorLinhaExibicao } from './realizadoresPorLinhaExibicao.js'
 import {
     MIN_REALIZADORES_PRE_MARCAR,
@@ -28,22 +27,6 @@ import { montarCidadesAlvoContagemPrestadores } from './contagemRealizadoresPlan
 import { carregarVinculosMunicipios } from '../cidadesSupertabelaVinculos.js'
 
 const normCodigo = (c) => String(c || '').trim().toUpperCase()
-
-function resolverLimiteExibicao(linha, categorias, limitesGrupoPorCategoriaId, contextoLimiteGrupoPlano) {
-    const catId = Number(linha.categoriaId)
-    if (procedimentoIsentoLimiteGrupo(linha)) {
-        return formatarTextoCampoPlano(linha.limite)
-    }
-    if (!categoriaUsaLimiteGrupo(categorias, catId)) {
-        return formatarTextoCampoPlano(linha.limite)
-    }
-    const grupo = resolverLimiteGrupoExibicao(categorias, limitesGrupoPorCategoriaId, catId, contextoLimiteGrupoPlano)
-    if (grupo) {
-        const catNome = categorias.find((c) => Number(c.id) === catId)?.nome || 'categoria'
-        return textoCelulaLimiteGrupo(grupo, catNome)
-    }
-    return formatarTextoCampoPlano(linha.limite)
-}
 
 /**
  * @param {{

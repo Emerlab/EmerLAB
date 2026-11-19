@@ -3,6 +3,7 @@ import {
     ETIQUETAS_POR_PAGINA,
     MODELO_ETIQUETA,
     agruparItensTextoEmEtiquetas,
+    avisosEtiqueta,
     gerarPdfEtiquetasEndereco,
     normalizarEtiquetaRegistro,
     parseArquivoEtiquetas,
@@ -69,6 +70,90 @@ describe('etiquetasEndereco', () => {
         expect(out[0].cep).toBe('95000-000')
         expect(out[1].nome).toMatch(/LUIZA/)
         expect(out[2].nome).toMatch(/GILMAR/)
+    })
+
+    it('PDF com a posição deslocada em relação à grade não embaralha destinatários', () => {
+        // Layout real exportado pelo outro sistema: nome e «Endereço:» caem em fileiras diferentes da grade da folha.
+        const col = (x, y0, nome, endereco, loc, cep) => [
+            { str: nome, x, y: y0 },
+            { str: `Endereço: ${endereco}`, x, y: y0 + 20 },
+            { str: loc, x, y: y0 + 40 },
+            { str: cep, x, y: y0 + 57 },
+        ]
+        const items = [
+            ...col(20, 140, 'AMANDA FACCHIN', 'CARLOS WEBER, 181 - CASA', 'RIO BRANCO - CAXIAS DO SUL - RS', '95097-650'),
+            ...col(330, 140, 'CAMILLA CHIELE BERNARDI', 'DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN...', 'PLANALTO - FARROUPILHA - RS', '95170-356'),
+            ...col(20, 248, 'CAROLINE NOTHEN', 'CARLOS WEBER, 176 - CASA', 'RIO BRANCO - CAXIAS DO SUL - RS', '95097-650'),
+            ...col(330, 248, 'JAINI SIEG RODRIGUES', 'BORGES DE MEDEIROS, 920 - SALA 81', 'CENTRO - CAXIAS DO SUL - RS', '95020-310'),
+        ]
+        const out = agruparItensTextoEmEtiquetas(items)
+        expect(out.map((e) => e.nome)).toEqual(['AMANDA FACCHIN', 'CAMILLA CHIELE BERNARDI', 'CAROLINE NOTHEN', 'JAINI SIEG RODRIGUES'])
+        expect(out[0]).toMatchObject({ endereco: 'CARLOS WEBER, 181 - CASA', cep: '95097-650' })
+        expect(out[1]).toMatchObject({ localidade: 'PLANALTO - FARROUPILHA - RS', cep: '95170-356' })
+        expect(out[3]).toMatchObject({ endereco: 'BORGES DE MEDEIROS, 920 - SALA 81', cep: '95020-310' })
+        expect(out.every((e) => !/^endere[cç]o/i.test(e.nome))).toBe(true)
+    })
+
+    it('PDF real do outro sistema: rótulo escrito «Enderço:» (sem o 2º e) também liga nome e endereço', () => {
+        // Posições extraídas do Etiqueta_19_11_2026_14_18.pdf (pdfjs, y a partir do topo, página 612x792).
+        const items = [
+            { str: 'AMANDA FACCHIN', x: 16, y: 93 },
+            { str: 'CAMILLA CHIELE BERNARDI', x: 313, y: 93 },
+            { str: 'Enderço: CARLOS WEBER, 181 - CASA', x: 16, y: 111 },
+            { str: 'Enderço: DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN…', x: 313, y: 111 },
+            { str: 'RIO BRANCO - CAXIAS DO SUL - RS', x: 16, y: 129 },
+            { str: 'PLANALTO - FARROUPILHA - RS', x: 313, y: 129 },
+            { str: '95097-650', x: 16, y: 145 },
+            { str: '95170-356', x: 313, y: 145 },
+            { str: 'CAROLINE NOTHEN', x: 16, y: 189 },
+            { str: 'JAINI SIEG RODRIGUES', x: 313, y: 189 },
+            { str: 'Enderço: CARLOS WEBER, 176 - CASA', x: 16, y: 207 },
+            { str: 'Enderço: BORGES DE MEDEIROS, 920 - SALA 81', x: 313, y: 207 },
+            { str: 'RIO BRANCO - CAXIAS DO SUL - RS', x: 16, y: 225 },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 313, y: 225 },
+            { str: '95097-650', x: 16, y: 241 },
+            { str: '95020-310', x: 313, y: 241 },
+        ]
+        const out = agruparItensTextoEmEtiquetas(items, 612)
+        expect(out).toEqual([
+            { nome: 'AMANDA FACCHIN', endereco: 'CARLOS WEBER, 181 - CASA', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' },
+            { nome: 'CAMILLA CHIELE BERNARDI', endereco: 'DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN…', localidade: 'PLANALTO - FARROUPILHA - RS', cep: '95170-356' },
+            { nome: 'CAROLINE NOTHEN', endereco: 'CARLOS WEBER, 176 - CASA', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' },
+            { nome: 'JAINI SIEG RODRIGUES', endereco: 'BORGES DE MEDEIROS, 920 - SALA 81', localidade: 'CENTRO - CAXIAS DO SUL - RS', cep: '95020-310' },
+        ])
+        expect(out.flatMap((e) => avisosEtiqueta(e))).toEqual([])
+    })
+
+    it('qualquer deslocamento vertical dá o mesmo resultado', () => {
+        const base = (dy) => [
+            { str: 'ANA', x: 20, y: 60 + dy },
+            { str: 'Endereço: RUA A, 1', x: 20, y: 80 + dy },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 20, y: 100 + dy },
+            { str: '95000-000', x: 20, y: 117 + dy },
+            { str: 'BIA', x: 330, y: 60 + dy },
+            { str: 'Endereço: RUA B, 2', x: 330, y: 80 + dy },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 330, y: 100 + dy },
+            { str: '95000-001', x: 330, y: 117 + dy },
+        ]
+        for (const dy of [0, 17, 33, 58, 71, 94]) {
+            const out = agruparItensTextoEmEtiquetas(base(dy))
+            expect(out.map((e) => [e.nome, e.cep])).toEqual([['ANA', '95000-000'], ['BIA', '95000-001']])
+        }
+    })
+
+    it('avisosEtiqueta: etiqueta completa não tem aviso, linha vazia também não', () => {
+        const ok = { nome: 'ANA', endereco: 'RUA A, 1', localidade: 'CENTRO - CAXIAS DO SUL - RS', cep: '95000-000' }
+        expect(avisosEtiqueta(ok)).toEqual([])
+        expect(avisosEtiqueta({ nome: '', endereco: '', localidade: '', cep: '' })).toEqual([])
+    })
+
+    it('avisosEtiqueta: pega o embaralhamento visto na importação (nome = «Endereço: …», nome sem endereço)', () => {
+        const trocada = { nome: 'Endereço: CARLOS WEBER, 181 - CASA', endereco: '', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' }
+        expect(avisosEtiqueta(trocada).join(' ')).toMatch(/nome parece ser um endereço/i)
+        expect(avisosEtiqueta(trocada).join(' ')).toMatch(/Sem endereço/)
+        const soNome = { nome: 'AMANDA FACCHIN', endereco: '', localidade: '', cep: '' }
+        expect(avisosEtiqueta(soNome)).toHaveLength(3)
+        expect(avisosEtiqueta({ nome: 'A', endereco: 'R', localidade: 'X - Y - RS', cep: '9500' }).join(' ')).toMatch(/CEP incompleto/)
     })
 
     it('agrupa endereço com quebra de linha na mesma etiqueta', () => {
