@@ -38,6 +38,13 @@ const ENDERECO_MAX_LINHAS = 3
 const PAD_BOTTOM = 2.5 * MM
 const COR_TEXTO = rgb(0.05, 0.05, 0.05)
 
+/**
+ * Rótulo «Endereço:» das linhas importadas. Aceita grafias que aparecem nos PDFs do outro sistema,
+ * como «Enderço:» (sem o 2º «e») e «Endereco:» (sem cedilha).
+ */
+const ROTULO_ENDERECO = /^ender[a-zç]{0,4}o\s*:/i
+const ROTULO_ENDERECO_PREFIXO = /^ender[a-zç]{0,4}o\s*:\s*/i
+
 export function normalizarCabecalhoEtiqueta(texto) {
     return String(texto || '')
         .normalize('NFD')
@@ -109,7 +116,7 @@ export function normalizarEtiquetaRegistro(raw = {}) {
     const nome = String(raw.nome || '').trim()
     const enderecoBruto = montarEnderecoLinha(raw)
     const endereco = enderecoBruto
-        ? enderecoBruto.replace(/^endere[cç]o\s*:\s*/i, '').trim()
+        ? enderecoBruto.replace(ROTULO_ENDERECO_PREFIXO, '').trim()
         : ''
     const localidade = String(raw.localidade || '').trim() || montarLinhaLocalidade(raw)
     const cep = formatarCep(raw.cep)
@@ -132,11 +139,11 @@ export function avisosEtiqueta(raw) {
     const e = normalizarEtiquetaRegistro(raw)
     const avisos = []
     if (!e.nome) avisos.push('Sem nome do destinatário.')
-    else if (/^endere[cç]o\s*:/i.test(e.nome) || pareceCep(e.nome) || pareceLocalidade(e.nome)) {
+    else if (ROTULO_ENDERECO.test(e.nome) || pareceCep(e.nome) || pareceLocalidade(e.nome)) {
         avisos.push('O nome parece ser um endereço ou CEP: confira se não trocou com outra etiqueta.')
     }
     if (!e.endereco) avisos.push('Sem endereço (rua e número).')
-    else if (/^endere[cç]o\s*:/i.test(e.endereco)) avisos.push('O endereço começa com «Endereço:».')
+    else if (ROTULO_ENDERECO.test(e.endereco)) avisos.push('O endereço começa com «Endereço:».')
     if (!e.localidade) avisos.push('Sem bairro, cidade e UF.')
     else if (!pareceLocalidade(e.localidade)) avisos.push('Bairro - Cidade - UF fora do formato esperado.')
     if (!e.cep) avisos.push('Sem CEP.')
@@ -154,7 +161,7 @@ function pareceCep(texto) {
 /** Ex.: CENTRO - CAXIAS DO SUL - RS (bairro - cidade - UF) */
 function pareceLocalidade(texto) {
     const t = String(texto || '').trim()
-    if (!t || /^endere[cç]o\s*:/i.test(t) || pareceCep(t)) return false
+    if (!t || ROTULO_ENDERECO.test(t) || pareceCep(t)) return false
     return /\s-\s.+\s-\s*[A-Za-z]{2}\s*$/.test(t)
 }
 
@@ -174,7 +181,7 @@ function juntarTextoCampo(a, b) {
 export function etiquetaPareceCompleta(et) {
     const e = normalizarEtiquetaRegistro(et)
     if (!e.nome) return false
-    if (pareceCep(e.nome) || /^endere[cç]o\s*:/i.test(e.nome) || pareceLocalidade(e.nome)) {
+    if (pareceCep(e.nome) || ROTULO_ENDERECO.test(e.nome) || pareceLocalidade(e.nome)) {
         return false
     }
     // Sem CEP = incompleta (fonte costuma cortar o CEP para a folha seguinte)
@@ -189,7 +196,7 @@ export function etiquetaPareceFragmento(et) {
     if (!etiquetaTemConteudo(e)) return false
     if (etiquetaPareceCompleta(e)) return false
     if (!e.nome && (e.endereco || e.localidade || e.cep)) return true
-    if (pareceCep(e.nome) || /^endere[cç]o\s*:/i.test(e.nome) || pareceLocalidade(e.nome)) {
+    if (pareceCep(e.nome) || ROTULO_ENDERECO.test(e.nome) || pareceLocalidade(e.nome)) {
         return true
     }
     if (e.nome && e.endereco && !e.cep) return true
@@ -201,7 +208,7 @@ export function etiquetaPareceFragmento(et) {
 /** Só sobra CEP/localidade/endereço — remanescente do card cortado na folha anterior. */
 export function ehRemanescenteDeCorte(et) {
     const e = reclassificarCamposSoltos(et)
-    if (e.nome && !pareceCep(e.nome) && !pareceLocalidade(e.nome) && !/^endere[cç]o\s*:/i.test(e.nome)) {
+    if (e.nome && !pareceCep(e.nome) && !pareceLocalidade(e.nome) && !ROTULO_ENDERECO.test(e.nome)) {
         return false
     }
     return Boolean(e.cep || e.localidade || e.endereco)
@@ -230,15 +237,15 @@ function reclassificarCamposSoltos(e) {
             nome = m[2].trim()
         }
     }
-    if (nome && !endereco && /^endere[cç]o\s*:/i.test(nome)) {
-        endereco = nome.replace(/^endere[cç]o\s*:\s*/i, '').trim()
+    if (nome && !endereco && ROTULO_ENDERECO.test(nome)) {
+        endereco = nome.replace(ROTULO_ENDERECO_PREFIXO, '').trim()
         nome = ''
     }
     if (nome && !localidade && pareceLocalidade(nome)) {
         localidade = nome
         nome = ''
     }
-    if (endereco && !localidade && pareceLocalidade(endereco) && !/^endere[cç]o/i.test(String(e.endereco || ''))) {
+    if (endereco && !localidade && pareceLocalidade(endereco) && !/^ender[a-zç]{0,4}o\b/i.test(String(e.endereco || ''))) {
         if (!nome) {
             localidade = endereco
             endereco = ''
@@ -313,9 +320,9 @@ function separarCepsOrfaosDoInicio(texts) {
     const orfaos = []
     while (linhas.length >= 2 && pareceCep(linhas[0])) {
         const restoTemNome =
-            linhas.slice(1).some((t) => /^endere[cç]o\s*:/i.test(t)) ||
+            linhas.slice(1).some((t) => ROTULO_ENDERECO.test(t)) ||
             linhas.slice(1).some(
-                (t) => !pareceCep(t) && !pareceLocalidade(t) && !/^endere[cç]o\s*:/i.test(t),
+                (t) => !pareceCep(t) && !pareceLocalidade(t) && !ROTULO_ENDERECO.test(t),
             )
         if (!restoTemNome) break
         orfaos.push(linhas.shift())
@@ -446,7 +453,7 @@ export function parseLinhasEmEtiquetas(textsIn) {
             continue
         }
 
-        const idxEnd = texts.findIndex((t) => /^endere[cç]o\s*:/i.test(t))
+        const idxEnd = texts.findIndex((t) => ROTULO_ENDERECO.test(t))
         let nome = ''
         let endereco = ''
         let localidade = ''
@@ -476,7 +483,7 @@ export function parseLinhasEmEtiquetas(textsIn) {
             }
             nome = nomeLimpo
 
-            const endParts = [texts[idxEnd].replace(/^endere[cç]o\s*:\s*/i, '').trim()]
+            const endParts = [texts[idxEnd].replace(ROTULO_ENDERECO_PREFIXO, '').trim()]
             let viuLocalidade = false
             let i = idxEnd + 1
 
@@ -509,8 +516,8 @@ export function parseLinhasEmEtiquetas(textsIn) {
         } else {
             nome = texts[0] || ''
             let i = 1
-            if (texts[i] && /^endere[cç]o\s*:/i.test(texts[i])) {
-                endereco = texts[i].replace(/^endere[cç]o\s*:\s*/i, '').trim()
+            if (texts[i] && ROTULO_ENDERECO.test(texts[i])) {
+                endereco = texts[i].replace(ROTULO_ENDERECO_PREFIXO, '').trim()
                 i += 1
             }
             if (texts[i] && pareceLocalidade(texts[i])) {
@@ -539,7 +546,6 @@ export function parseLinhasEmEtiquetas(textsIn) {
     return out
 }
 
-const LINHA_ENDERECO = /^endere[cç]o\s*:/i
 /** Diferença de y (pt) abaixo da qual duas etiquetas de colunas diferentes estão na mesma fileira. */
 const TOLERANCIA_FILEIRA = 10
 
@@ -582,7 +588,7 @@ function inicioDoNome(trecho) {
  * @returns {{ y: number, texts: string[] }[]}
  */
 function etiquetasDaColuna(linhas) {
-    const ancoras = linhas.map((l, i) => (LINHA_ENDERECO.test(l.text) ? i : -1)).filter((i) => i >= 0)
+    const ancoras = linhas.map((l, i) => (ROTULO_ENDERECO.test(l.text) ? i : -1)).filter((i) => i >= 0)
     if (!ancoras.length) return linhas.length ? [{ y: linhas[0].y, texts: linhas.map((l) => l.text) }] : []
 
     // Sobra do topo (cauda de uma etiqueta cortada na folha anterior) + nome da 1ª etiqueta

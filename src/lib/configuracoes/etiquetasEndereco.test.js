@@ -94,6 +94,36 @@ describe('etiquetasEndereco', () => {
         expect(out.every((e) => !/^endere[cç]o/i.test(e.nome))).toBe(true)
     })
 
+    it('PDF real do outro sistema: rótulo escrito «Enderço:» (sem o 2º e) também liga nome e endereço', () => {
+        // Posições extraídas do Etiqueta_19_11_2026_14_18.pdf (pdfjs, y a partir do topo, página 612x792).
+        const items = [
+            { str: 'AMANDA FACCHIN', x: 16, y: 93 },
+            { str: 'CAMILLA CHIELE BERNARDI', x: 313, y: 93 },
+            { str: 'Enderço: CARLOS WEBER, 181 - CASA', x: 16, y: 111 },
+            { str: 'Enderço: DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN…', x: 313, y: 111 },
+            { str: 'RIO BRANCO - CAXIAS DO SUL - RS', x: 16, y: 129 },
+            { str: 'PLANALTO - FARROUPILHA - RS', x: 313, y: 129 },
+            { str: '95097-650', x: 16, y: 145 },
+            { str: '95170-356', x: 313, y: 145 },
+            { str: 'CAROLINE NOTHEN', x: 16, y: 189 },
+            { str: 'JAINI SIEG RODRIGUES', x: 313, y: 189 },
+            { str: 'Enderço: CARLOS WEBER, 176 - CASA', x: 16, y: 207 },
+            { str: 'Enderço: BORGES DE MEDEIROS, 920 - SALA 81', x: 313, y: 207 },
+            { str: 'RIO BRANCO - CAXIAS DO SUL - RS', x: 16, y: 225 },
+            { str: 'CENTRO - CAXIAS DO SUL - RS', x: 313, y: 225 },
+            { str: '95097-650', x: 16, y: 241 },
+            { str: '95020-310', x: 313, y: 241 },
+        ]
+        const out = agruparItensTextoEmEtiquetas(items, 612)
+        expect(out).toEqual([
+            { nome: 'AMANDA FACCHIN', endereco: 'CARLOS WEBER, 181 - CASA', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' },
+            { nome: 'CAMILLA CHIELE BERNARDI', endereco: 'DOUTOR JAIME ROSSLER, 441 - APTO 203, PLAN…', localidade: 'PLANALTO - FARROUPILHA - RS', cep: '95170-356' },
+            { nome: 'CAROLINE NOTHEN', endereco: 'CARLOS WEBER, 176 - CASA', localidade: 'RIO BRANCO - CAXIAS DO SUL - RS', cep: '95097-650' },
+            { nome: 'JAINI SIEG RODRIGUES', endereco: 'BORGES DE MEDEIROS, 920 - SALA 81', localidade: 'CENTRO - CAXIAS DO SUL - RS', cep: '95020-310' },
+        ])
+        expect(out.flatMap((e) => avisosEtiqueta(e))).toEqual([])
+    })
+
     it('qualquer deslocamento vertical dá o mesmo resultado', () => {
         const base = (dy) => [
             { str: 'ANA', x: 20, y: 60 + dy },
