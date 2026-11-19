@@ -2,6 +2,7 @@
  * Pendências de limite/carência por procedimento: um procedimento deve ter linha em planos_config,
  * com carência (e limite, salvo limite de grupo ativo) preenchidos, em cada plano do plano base até o Ultra.
  */
+import { gravarPlanoConfig } from './planosConfigCompat.js'
 import { categoriaUsaLimiteGrupo, procedimentoIsentoLimiteGrupo } from './categoriaLimitesGrupo.js'
 import { obterPlanoIdsPermitidosDesdeBase, obterChavePlanoPorId, CHAVE_PLANO_APENAS_LOJA } from './planosHierarquia.js'
 
@@ -56,4 +57,21 @@ export const calcularPendencias = (proc, contexto) => {
         }
     })
     return pendencias
+}
+
+/** Grava os planos informados um a um; a falha de um plano não impede os demais. */
+export const salvarLimitesCarenciasProcedimento = async (supabase, { codigo, itens }) => {
+    const erros = []
+    for (const item of itens || []) {
+        const resultado = await gravarPlanoConfig(supabase, {
+            planoId: item.planoId,
+            procedimento: codigo,
+            limite: item.limite,
+            carencia: item.carencia,
+        })
+        if (resultado.status === 'erro') {
+            erros.push({ planoId: Number(item.planoId), mensagem: resultado.error?.message || 'Erro ao gravar.' })
+        }
+    }
+    return { erros }
 }

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { criarBancoFalso } from './bancoFalsoMemoria.testutil.js'
 import { mapearPlanos } from './planosHierarquia.js'
 import {
     calcularPendencias,
     indexarPlanosConfig,
     limiteGrupoAtivoNoPlano,
     planoIdsAplicaveis,
+    salvarLimitesCarenciasProcedimento,
 } from './procedimentoLimitesCarencias.js'
 
 const mapaPlanos = mapearPlanos([
@@ -116,5 +118,35 @@ describe('limiteGrupoAtivoNoPlano', () => {
     it("devolve '' quando a categoria não usa limite de grupo ou não há linha no plano", () => {
         expect(limiteGrupoAtivoNoPlano(categorias, rows, 24, 4)).toBe('')
         expect(limiteGrupoAtivoNoPlano(categorias, rows, 23, 3)).toBe('')
+    })
+})
+
+describe('salvarLimitesCarenciasProcedimento', () => {
+    const itens = [
+        { planoId: 2, limite: '5', carencia: '60 Dias' },
+        { planoId: 3, limite: '8', carencia: '60 Dias' },
+        { planoId: 4, limite: '10', carencia: '45 Dias' },
+    ]
+
+    it('grava todos os planos informados', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        const r = await salvarLimitesCarenciasProcedimento(supabase, { codigo: 'OUT2-005', itens })
+        expect(r).toEqual({ erros: [] })
+        expect(tab('planos_config').map((x) => x.plano_id)).toEqual([2, 3, 4])
+    })
+
+    it('falha em um plano não impede os demais (Review Focus 4)', async () => {
+        const { supabase, tab, falhar } = criarBancoFalso()
+        falhar('planos_config', 'insert', (p) => p.plano_id === 3, 'sem permissão')
+        const r = await salvarLimitesCarenciasProcedimento(supabase, { codigo: 'OUT2-005', itens })
+        expect(r.erros).toEqual([{ planoId: 3, mensagem: 'sem permissão' }])
+        expect(tab('planos_config').map((x) => x.plano_id)).toEqual([2, 4])
+    })
+
+    it('itens vazio → nenhuma chamada ao banco e erros vazio', async () => {
+        const { supabase, db } = criarBancoFalso()
+        const r = await salvarLimitesCarenciasProcedimento(supabase, { codigo: 'OUT2-005', itens: [] })
+        expect(r).toEqual({ erros: [] })
+        expect(db.chamadas).toEqual([])
     })
 })
