@@ -15,6 +15,7 @@ import {
     isMissingCategoriaLimitesGrupoTable,
     montarLimitesGrupoPorCategoriaEChavePlano,
     montarPlanosChaveDisponiveisPorCategoria,
+    procedimentoIsentoLimiteGrupo,
     salvarLimiteGrupoCategoria } from '../../../lib/categoriaLimitesGrupo'
 import {
     CHAVE_PLANO_APENAS_LOJA,
@@ -25,6 +26,14 @@ import {
     obterChavePlanoPorId,
     obterPlanoIdsPermitidosDesdeChaveBase } from '../../../lib/planosHierarquia.js'
 import { TOAST_AUTO_DISMISS_MS, useConfirmacaoExclusaoAutoDismiss } from '../../../lib/toastUi.js'
+import {
+    calcularPendencias,
+    indexarPlanosConfig,
+    limiteGrupoAtivoNoPlano,
+    planoIdsAplicaveis,
+    salvarLimitesCarenciasProcedimento } from '../../../lib/procedimentoLimitesCarencias.js'
+import GradeLimitesCarencias from './GradeLimitesCarencias.jsx'
+import EditorLimitesCarenciasModal from './EditorLimitesCarenciasModal.jsx'
 import '../Supertabela_main/Supertabelamain.css'
 import './Supertabelaprocedimentos.css'
 import CampoBuscaComLimpar from '../../../components/CampoBuscaComLimpar/CampoBuscaComLimpar'
@@ -69,6 +78,11 @@ const Supertabelaprocedimentos = () => {
     const [modoCatalogo, setModoCatalogo] = useState('procedimentos')
     const modoDescontos = modoCatalogo === 'descontos'
     const [limitesGrupoRows, setLimitesGrupoRows] = useState([])
+    const [planosConfigRows, setPlanosConfigRows] = useState([])
+    const [filtrarPendentes, setFiltrarPendentes] = useState(false)
+    const [editorLimites, setEditorLimites] = useState(null)
+    const [salvandoLimites, setSalvandoLimites] = useState(false)
+    const [novoLimitesCarencias, setNovoLimitesCarencias] = useState({})
     const [edicoesLimiteGrupo, setEdicoesLimiteGrupo] = useState({})
     const [edicoesNomeCategoria, setEdicoesNomeCategoria] = useState({})
     const [adicionarCategoriaAtivo, setAdicionarCategoriaAtivo] = useState(false)
@@ -138,6 +152,7 @@ const Supertabelaprocedimentos = () => {
                 { data: categoriasData, error: errCategorias },
                 { data: procedimentosData, error: errProcedimentos },
                 { data: planosCidadeData, error: errPlanosCidade },
+                { data: planosConfigData, error: errPlanosConfig },
                 resultadoLimitesGrupo,
             ] = await Promise.all([
                 supabase.from('planos').select('id, nome').order('id', { ascending: true }),
@@ -145,11 +160,14 @@ const Supertabelaprocedimentos = () => {
                 buscarTodosPaginado(() =>
                     supabase
                         .from('procedimentos')
-                        .select('codigo, nome, categoria_id, plano_base_id, publicado_formulario')
+                        .select('id, codigo, nome, categoria_id, plano_base_id, publicado_formulario')
                         .order('codigo', { ascending: true })
                 ),
                 buscarTodosPaginado(() =>
                     supabase.from('planos_cidade').select('procedimento_cod, plano_id')
+                ),
+                buscarTodosPaginado(() =>
+                    supabase.from('planos_config').select('id, plano_id, procedimento, limite, carencia')
                 ),
                 buscarCategoriaLimitesGrupo(supabase),
             ])
@@ -160,8 +178,8 @@ const Supertabelaprocedimentos = () => {
             }
             setLimitesGrupoRows(resultadoLimitesGrupo?.data || [])
 
-            if (errPlanos || errCategorias || errProcedimentos || errPlanosCidade) {
-                const detalhes = [errPlanos?.message, errCategorias?.message, errProcedimentos?.message, errPlanosCidade?.message]
+            if (errPlanos || errCategorias || errProcedimentos || errPlanosCidade || errPlanosConfig) {
+                const detalhes = [errPlanos?.message, errCategorias?.message, errProcedimentos?.message, errPlanosCidade?.message, errPlanosConfig?.message]
                     .filter(Boolean)
                     .join(' | ')
                 setErroDetalhe(`Erro ao carregar dados base: ${detalhes}`)
@@ -195,6 +213,7 @@ const Supertabelaprocedimentos = () => {
                     rowId: `proc-${codigo}`,
                     codigo,
                     codigoBanco: codigo,
+                    procedimentoId: item.id != null ? Number(item.id) : null,
                     procedimento: String(item.nome || codigo),
                     categoriaId: item.categoria_id != null ? Number(item.categoria_id) : null,
                     planoBaseChave: chavePorPlanoBase || planoBasePorQuantidade(quantidadePlanos),
@@ -202,6 +221,7 @@ const Supertabelaprocedimentos = () => {
             })
 
             setPlanos(listaPlanos)
+            setPlanosConfigRows(planosConfigData || [])
             setCategorias(
                 (categoriasData || []).map((item) => ({
                     ...item,
@@ -215,9 +235,35 @@ const Supertabelaprocedimentos = () => {
         }
     }, [])
 
+    const contextoPendencias = useMemo(
+        () => ({
+            mapaPlanos,
+            indiceConfigs: indexarPlanosConfig(planosConfigRows),
+            categorias,
+            limitesGrupoRows }),
+        [mapaPlanos, planosConfigRows, categorias, limitesGrupoRows]
+    )
+
+    const pendenciasPorCodigo = useMemo(() => {
+        const mapa = new Map()
+        linhas.forEach((linha) => {
+            const pendencias = calcularPendencias(
+                {
+                    codigo: linha.codigo,
+                    categoriaId: linha.categoriaId,
+                    planoBaseId: mapaPlanos[linha.planoBaseChave]?.id ?? null,
+                    procedimentoId: linha.procedimentoId },
+                contextoPendencias
+            )
+            if (pendencias.length > 0) mapa.set(linha.codigo, pendencias)
+        })
+        return mapa
+    }, [linhas, mapaPlanos, contextoPendencias])
+
     const linhasFiltradas = useMemo(() => {
-        if (!termoBusca.trim()) return linhas
-        return linhas.filter((linha) => {
+        const linhasBase = filtrarPendentes ? linhas.filter((linha) => pendenciasPorCodigo.has(linha.codigo)) : linhas
+        if (!termoBusca.trim()) return linhasBase
+        return linhasBase.filter((linha) => {
             const categoriaNome = categorias.find((c) => Number(c.id) === Number(linha.categoriaId))?.nome || ''
             const planoNome = ROTULO_PLANO[linha.planoBaseChave] || ''
             const blob = normalizarTextoBuscaDev(
@@ -234,7 +280,7 @@ const Supertabelaprocedimentos = () => {
             )
             return filtrarLinhaSupertabelaPorBusca(linha, blob, termoBusca)
         })
-    }, [linhas, termoBusca, categorias])
+    }, [linhas, termoBusca, categorias, filtrarPendentes, pendenciasPorCodigo])
 
     const handleOrdenarCategoria = (categoriaId, coluna) => {
         setOrdenacaoPorCategoria((anterior) => {
@@ -840,6 +886,101 @@ const Supertabelaprocedimentos = () => {
         )
     }
 
+    const nomePlanoLimites = (planoId) =>
+        planos.find((plano) => Number(plano.id) === Number(planoId))?.nome || `Plano ${planoId}`
+
+    const planosAplicaveisDaLinha = (linha) =>
+        planoIdsAplicaveis(mapaPlanos[linha.planoBaseChave]?.id ?? null, mapaPlanos).map((id) => ({
+            id,
+            nome: nomePlanoLimites(id) }))
+
+    const limiteGrupoPorPlano = (categoriaId, procedimentoId, planoIds) => {
+        const resultado = {}
+        if (procedimentoIsentoLimiteGrupo({ procedimentoId })) return resultado
+        planoIds.forEach((id) => {
+            const valor = limiteGrupoAtivoNoPlano(categorias, limitesGrupoRows, categoriaId, id)
+            if (valor) resultado[id] = valor
+        })
+        return resultado
+    }
+
+    const textoPendencias = (pendencias) =>
+        pendencias
+            .map((pendencia) => {
+                const faltas = pendencia.faltaLinha
+                    ? 'sem configuração'
+                    : [pendencia.faltaLimite && 'limite', pendencia.faltaCarencia && 'carência']
+                          .filter(Boolean)
+                          .join(' e ')
+                return `${nomePlanoLimites(pendencia.planoId)}: ${faltas}`
+            })
+            .join(' | ')
+
+    const recarregarPlanosConfig = async () => {
+        const { data, error } = await buscarTodosPaginado(() =>
+            supabase.from('planos_config').select('id, plano_id, procedimento, limite, carencia')
+        )
+        if (error) {
+            mostrarErroToast(`Erro ao atualizar limites e carências: ${error.message}`)
+            return
+        }
+        setPlanosConfigRows(data || [])
+    }
+
+    const abrirEditorLimites = (linha) => {
+        const planosAplicaveis = planosAplicaveisDaLinha(linha)
+        const porPlano = indexarPlanosConfig(planosConfigRows).get(String(linha.codigo).toUpperCase())
+        const valoresIniciais = {}
+        planosAplicaveis.forEach((plano) => {
+            const config = porPlano?.get(plano.id)
+            valoresIniciais[plano.id] = { limite: config?.limite || '', carencia: config?.carencia || '' }
+        })
+        setEditorLimites({
+            linha,
+            planos: planosAplicaveis,
+            valoresIniciais,
+            limiteGrupoPorPlanoId: limiteGrupoPorPlano(
+                linha.categoriaId,
+                linha.procedimentoId,
+                planosAplicaveis.map((plano) => plano.id)
+            ) })
+    }
+
+    const salvarEditorLimites = async (valores) => {
+        if (bloquearSeSomenteLeitura(mostrarErroToast)) return
+        const { linha, planos: planosAplicaveis, valoresIniciais } = editorLimites
+        const itens = planosAplicaveis
+            .filter((plano) => {
+                const inicial = valoresIniciais[plano.id]
+                const novo = valores[plano.id] || inicial
+                return novo.limite !== inicial.limite || novo.carencia !== inicial.carencia
+            })
+            .map((plano) => ({
+                planoId: plano.id,
+                limite: valores[plano.id]?.limite ?? '',
+                carencia: valores[plano.id]?.carencia ?? '' }))
+
+        if (itens.length === 0) {
+            setEditorLimites(null)
+            return
+        }
+
+        setSalvandoLimites(true)
+        try {
+            const { erros } = await salvarLimitesCarenciasProcedimento(supabase, { codigo: linha.codigo, itens })
+            await recarregarPlanosConfig()
+            if (erros.length > 0) {
+                mostrarErroToast(
+                    `Não foi possível gravar: ${erros.map((erro) => `${nomePlanoLimites(erro.planoId)} (${erro.mensagem})`).join(', ')}.`
+                )
+                return
+            }
+            setEditorLimites(null)
+        } finally {
+            setSalvandoLimites(false)
+        }
+    }
+
     const inserirNovoProcedimento = async () => {
         const codigo = normalizarCodigo(novoProcedimento.codigo)
         const nome = String(novoProcedimento.nome || '').trim()
@@ -887,12 +1028,28 @@ const Supertabelaprocedimentos = () => {
                 return
             }
 
+            const planoIdsNovo = planoIdsAplicaveis(planoBaseId, mapaPlanos)
+            const resultadoLimites = await salvarLimitesCarenciasProcedimento(supabase, {
+                codigo,
+                itens: planoIdsNovo.map((id) => ({
+                    planoId: id,
+                    limite: novoLimitesCarencias[id]?.limite ?? '',
+                    carencia: novoLimitesCarencias[id]?.carencia ?? '' })) })
+
             setNovoProcedimento({
                 codigo: '',
                 nome: '',
                 categoriaId: String(categoriaId),
                 planoBaseChave: novoProcedimento.planoBaseChave })
+            setNovoLimitesCarencias({})
             await carregarBase()
+            if (resultadoLimites.erros.length > 0) {
+                mostrarErroToast(
+                    `Procedimento criado, mas não foi possível gravar limites e carências em: ${resultadoLimites.erros
+                        .map((erro) => nomePlanoLimites(erro.planoId))
+                        .join(', ')}. Ele aparece em Pendentes.`
+                )
+            }
         } catch (error) {
             mostrarErroToast(`Falha ao inserir procedimento: ${error.message}`)
         } finally {
@@ -995,6 +1152,18 @@ const Supertabelaprocedimentos = () => {
                             </div>
                         </div>
                     ) : null}
+
+                    {!modoCategorias && !modoDescontos && (
+                        <button
+                            type='button'
+                            className={`supertabelaprocedimentos_filtro_pendentes${filtrarPendentes ? ' is-on' : ''}`}
+                            aria-pressed={filtrarPendentes}
+                            onClick={() => setFiltrarPendentes((anterior) => !anterior)}
+                            title='Procedimentos sem limite ou carência em algum plano'
+                        >
+                            Pendentes ({pendenciasPorCodigo.size})
+                        </button>
+                    )}
 
                     {!somenteLeitura && (
                         <label className="ek-check">
@@ -1115,6 +1284,29 @@ const Supertabelaprocedimentos = () => {
                                 ))}
                             </SelectDropdown>
                         </div>
+                        {(() => {
+                            const planosNovo = planoIdsAplicaveis(
+                                mapaPlanos[novoProcedimento.planoBaseChave]?.id ?? null,
+                                mapaPlanos
+                            ).map((id) => ({ id, nome: nomePlanoLimites(id) }))
+                            if (planosNovo.length === 0) return null
+                            return (
+                                <GradeLimitesCarencias
+                                    planos={planosNovo}
+                                    valores={novoLimitesCarencias}
+                                    onChange={(planoId, campo, valor) =>
+                                        setNovoLimitesCarencias((anterior) => ({
+                                            ...anterior,
+                                            [planoId]: { limite: '', carencia: '', ...anterior[planoId], [campo]: valor } }))
+                                    }
+                                    limiteGrupoPorPlanoId={limiteGrupoPorPlano(
+                                        Number(novoProcedimento.categoriaId),
+                                        null,
+                                        planosNovo.map((plano) => plano.id)
+                                    )}
+                                />
+                            )
+                        })()}
                         <button
                             type='button'
                             className='supertabelaprocedimentos_massa_btn'
@@ -1141,6 +1333,18 @@ const Supertabelaprocedimentos = () => {
                         x
                     </button>
                 </div>
+            )}
+
+            {editorLimites && (
+                <EditorLimitesCarenciasModal
+                    titulo={`Limites e carências — ${editorLimites.linha.codigo} ${editorLimites.linha.procedimento}`}
+                    planos={editorLimites.planos}
+                    valoresIniciais={editorLimites.valoresIniciais}
+                    limiteGrupoPorPlanoId={editorLimites.limiteGrupoPorPlanoId}
+                    salvando={salvandoLimites}
+                    onSalvar={salvarEditorLimites}
+                    onFechar={() => setEditorLimites(null)}
+                />
             )}
 
             {confirmacaoExclusao && (
@@ -1382,7 +1586,7 @@ const Supertabelaprocedimentos = () => {
                                 const colSpanProc = somenteLeitura ? 5 : 6
                                 const colProcWidths = somenteLeitura
                                     ? ['11%', '38%', '15%', '18%', '18%']
-                                    : ['11%', '32%', '14%', '16%', '14%', '8%']
+                                    : ['11%', '28%', '14%', '16%', '13%', '18%']
 
                                 const renderLinha = (linha) => (
                                     <tr key={linha.rowId}>
@@ -1414,6 +1618,14 @@ const Supertabelaprocedimentos = () => {
                                                 />
                                             ) : (
                                                 linha.procedimento
+                                            )}
+                                            {pendenciasPorCodigo.has(linha.codigo) && (
+                                                <span
+                                                    className='supertabelaprocedimentos_pendente'
+                                                    title={textoPendencias(pendenciasPorCodigo.get(linha.codigo))}
+                                                >
+                                                    Pendente
+                                                </span>
                                             )}
                                         </td>
                                         <td>
@@ -1489,6 +1701,15 @@ const Supertabelaprocedimentos = () => {
                                         </td>
                                         {!somenteLeitura && (
                                             <td>
+                                                <button
+                                                    type='button'
+                                                    className='supertabelaprocedimentos_acao_limites'
+                                                    onClick={() => abrirEditorLimites(linha)}
+                                                    disabled={planosAplicaveisDaLinha(linha).length === 0}
+                                                    title='Editar limites e carências de todos os planos'
+                                                >
+                                                    Limites
+                                                </button>
                                                 <button
                                                     type='button'
                                                     className='table_delete_btn'
