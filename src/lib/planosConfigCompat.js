@@ -68,8 +68,11 @@ const buscarIdPlanoConfig = async (supabase, planoNum, variantes) => {
     return { id: data?.[0]?.id ?? null, error: null }
 }
 
-/** Cria ou atualiza limite/carência de um procedimento num plano (sem upsert/ON CONFLICT). */
-export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limite = '', carencia = '' }) => {
+/**
+ * Cria ou atualiza limite/carência de um procedimento num plano (sem upsert/ON CONFLICT).
+ * Campo omitido (undefined) não é alterado numa atualização e entra em branco numa criação.
+ */
+export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limite, carencia }) => {
     const planoNum = Number(planoId)
     const variantes = variantesProcedimento(procedimento)
     if (!variantes.length) {
@@ -78,7 +81,11 @@ export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limit
     const procGravar = String(procedimento).trim().toUpperCase()
 
     const atualizar = async (id) => {
-        const { error } = await supabase.from('planos_config').update({ limite, carencia }).eq('id', id)
+        const campos = {}
+        if (limite !== undefined) campos.limite = limite
+        if (carencia !== undefined) campos.carencia = carencia
+        if (Object.keys(campos).length === 0) return { status: 'atualizado', error: null }
+        const { error } = await supabase.from('planos_config').update(campos).eq('id', id)
         return error ? { status: 'erro', error } : { status: 'atualizado', error: null }
     }
 
@@ -89,8 +96,8 @@ export const gravarPlanoConfig = async (supabase, { planoId, procedimento, limit
     const { error: errInsert } = await supabase.from('planos_config').insert({
         plano_id: planoNum,
         procedimento: procGravar,
-        limite,
-        carencia,
+        limite: limite ?? '',
+        carencia: carencia ?? '',
     })
     if (!errInsert) return { status: 'criado', error: null }
 

@@ -3,6 +3,7 @@ import { criarBancoFalso } from './bancoFalsoMemoria.testutil.js'
 import { mapearPlanos } from './planosHierarquia.js'
 import {
     calcularPendencias,
+    calcularPendenciasDasLinhas,
     indexarPlanosConfig,
     limiteGrupoAtivoNoPlano,
     planoIdsAplicaveis,
@@ -143,10 +144,31 @@ describe('salvarLimitesCarenciasProcedimento', () => {
         expect(tab('planos_config').map((x) => x.plano_id)).toEqual([2, 4])
     })
 
+    it('item só com carência não apaga o limite existente (Important 1)', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        tab('planos_config').push({ id: 1, plano_id: 4, procedimento: 'OUT2-005', limite: '10', carencia: '' })
+        await salvarLimitesCarenciasProcedimento(supabase, { codigo: 'OUT2-005', itens: [{ planoId: 4, carencia: '45 Dias' }] })
+        expect(tab('planos_config')[0]).toMatchObject({ limite: '10', carencia: '45 Dias' })
+    })
+
     it('itens vazio → nenhuma chamada ao banco e erros vazio', async () => {
         const { supabase, db } = criarBancoFalso()
         const r = await salvarLimitesCarenciasProcedimento(supabase, { codigo: 'OUT2-005', itens: [] })
         expect(r).toEqual({ erros: [] })
         expect(db.chamadas).toEqual([])
+    })
+})
+
+describe('calcularPendenciasDasLinhas', () => {
+    it('ignora linhas cuja categoria não é exibida e devolve Map por código (Important 2)', () => {
+        const linhas = [
+            { codigo: 'AAA-001', categoriaId: 23, planoBaseChave: 'ultra', procedimentoId: 1 },
+            { codigo: 'BBB-001', categoriaId: 1, planoBaseChave: 'ultra', procedimentoId: 2 },
+            { codigo: 'CCC-001', categoriaId: null, planoBaseChave: 'ultra', procedimentoId: 3 },
+        ]
+        const ctx = { ...contexto([]), categorias: [{ id: 23, usa_limite_grupo: false }] }
+        const mapa = calcularPendenciasDasLinhas(linhas, ctx)
+        expect([...mapa.keys()]).toEqual(['AAA-001'])
+        expect(mapa.get('AAA-001').map((p) => p.planoId)).toEqual([4])
     })
 })

@@ -27,7 +27,7 @@ import {
     obterPlanoIdsPermitidosDesdeChaveBase } from '../../../lib/planosHierarquia.js'
 import { TOAST_AUTO_DISMISS_MS, useConfirmacaoExclusaoAutoDismiss } from '../../../lib/toastUi.js'
 import {
-    calcularPendencias,
+    calcularPendenciasDasLinhas,
     indexarPlanosConfig,
     limiteGrupoAtivoNoPlano,
     planoIdsAplicaveis,
@@ -244,21 +244,10 @@ const Supertabelaprocedimentos = () => {
         [mapaPlanos, planosConfigRows, categorias, limitesGrupoRows]
     )
 
-    const pendenciasPorCodigo = useMemo(() => {
-        const mapa = new Map()
-        linhas.forEach((linha) => {
-            const pendencias = calcularPendencias(
-                {
-                    codigo: linha.codigo,
-                    categoriaId: linha.categoriaId,
-                    planoBaseId: mapaPlanos[linha.planoBaseChave]?.id ?? null,
-                    procedimentoId: linha.procedimentoId },
-                contextoPendencias
-            )
-            if (pendencias.length > 0) mapa.set(linha.codigo, pendencias)
-        })
-        return mapa
-    }, [linhas, mapaPlanos, contextoPendencias])
+    const pendenciasPorCodigo = useMemo(
+        () => calcularPendenciasDasLinhas(linhas, contextoPendencias),
+        [linhas, contextoPendencias]
+    )
 
     const linhasFiltradas = useMemo(() => {
         const linhasBase = filtrarPendentes ? linhas.filter((linha) => pendenciasPorCodigo.has(linha.codigo)) : linhas
@@ -955,10 +944,14 @@ const Supertabelaprocedimentos = () => {
                 const novo = valores[plano.id] || inicial
                 return novo.limite !== inicial.limite || novo.carencia !== inicial.carencia
             })
-            .map((plano) => ({
-                planoId: plano.id,
-                limite: valores[plano.id]?.limite ?? '',
-                carencia: valores[plano.id]?.carencia ?? '' }))
+            .map((plano) => {
+                const inicial = valoresIniciais[plano.id]
+                const novo = valores[plano.id] || inicial
+                const item = { planoId: plano.id }
+                if (novo.limite !== inicial.limite) item.limite = novo.limite
+                if (novo.carencia !== inicial.carencia) item.carencia = novo.carencia
+                return item
+            })
 
         if (itens.length === 0) {
             setEditorLimites(null)

@@ -59,6 +59,26 @@ export const calcularPendencias = (proc, contexto) => {
     return pendencias
 }
 
+/** Pendências por código só das linhas cuja categoria é exibida na página (as outras nunca aparecem). */
+export const calcularPendenciasDasLinhas = (linhas, contexto) => {
+    const categoriaIdsVisiveis = new Set((contexto.categorias || []).map((categoria) => Number(categoria.id)))
+    const mapa = new Map()
+    ;(linhas || []).forEach((linha) => {
+        if (!categoriaIdsVisiveis.has(Number(linha.categoriaId))) return
+        const pendencias = calcularPendencias(
+            {
+                codigo: linha.codigo,
+                categoriaId: linha.categoriaId,
+                planoBaseId: contexto.mapaPlanos[linha.planoBaseChave]?.id ?? null,
+                procedimentoId: linha.procedimentoId,
+            },
+            contexto
+        )
+        if (pendencias.length > 0) mapa.set(linha.codigo, pendencias)
+    })
+    return mapa
+}
+
 /** Grava os planos informados um a um; a falha de um plano não impede os demais. */
 export const salvarLimitesCarenciasProcedimento = async (supabase, { codigo, itens }) => {
     const erros = []

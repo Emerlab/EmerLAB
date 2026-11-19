@@ -39,4 +39,18 @@ describe('gravarPlanoConfig', () => {
         expect(r.error).toBeInstanceOf(Error)
         expect(db.chamadas).toEqual([])
     })
+
+    it('atualização parcial: só o campo informado muda, o outro permanece (Important 1)', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        tab('planos_config').push({ id: 1, plano_id: 4, procedimento: 'OUT2-005', limite: '10 - Grupo X', carencia: '' })
+        const r = await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', carencia: '45 Dias' })
+        expect(r.status).toBe('atualizado')
+        expect(tab('planos_config')[0]).toEqual({ id: 1, plano_id: 4, procedimento: 'OUT2-005', limite: '10 - Grupo X', carencia: '45 Dias' })
+    })
+
+    it('criação com só um campo grava o outro em branco', async () => {
+        const { supabase, tab } = criarBancoFalso()
+        await gravarPlanoConfig(supabase, { planoId: 4, procedimento: 'OUT2-005', carencia: '45 Dias' })
+        expect(tab('planos_config')[0]).toMatchObject({ limite: '', carencia: '45 Dias' })
+    })
 })
