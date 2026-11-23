@@ -1168,8 +1168,14 @@ async function nomesArquivosEnviados(waId, lista) {
 /** Sessão livre (texto/arquivo) só com mensagem do cliente nas últimas 24h — abertura nossa exige template. */
 // Só quem está com a conversa responde (texto, arquivo, template). Sem atendente, qualquer um do setor responde
 // e passa a ser o atendente. A WATI não trava isso pela API: a regra é do painel, para a atribuição valer.
-function exigirSerAtendente(meta, usuario) {
-    if (!meta?.atendente_email || mesmoEmail(meta.atendente_email, usuario.email)) return
+// Exceções: admin, e conversa expirada (cliente sem escrever há mais de 24h, ou nunca escreveu) — o atendente antigo
+// não está mais em atendimento e quem envia o template assume. Devolve true quando está tomando a conversa de outro.
+// (exigirConversa já garante que o usuário é do departamento.)
+function exigirSerAtendente(meta, usuario, agora = Date.now()) {
+    if (!meta?.atendente_email || mesmoEmail(meta.atendente_email, usuario.email)) return false
+    if (usuario.papel === 'admin') return true
+    const ultima = meta.ultima_cliente_em ? new Date(meta.ultima_cliente_em).getTime() : 0
+    if (!ultima || agora - ultima >= 24 * 3600 * 1000) return true
     throw new HttpError(403, `Esta conversa está com ${meta.atendente_email}. Assuma a conversa para responder.`, 'outro_atendente')
 }
 
@@ -1318,8 +1324,8 @@ const TEMPLATE_REPETIDO_MS = 30000
 const templatesRecentes = new Map()
 
 async function enviarTemplateHandler(req, usuario, waId) {
-    const meta = await exigirConversa(usuario, waId)
-    exigirSerAtendente(meta, usuario)
+    let meta = await exigirConversa(usuario, waId)
+    const tomando = exigirSerAtendente(meta, usuario)
     if (canalDe(waId) !== 'whatsapp') throw new HttpError(400, 'Templates existem só no WhatsApp. No Instagram e no Messenger, aguarde o cliente escrever.', 'canal')
     const { nome, parametros } = await lerCorpo(req)
     if (!nome) throw new HttpError(400, 'Escolha um template.')
@@ -1340,7 +1346,13 @@ async function enviarTemplateHandler(req, usuario, waId) {
         throw e
     }
     // template enviado por atendente conta como resposta (regra do "Não respondidas" da WATI)
-    await salvarMeta(waId, { ultima_msg: `📄 Template: ${nome}`, ultima_msg_em: new Date().toISOString(), ultima_msg_minha: true, ultima_humana_em: new Date().toISOString() })
+    // quem envia o template por cima de outro atendente (admin ou conversa expirada) passa a ser o atendente
+    const campos = { ultima_msg: `📄 Template: ${nome}`, ultima_msg_em: new Date().toISOString(), ultima_msg_minha: true, ultima_humana_em: new Date().toISOString() }
+    if (tomando) {
+        campos.atendente_email = usuario.email
+        meta = { ...meta, atendente_email: usuario.email }
+    }
+    await salvarMeta(waId, campos)
     // o template reabre a conversa na WATI: leva para lá o atendente do painel, que a WATI recusava com ela encerrada
     if (meta?.atendente_email) {
         await comConversaWati(waId, (t) => wati.atribuirAtendenteV3(t, meta.atendente_email), meta)
@@ -2428,4 +2440,4 @@ export async function handle(req, res, rotaForcada) {
 }
 
 // Somente para os testes automatizados (não faz parte da API)
-export const __teste = { verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
+export const __teste = { exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
