@@ -2043,6 +2043,54 @@ function telefoneDoWebhook(b) {
     return ''
 }
 
+// Atribuição feita pelo bot/round-robin da WATI: não existe webhook de atribuição, e o atendente comum só enxerga a
+// conversa depois que o painel sabe de quem ela é (podeVerConversa). Sem isto o painel só descobria na conferência
+// periódica (RECONFERIR_ATIVA_MS, 15 min). Aproveita os eventos que JÁ chegam (mensagem do cliente e mensagem do bot,
+// como o aviso "Um atendente já vai continuar…") para conferir só a atribuição daquela conversa.
+const SYNC_ATRIBUICAO_MIN_MS = 15000 // no máximo 1 conferência por conversa a cada 15 s (bot manda várias mensagens)
+const SYNC_ATRIBUICAO_REPETE_MS = 1000 // a atribuição pode ser gravada logo depois da mensagem do bot: confere de novo
+const SYNC_ATRIBUICAO_TETO_MS = 3000 // quanto a resposta à WATI espera no máximo (ela marca como defeituoso quem demora)
+const ultimaSyncAtribuicao = new Map() // waId → quando conferiu (por instância)
+
+/** Vale conferir a atribuição? Conversa sem atendente no painel, ou mensagem do bot (que é quando o bot passa a conversa). */
+function precisaSincronizarAtribuicao(meta, minha, b) {
+    if (meta?.status === 'resolvida' && minha) return false
+    if (!meta?.atendente_email) return true
+    return minha && !respostaHumanaWati(b.operatorName, b.operatorEmail)
+}
+
+/** Confere na WATI quem atende (e a equipe, se ninguém) e grava no painel. Devolve true se descobriu algo novo. */
+async function sincronizarAtribuicao(waId, meta, departamentos) {
+    wati.invalidarCache(`msgs:${waId}:`) // o histórico em cache é anterior ao evento que acabou de chegar
+    const { mensagens: itens } = await listarMensagensWati(waId, { pagina: 1, tamanho: 20 })
+    const pend = {}
+    const atendente = atendenteDoHistorico(itens)
+    if (atendente && !mesmoEmail(atendente, meta?.atendente_email)) pend.atendente_email = atendente
+    if (!atendente && !meta?.atendente_email && meta?.status !== 'resolvida') {
+        const depto = await departamentoDaWati(waId, meta, departamentos).catch(() => undefined)
+        if (depto && depto !== meta?.departamento_id) pend.departamento_id = depto
+    }
+    if (!Object.keys(pend).length) return false
+    await salvarMeta(waId, pend)
+    return true
+}
+
+async function sincronizarAtribuicaoDoWebhook(waId, meta, minha, b, agora = Date.now()) {
+    if (!precisaSincronizarAtribuicao(meta, minha, b) || wati.watiEmPausa()) return false
+    if (agora - (ultimaSyncAtribuicao.get(waId) || 0) < SYNC_ATRIBUICAO_MIN_MS) return false
+    if (ultimaSyncAtribuicao.size > 500) ultimaSyncAtribuicao.clear()
+    ultimaSyncAtribuicao.set(waId, agora)
+    try {
+        const departamentos = await listarDepartamentos().catch(() => [])
+        if (await sincronizarAtribuicao(waId, meta, departamentos)) return true
+        await new Promise((r) => setTimeout(r, SYNC_ATRIBUICAO_REPETE_MS))
+        return await sincronizarAtribuicao(waId, meta, departamentos)
+    } catch (e) {
+        console.error('[zap] sincronizar atribuição', waId, e?.message || e)
+        return false
+    }
+}
+
 async function processarWebhook(b) {
     const waId = telefoneDoWebhook(b)
     const evento = b.eventType || ''
@@ -2073,7 +2121,7 @@ async function processarWebhook(b) {
             .then(() => {}, () => {})
     }
     // status antes do RPC: cliente em resolvida → painel reabre; precisa reabrir na WATI também
-    const metaAntes = !minha ? await metaConversa(waId).catch(() => null) : null
+    const metaAntes = await metaConversa(waId).catch(() => null)
     ok(
         await db().rpc('zap_registrar_mensagem', {
             p_wa_id: waId,
@@ -2093,6 +2141,13 @@ async function processarWebhook(b) {
         const reabrir = comConversaWati(waId, (alvo) => wati.atualizarStatus(alvo, 'aberta'), metaAntes).catch(() => {})
         await Promise.race([reabrir, new Promise((ok) => setTimeout(ok, 1500))])
     }
+    // quem atende segundo a WATI (o bot passa a conversa sem avisar o painel): confere já, com teto de espera
+    let tetoSync
+    await Promise.race([
+        sincronizarAtribuicaoDoWebhook(waId, metaAntes, minha, b),
+        new Promise((r) => (tetoSync = setTimeout(r, SYNC_ATRIBUICAO_TETO_MS))),
+    ])
+    clearTimeout(tetoSync)
     if (!minha && b.messageReferral) await registrarAnuncio(waId, anuncioDe([{ ...b, created: em }]), null)
     wati.invalidarCache(`msgs:${waId}:`)
     await avisarConversa(normalizarWaId(waId))
@@ -2440,4 +2495,4 @@ export async function handle(req, res, rotaForcada) {
 }
 
 // Somente para os testes automatizados (não faz parte da API)
-export const __teste = { exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
+export const __teste = { sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }

@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "api/rc-pdf.js": {
-    "mtime": 1788293618.5698035,
-    "seen": 1793728847.1368454,
-    "ast_hash": "655eb06b09f041bd74b6749a6d42c8cb",
+    "mtime": 1795097077.6385837,
+    "seen": 1795613151.660413,
+    "ast_hash": "109aa43601950d6db035b6ddde71e8f8",
     "semantic_hash": ""
   },
   "eslint.config.js": {
@@ -228,9 +228,9 @@
     "semantic_hash": ""
   },
   "scripts/rc/generate-rc-pdf.mjs": {
-    "mtime": 1786041054.950525,
-    "seen": 1793728847.1368992,
-    "ast_hash": "2a6674f3be2e98aefa65bf31c0763371",
+    "mtime": 1795097077.640108,
+    "seen": 1795613151.662172,
+    "ast_hash": "2cffdfd4e7e88098fbbbad60080946b3",
     "semantic_hash": ""
   },
   "scripts/sql/aplicar-restaurar-nomes-prestadores.mjs": {
@@ -450,15 +450,15 @@
     "semantic_hash": ""
   },
   "src/components/Supertabela/GerenciarTabelasModal.jsx": {
-    "mtime": 1785327287.3416939,
-    "seen": 1793728847.1370277,
-    "ast_hash": "4b896e3e77955657e570432cabe4613f",
+    "mtime": 1795113780.2798533,
+    "seen": 1795613151.6673007,
+    "ast_hash": "c39584fe6d953c540b248e43646e5ff2",
     "semantic_hash": ""
   },
   "src/components/Supertabela/ModalImpressaoHonorariosCidade.jsx": {
-    "mtime": 1788285866.6522453,
-    "seen": 1793728847.1370313,
-    "ast_hash": "bfcd25743d0ddc994088a691b443d8c4",
+    "mtime": 1795098782.6203399,
+    "seen": 1795613151.6673057,
+    "ast_hash": "abf3b80b0827f95fc4444aaef9c6ff17",
     "semantic_hash": ""
   },
   "src/components/Toast/CredenciamentoMainAlert.jsx": {
@@ -780,9 +780,9 @@
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferenciaLaboratorioPrecos.js": {
-    "mtime": 1794917373.7450142,
-    "seen": 1794946123.8870802,
-    "ast_hash": "2218e7a78889b7851127c18c4085e205",
+    "mtime": 1795027040.9762452,
+    "seen": 1795613151.6737587,
+    "ast_hash": "f11e6d80f85d9dac54bff4b2c9e64a60",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/conferencia/classify.js": {
@@ -882,15 +882,15 @@
     "semantic_hash": ""
   },
   "src/lib/configuracoes/etiquetasEndereco.js": {
-    "mtime": 1790771292.5639482,
-    "seen": 1793728847.1372921,
-    "ast_hash": "777f603752e2e4d5e7ac04eac01c99cb",
+    "mtime": 1795113780.3075197,
+    "seen": 1795613151.6762419,
+    "ast_hash": "e924c026413b43debd7b6007c18c0837",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/etiquetasEndereco.test.js": {
-    "mtime": 1790771292.5639482,
-    "seen": 1793728847.1372952,
-    "ast_hash": "a4aa49a060572f00ebe335f2807e0ec6",
+    "mtime": 1795113780.3095195,
+    "seen": 1795613151.6762443,
+    "ast_hash": "918d2b101362c430cef2929dff159478",
     "semantic_hash": ""
   },
   "src/lib/configuracoes/exportCredenciadosExcel.js": {
@@ -1008,9 +1008,9 @@
     "semantic_hash": ""
   },
   "src/lib/credenciamento/carregarLinhasHonorariosPrestador.js": {
-    "mtime": 1794917373.7480123,
-    "seen": 1794946123.8915286,
-    "ast_hash": "b0f13fb321237a6a56dd12cd59619934",
+    "mtime": 1795027040.9792442,
+    "seen": 1795613151.6780806,
+    "ast_hash": "53d913984a01baeca19f8af239c13bfa",
     "semantic_hash": ""
   },
   "src/lib/credenciamento/emerRadarApi.js": {
@@ -1392,9 +1392,9 @@
     "semantic_hash": ""
   },
   "src/lib/exportSupertabelaExcel.js": {
-    "mtime": 1793971145.5699697,
-    "seen": 1793972285.3792865,
-    "ast_hash": "35751d61818c83cf9c91c9abe5a2a253",
+    "mtime": 1795113780.3115206,
+    "seen": 1795613151.685354,
+    "ast_hash": "fb85089e7e9e8061fefc32859b12b47d",
     "semantic_hash": ""
   },
   "src/lib/formularioCredenciamento.js": {
@@ -1440,21 +1440,21 @@
     "semantic_hash": ""
   },
   "src/lib/impressaoHonorarios/gerarImpressaoHonorariosPdf.js": {
-    "mtime": 1795009153.1466331,
-    "seen": 1795014322.762854,
-    "ast_hash": "94a751fa23876a2de27991e698e5c58a",
+    "mtime": 1795025643.5190637,
+    "seen": 1795613151.6862354,
+    "ast_hash": "d9232315347c453d3305c0e27d251c20",
     "semantic_hash": ""
   },
   "src/lib/impressaoHonorarios/honorariosObservacoes.js": {
-    "mtime": 1788291997.4735055,
-    "seen": 1793728847.137618,
-    "ast_hash": "4f7533ef780c7fdbc17a98c6025440d8",
+    "mtime": 1795021261.626991,
+    "seen": 1795613151.6862435,
+    "ast_hash": "44c40453512c20399b91f9c7ae60c965",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/carregarLinhasImpressaoPlanos.js": {
-    "mtime": 1784291508.2388568,
-    "seen": 1793728847.1376216,
-    "ast_hash": "98fc157ac0d4f763a730350e6df5890a",
+    "mtime": 1795113780.3135183,
+    "seen": 1795613151.6862617,
+    "ast_hash": "372d7f41cd36f348288f8a72fdaa47ad",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/contagemRealizadoresPlanosDev.js": {
@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/gerarImpressaoPlanosPdf.js": {
-    "mtime": 1795009153.1487477,
-    "seen": 1795014322.7633383,
-    "ast_hash": "a4051b533665815b87c2459b7ca0fd8a",
+    "mtime": 1795025643.7625184,
+    "seen": 1795613151.686927,
+    "ast_hash": "5fa1a8686fe6c67bbc5dc3de353c7398",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/mapaRealizadoresRegiao.js": {
@@ -1494,9 +1494,9 @@
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/modoImpressaoPlanos.js": {
-    "mtime": 1795009152.9028566,
-    "seen": 1795014322.763531,
-    "ast_hash": "aa729dd54a7933ce59fef219ceccf390",
+    "mtime": 1795113780.3205185,
+    "seen": 1795613151.6871977,
+    "ast_hash": "6546532fbfce753b5f8d05cc5c9aab37",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/modoImpressaoPlanos.test.js": {
@@ -1512,9 +1512,9 @@
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/planosObservacoes.js": {
-    "mtime": 1788291997.474012,
-    "seen": 1793728847.137656,
-    "ast_hash": "dd485f2dbe550cf798338e107ce2a008",
+    "mtime": 1795021261.642996,
+    "seen": 1795613151.6874797,
+    "ast_hash": "f7e6f39aebc6c0120fc81ecbc6d7cbac",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/realizadoresPorLinhaExibicao.js": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "src/lib/pdf/observacoesModeloPdf.js": {
-    "mtime": 1795009152.848258,
-    "seen": 1795014322.7656345,
-    "ast_hash": "b866fb26cca14f0f767aedd66284da95",
+    "mtime": 1795021261.1884744,
+    "seen": 1795613151.689952,
+    "ast_hash": "2de814fa4f47a80a69b0d1eec5338e34",
     "semantic_hash": ""
   },
   "src/lib/pdf/serializarPdf.js": {
@@ -1656,9 +1656,9 @@
     "semantic_hash": ""
   },
   "src/lib/planosConfigCompat.js": {
-    "mtime": 1785327287.313563,
-    "seen": 1793728847.1377404,
-    "ast_hash": "9e83d8a18cad42a3fae6562be1abf2a6",
+    "mtime": 1795437383.6624477,
+    "seen": 1795613151.6904473,
+    "ast_hash": "29ee45c1ba3250d144ecb8e14e1dd2a3",
     "semantic_hash": ""
   },
   "src/lib/planosHierarquia.js": {
@@ -1668,9 +1668,9 @@
     "semantic_hash": ""
   },
   "src/lib/prestadorCadastroHelpers.js": {
-    "mtime": 1794943229.687569,
-    "seen": 1794946123.9091165,
-    "ast_hash": "ce29b49c566027920d2bf78285442d74",
+    "mtime": 1795027040.9917862,
+    "seen": 1795613151.6905348,
+    "ast_hash": "5f715681677b1812a80b2b32285791e1",
     "semantic_hash": ""
   },
   "src/lib/prestadorLocalidadeVinculo.js": {
@@ -1680,9 +1680,9 @@
     "semantic_hash": ""
   },
   "src/lib/prestadorNomeAlternativo.js": {
-    "mtime": 1794917373.7490008,
-    "seen": 1794946123.9092302,
-    "ast_hash": "cf651dcac63789dfd1fc2cb89ea4800d",
+    "mtime": 1795027040.9937873,
+    "seen": 1795613151.690615,
+    "ast_hash": "1a578860e377f99a6091793f59c6adf3",
     "semantic_hash": ""
   },
   "src/lib/prestadorNomeAlternativo.test.js": {
@@ -1752,9 +1752,9 @@
     "semantic_hash": ""
   },
   "src/lib/repasse/apiRepasseMensal.test.js": {
-    "mtime": 1794943229.6915562,
-    "seen": 1794946123.9106846,
-    "ast_hash": "a283135536063bc8770689d943a00613",
+    "mtime": 1795027040.9957922,
+    "seen": 1795613151.6921442,
+    "ast_hash": "e9c09f0bf01fc8ca7ff260e83a7cf66e",
     "semantic_hash": ""
   },
   "src/lib/repasse/exportRelatorio.js": {
@@ -1776,15 +1776,15 @@
     "semantic_hash": ""
   },
   "src/lib/repasse/repasseApi.js": {
-    "mtime": 1794943229.6935508,
-    "seen": 1794946123.9114232,
-    "ast_hash": "132d55c1511f1cc809cf0bec82f6d17c",
+    "mtime": 1795027040.9977858,
+    "seen": 1795613151.6927023,
+    "ast_hash": "8e8702ae83d916b0c0325d580bac4a77",
     "semantic_hash": ""
   },
   "src/lib/repasse/repasseCore.js": {
-    "mtime": 1794943229.6955438,
-    "seen": 1794946123.9115818,
-    "ast_hash": "6ffcfd3609df3710e2b9f90a4a49ac8b",
+    "mtime": 1795027040.9987886,
+    "seen": 1795613151.6927931,
+    "ast_hash": "d4cabd8b519b2e992dfc19021ee4dbf0",
     "semantic_hash": ""
   },
   "src/lib/repasse/repasseCore.test.js": {
@@ -1956,21 +1956,21 @@
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ImpressaoEtiquetas/ConfigImpressaoEtiquetas.jsx": {
-    "mtime": 1790771292.5639482,
-    "seen": 1793728847.1379294,
-    "ast_hash": "b7fb889946c072d557b42d7724aa7a5a",
+    "mtime": 1795113780.3475187,
+    "seen": 1795613151.697313,
+    "ast_hash": "0f6fe5f0f03bbfd1038ed33eeb8ca3a1",
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ObservacoesHonorarios/ConfigObservacoesHonorarios.jsx": {
-    "mtime": 1793971170.612459,
-    "seen": 1793972285.3872495,
-    "ast_hash": "cdd32bfe55cbaee709c001542c558b27",
+    "mtime": 1795021261.13339,
+    "seen": 1795613151.6973152,
+    "ast_hash": "324d1d82e4de16641c4c1c1433f39932",
     "semantic_hash": ""
   },
   "src/pages/Configuracoes/ObservacoesPlanos/ConfigObservacoesPlanos.jsx": {
-    "mtime": 1793971170.6144533,
-    "seen": 1793972285.3872519,
-    "ast_hash": "aed9a883de36f69c05b0ab66f11200ba",
+    "mtime": 1795021261.1383905,
+    "seen": 1795613151.697317,
+    "ast_hash": "c21a8b22bfe99df2d1e42a348406c1cc",
     "semantic_hash": ""
   },
   "src/pages/Contratos/ClicksignEmerdog.jsx": {
@@ -2022,9 +2022,9 @@
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/CredenciamentoCadastroForm.jsx": {
-    "mtime": 1794943229.7678807,
-    "seen": 1794946123.9184103,
-    "ast_hash": "93a3dcbaa7a0016befcad1faf5f43b13",
+    "mtime": 1795027041.002786,
+    "seen": 1795613151.6980534,
+    "ast_hash": "1d6aa15dae52183af47b20c881ee7c8e",
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/CredenciamentoCadastroLista.jsx": {
@@ -2052,9 +2052,9 @@
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/PrestadorHonorariosContratos.jsx": {
-    "mtime": 1788285866.6681883,
-    "seen": 1793728847.138006,
-    "ast_hash": "824b1b427ed4c89c5906ee50864ba1e3",
+    "mtime": 1795021261.536798,
+    "seen": 1795613151.6984572,
+    "ast_hash": "bf70f63a464a7f27b79407f99079bbae",
     "semantic_hash": ""
   },
   "src/pages/Credenciamento/Credenciamento_cadastro/PrestadorResponsaveisInput.jsx": {
@@ -2208,9 +2208,9 @@
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosCaixa.jsx": {
-    "mtime": 1794943229.7704625,
-    "seen": 1794946123.9226983,
-    "ast_hash": "8fa4aaf191db28d8ffef54d5b59d41e8",
+    "mtime": 1795027041.0047896,
+    "seen": 1795613151.7017496,
+    "ast_hash": "581cab2d88bd174d898425f889253056",
     "semantic_hash": ""
   },
   "src/pages/Pagamentos/PagamentosComprovanteModal.jsx": {
@@ -2256,21 +2256,21 @@
     "semantic_hash": ""
   },
   "src/pages/Planos/ImpressaoPlanos/ImpressaoPlanos.jsx": {
-    "mtime": 1795009153.1528194,
-    "seen": 1795014322.7799747,
-    "ast_hash": "119cd36f1e834b72d2a23a95c7c537dc",
+    "mtime": 1795113780.3535225,
+    "seen": 1795613151.7026012,
+    "ast_hash": "041f2a877f712922895440ec0497d0ef",
     "semantic_hash": ""
   },
   "src/pages/RepasseMensal/RepasseMensalPublico.jsx": {
-    "mtime": 1794943229.7734535,
-    "seen": 1794946123.9234636,
-    "ast_hash": "49822601c7eb73a1f6267aa222bce1eb",
+    "mtime": 1795027041.0067854,
+    "seen": 1795613151.702754,
+    "ast_hash": "4a45eb478dbd223ca2feaa11842b74bd",
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_cidades/Supertabelacidades.jsx": {
-    "mtime": 1793971170.6714537,
-    "seen": 1793972285.3896315,
-    "ast_hash": "892138c763734ba63e875efb1a2d6b59",
+    "mtime": 1795098782.6283371,
+    "seen": 1795613151.7027562,
+    "ast_hash": "63b0118ab5fbbb68c5b157f525056270",
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_doc/Supertabeladoc.jsx": {
@@ -2292,15 +2292,15 @@
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_negociacoes/Supertabelanegociacoes.jsx": {
-    "mtime": 1794917373.7509978,
-    "seen": 1794946123.9238513,
-    "ast_hash": "3cd9d2bc772e1a63d8440e9c8cd2ff5b",
+    "mtime": 1795027041.0097861,
+    "seen": 1795613151.70309,
+    "ast_hash": "c1e9a6bdfac4ce863da2c90279d97e24",
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_planos/Supertabelaplanos.jsx": {
-    "mtime": 1793971170.680683,
-    "seen": 1793972285.3897727,
-    "ast_hash": "b38e282e2e253d63bc058dedef1ca535",
+    "mtime": 1795437383.6764479,
+    "seen": 1795613151.7031045,
+    "ast_hash": "e906296777b0cdc19ffe941c9a5261f9",
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_procedimentos/SupertabelaBeneficiosCatalogo.jsx": {
@@ -2310,9 +2310,9 @@
     "semantic_hash": ""
   },
   "src/pages/Supertabela/Supertabela_procedimentos/Supertabelaprocedimentos.jsx": {
-    "mtime": 1793971170.6826832,
-    "seen": 1793972285.3899057,
-    "ast_hash": "04842584dbcfc3c73e16886a40172309",
+    "mtime": 1795113780.3893902,
+    "seen": 1795613151.7032712,
+    "ast_hash": "ea315f4b0eb57c253136273db4a5a314",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/cors.ts": {
@@ -2520,15 +2520,15 @@
     "semantic_hash": ""
   },
   "zap-emerlab/server/router.js": {
-    "mtime": 1794943229.797748,
-    "seen": 1794946123.9287004,
-    "ast_hash": "6856b8ec38ced86d4bc13962416664c5",
+    "mtime": 1795613082.0268912,
+    "seen": 1795613151.707434,
+    "ast_hash": "9adabbc135cb9f2f023e875ebb625aac",
     "semantic_hash": ""
   },
   "zap-emerlab/server/wati.js": {
-    "mtime": 1794943229.7999434,
-    "seen": 1794946123.9291275,
-    "ast_hash": "c89c31427df260d08e2a6f1d36b37402",
+    "mtime": 1795027041.0145192,
+    "seen": 1795613151.7076192,
+    "ast_hash": "61677ee0704a26ed817a5bfce56d374c",
     "semantic_hash": ""
   },
   "zap-emerlab/src/App.jsx": {
@@ -3030,45 +3030,45 @@
     "semantic_hash": ""
   },
   "src/assets/honorarios/Descontos.pdf": {
-    "mtime": 1783971995.8397183,
-    "seen": 1793728847.1386585,
-    "ast_hash": "77eb1c20673113bd934667318010ecb6",
+    "mtime": 1795027324.3884423,
+    "seen": 1795613151.716986,
+    "ast_hash": "a41afc39fc4967891bb367151e5c8627",
     "semantic_hash": ""
   },
   "src/assets/honorarios/honorarios.pdf": {
-    "mtime": 1783969946.1606967,
-    "seen": 1793728847.1386626,
-    "ast_hash": "403fc4be65751010c56088ee2b5b3364",
+    "mtime": 1795027324.3162374,
+    "seen": 1795613151.7169883,
+    "ast_hash": "0ba9796a1a5d771bd0f12dfa72bb1513",
     "semantic_hash": ""
   },
   "src/assets/planos/avancado.pdf": {
-    "mtime": 1783521634.3853862,
-    "seen": 1793728847.138667,
-    "ast_hash": "138a7691ae89fa630f59501f8d92ec25",
+    "mtime": 1795027323.4612417,
+    "seen": 1795613151.7169902,
+    "ast_hash": "a44e25f0fe677bcd1b88c47933e79d3e",
     "semantic_hash": ""
   },
   "src/assets/planos/basico.pdf": {
-    "mtime": 1783521537.2719932,
-    "seen": 1793728847.1386762,
-    "ast_hash": "e08bf35246b8a4826de31081fa3f7882",
+    "mtime": 1795027323.8420174,
+    "seen": 1795613151.7169917,
+    "ast_hash": "963a4a2d93ac4f26bdc56264ed8f7b68",
     "semantic_hash": ""
   },
   "src/assets/planos/classico.pdf": {
-    "mtime": 1783521584.8184826,
-    "seen": 1793728847.1386797,
-    "ast_hash": "e33fa1c885601576ac4ee3b1381307ca",
+    "mtime": 1795027324.000824,
+    "seen": 1795613151.7169938,
+    "ast_hash": "e779cf99d184550e5ef8b3167ca99b4e",
     "semantic_hash": ""
   },
   "src/assets/planos/ultra.pdf": {
-    "mtime": 1783521656.4902914,
-    "seen": 1793728847.1386845,
-    "ast_hash": "0720ab1764d5dc55389fe567b53ab6fc",
+    "mtime": 1795027324.1553056,
+    "seen": 1795613151.716996,
+    "ast_hash": "ed24c0d8d060b55772770700ef398100",
     "semantic_hash": ""
   },
   "src/assets/rc/template_rc.pdf": {
-    "mtime": 1782500350.9677186,
-    "seen": 1793728847.138688,
-    "ast_hash": "7f62cb624fed136a0eb6b15fcce86ed3",
+    "mtime": 1795027324.4832919,
+    "seen": 1795613151.7169971,
+    "ast_hash": "175241f651a4d52ecd7c2d29f2d3f504",
     "semantic_hash": ""
   },
   "docs/ui-audit/antes-depois/cadastro-prestadores-mobile.png": {
@@ -3396,9 +3396,9 @@
     "semantic_hash": ""
   },
   "api/_lib/repasseMensalHandler.js": {
-    "mtime": 1794943229.5773695,
-    "seen": 1794946123.8627312,
-    "ast_hash": "204c18d531c8097f6524f1414ecd964e",
+    "mtime": 1795027040.972244,
+    "seen": 1795613151.6592073,
+    "ast_hash": "2a4a430dac4b768e0016f0401ce6972f",
     "semantic_hash": ""
   },
   "src/lib/notifContagens.js": {
@@ -3852,9 +3852,9 @@
     "semantic_hash": ""
   },
   "api/_lib/apiV1/indiceRotas.js": {
-    "mtime": 1794425923.2005074,
-    "seen": 1794576371.3539462,
-    "ast_hash": "1ee66b09d8e2890b0fa215defe51eddc",
+    "mtime": 1795113780.258853,
+    "seen": 1795613151.6579297,
+    "ast_hash": "692ffb65d59055208d32f6e6a8fa6a58",
     "semantic_hash": ""
   },
   "api/_lib/apiV1/pagamentosRotas.js": {
@@ -3882,63 +3882,63 @@
     "semantic_hash": ""
   },
   "api/_lib/repasseComprovante.js": {
-    "mtime": 1794943229.5763016,
-    "seen": 1794946123.8624349,
-    "ast_hash": "f087c363cea19dad16cb8624e15ddb76",
+    "mtime": 1795027040.9712481,
+    "seen": 1795613151.659114,
+    "ast_hash": "ee10af5c5af7802363de3b9638a7c221",
     "semantic_hash": ""
   },
   "docs/api/openapi.json": {
-    "mtime": 1794425923.2964904,
-    "seen": 1794576371.3562217,
-    "ast_hash": "cbeec8559e77798516baa5ffbb323f90",
+    "mtime": 1795113780.2638524,
+    "seen": 1795613151.6604154,
+    "ast_hash": "a796f855f858530acee2fca25bdaa5d5",
     "semantic_hash": ""
   },
   "public/api-docs/openapi.json": {
-    "mtime": 1794425923.3546178,
-    "seen": 1794576371.3564181,
-    "ast_hash": "cbeec8559e77798516baa5ffbb323f90",
+    "mtime": 1795113780.2728524,
+    "seen": 1795613151.6606894,
+    "ast_hash": "a796f855f858530acee2fca25bdaa5d5",
     "semantic_hash": ""
   },
   "scripts/api-docs-gerar.mjs": {
-    "mtime": 1794425923.3642907,
-    "seen": 1794576371.3565173,
-    "ast_hash": "01701e1b64aa01532123256f3bc99108",
+    "mtime": 1795113780.275853,
+    "seen": 1795613151.660789,
+    "ast_hash": "6e06577df0632d6433e9d1bf86b59e8e",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chaves.js": {
-    "mtime": 1794425923.3853588,
-    "seen": 1794576371.365617,
-    "ast_hash": "dfff1013b42f4f7af6dc83463b3601f2",
+    "mtime": 1795113780.281852,
+    "seen": 1795613151.6689758,
+    "ast_hash": "937bb8a123e12a64798cb553d54cb741",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chaves.test.js": {
-    "mtime": 1794425923.3863542,
-    "seen": 1794576371.3656197,
-    "ast_hash": "ffa8435c300425e9684e0f183a066331",
+    "mtime": 1795113780.2838552,
+    "seen": 1795613151.6689782,
+    "ast_hash": "9149a08cbf6a256186c3e876e730af00",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chavesAdminApi.js": {
-    "mtime": 1794425923.3954563,
-    "seen": 1794576371.3656213,
-    "ast_hash": "5c398ed353ec0b2694aeccd0f9659345",
+    "mtime": 1795113780.2858613,
+    "seen": 1795613151.66898,
+    "ast_hash": "b217fcd033da2011b202fa9b6266130e",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chavesAdminApi.test.js": {
-    "mtime": 1794425923.4064574,
-    "seen": 1794576371.3656235,
-    "ast_hash": "234cc83828168d9675300f432bffa27d",
+    "mtime": 1795113780.2879221,
+    "seen": 1795613151.668982,
+    "ast_hash": "550bdc64a649ef96dcc7cf16f4986386",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chavesAdminRegras.js": {
-    "mtime": 1794425923.4174585,
-    "seen": 1794576371.3656259,
-    "ast_hash": "8076ff3411ca7b997b35c8fb55cb35a8",
+    "mtime": 1795113780.2888563,
+    "seen": 1795613151.6689832,
+    "ast_hash": "a3178de496bea9c110231a052c6377d2",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chavesAdminRegras.test.js": {
-    "mtime": 1794425923.4264581,
-    "seen": 1794576371.3656278,
-    "ast_hash": "563e7908aa5e7f50737ec1f83e5f0ab9",
+    "mtime": 1795113780.2898529,
+    "seen": 1795613151.6689851,
+    "ast_hash": "de13eecaebf5140f5a286e1bd1ec3e3d",
     "semantic_hash": ""
   },
   "src/lib/apiV1/chavesAdminRotas.test.js": {
@@ -3948,9 +3948,9 @@
     "semantic_hash": ""
   },
   "src/lib/apiV1/openapi.test.js": {
-    "mtime": 1794425923.446457,
-    "seen": 1794576371.3656313,
-    "ast_hash": "eae5933571da183f26a833486f446bb0",
+    "mtime": 1795113780.290853,
+    "seen": 1795613151.6690805,
+    "ast_hash": "a15ab01bc127008293940fd255d08073",
     "semantic_hash": ""
   },
   "src/lib/apiV1/pagamentosRegras.js": {
@@ -3972,9 +3972,9 @@
     "semantic_hash": ""
   },
   "src/lib/apiV1/redeRegras.js": {
-    "mtime": 1794425923.4814608,
-    "seen": 1794576371.3656392,
-    "ast_hash": "7fd6d8410c0706268255f88048201db8",
+    "mtime": 1795113780.3025239,
+    "seen": 1795613151.669396,
+    "ast_hash": "03b866f951bbc2adf66238aef58d96dd",
     "semantic_hash": ""
   },
   "src/lib/apiV1/redeRegras.test.js": {
@@ -4038,9 +4038,9 @@
     "semantic_hash": ""
   },
   "src/pages/Administrativo/Api/AdminApiChaves.jsx": {
-    "mtime": 1794425923.5602665,
-    "seen": 1794576371.399609,
-    "ast_hash": "2fbc773889e97437fe4af07077520165",
+    "mtime": 1795113780.3425183,
+    "seen": 1795613151.6946437,
+    "ast_hash": "4487ab92e02fabf2243e0642b8ac1084",
     "semantic_hash": ""
   },
   "src/pages/Administrativo/Api/AdminApiTestar.jsx": {
@@ -4062,9 +4062,9 @@
     "semantic_hash": ""
   },
   "docs/api/README.md": {
-    "mtime": 1794425923.2864754,
-    "seen": 1794576371.4257028,
-    "ast_hash": "8f3741cbd48694e5cb3a945644b989ed",
+    "mtime": 1795113780.2628548,
+    "seen": 1795613151.713659,
+    "ast_hash": "3fb5f526a7c7b524d021cd67b384536d",
     "semantic_hash": ""
   },
   "docs/api/pagamentos.md": {
@@ -4086,9 +4086,9 @@
     "semantic_hash": ""
   },
   "public/api-docs/index.html": {
-    "mtime": 1794425923.352848,
-    "seen": 1794576371.4268954,
-    "ast_hash": "b9439f66fa986aec3b3c0984ccf10411",
+    "mtime": 1795113780.271853,
+    "seen": 1795613151.715294,
+    "ast_hash": "4a8c7e44892e43923c41c5b8698d2108",
     "semantic_hash": ""
   },
   "src/lib/exportAprovadosAPagarExcel.js": {
@@ -4176,15 +4176,15 @@
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/gerarZipPlanosCidade.js": {
-    "mtime": 1795009152.9913678,
-    "seen": 1795014322.7633402,
-    "ast_hash": "a8ec1c84fdb1df99e7fc4232df2c467c",
+    "mtime": 1795021261.3956804,
+    "seen": 1795613151.686936,
+    "ast_hash": "57d3c8cf7c1947659449d77f9902bf12",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/gerarZipPlanosCidade.test.js": {
-    "mtime": 1795009152.9933786,
-    "seen": 1795014322.7633421,
-    "ast_hash": "5330ac46ddfcc5c24ebd2b2b627bea91",
+    "mtime": 1795021261.3966784,
+    "seen": 1795613151.68694,
+    "ast_hash": "800f2db87c7cb5a9b35bc24a262c58c6",
     "semantic_hash": ""
   },
   "src/lib/impressaoPlanos/statusZipPlanos.js": {
@@ -4218,15 +4218,15 @@
     "semantic_hash": ""
   },
   "src/pages/Publico/TabelaPlanosPublico/TabelaPlanosPublico.jsx": {
-    "mtime": 1795014869.696832,
-    "seen": 1795014937.4184177,
-    "ast_hash": "d6a46fd3fb7b772229dadf4052f75bd9",
+    "mtime": 1795113780.3625202,
+    "seen": 1795613151.7027416,
+    "ast_hash": "a5beab969a747e675ee302c847c4d931",
     "semantic_hash": ""
   },
   "src/pages/Publico/TabelaPlanosPublico/mockTabelaPlanos.js": {
-    "mtime": 1795014197.896206,
-    "seen": 1795014322.779983,
-    "ast_hash": "3e19e490639340853793bfdda9d4ca1a",
+    "mtime": 1795113780.3715186,
+    "seen": 1795613151.7027524,
+    "ast_hash": "a3cae380def30a263788e4d8f15ebb87",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-11-17-impressao-planos-zip-rapido.md": {
@@ -4245,6 +4245,414 @@
     "mtime": 1795009152.6220646,
     "seen": 1795014322.7987974,
     "ast_hash": "64eb692c8c928f466e9255c64bf765d3",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/planosDados.js": {
+    "mtime": 1795113780.260854,
+    "seen": 1795613151.6580756,
+    "ast_hash": "5709d7a083d68a715ee995dda2a1b960",
+    "semantic_hash": ""
+  },
+  "api/_lib/apiV1/planosRotas.js": {
+    "mtime": 1795113780.260854,
+    "seen": 1795613151.6580782,
+    "ast_hash": "6b3b3cb567834383480526d8359d935e",
+    "semantic_hash": ""
+  },
+  "src/components/Supertabela/GerenciarTabelasModal.test.jsx": {
+    "mtime": 1795113780.2798533,
+    "seen": 1795613151.6673033,
+    "ast_hash": "28c18d98cc3cdda301d222d3f8dbb874",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosFiltrosRegras.js": {
+    "mtime": 1795113780.2938516,
+    "seen": 1795613151.6693702,
+    "ast_hash": "bd1ab9767718c87bffcc865b9bb33d25",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosFiltrosRegras.test.js": {
+    "mtime": 1795113780.2948532,
+    "seen": 1795613151.6693718,
+    "ast_hash": "bc45b8bd0a652a9d8f9423b4322812ab",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosPublicosApi.js": {
+    "mtime": 1795113780.2948532,
+    "seen": 1795613151.669375,
+    "ast_hash": "48723aa8aee1e879d400098a1c23b149",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosPublicosApi.test.js": {
+    "mtime": 1795113780.2958577,
+    "seen": 1795613151.6693778,
+    "ast_hash": "73f775814ae04b7db64c420f5fae4399",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosRegras.js": {
+    "mtime": 1795113780.2965221,
+    "seen": 1795613151.6693804,
+    "ast_hash": "d160b6239643e425c32526cb7fc8c008",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosRegras.test.js": {
+    "mtime": 1795113780.2975173,
+    "seen": 1795613151.6693828,
+    "ast_hash": "eb62187bdddc00c1b23d73264a63f9c5",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosRotas.test.js": {
+    "mtime": 1795113780.2975173,
+    "seen": 1795613151.6693861,
+    "ast_hash": "6f46101c1d4fbbb0b11ee130fbebfcd5",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosSinonimos.js": {
+    "mtime": 1795113780.2985203,
+    "seen": 1795613151.6693892,
+    "ast_hash": "821d993bd02717fd2581c55f22f7d35a",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/planosSinonimos.test.js": {
+    "mtime": 1795113780.2985203,
+    "seen": 1795613151.6693928,
+    "ast_hash": "1082e4b2bd6df5136e5f858de198e621",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/sortearPrestadores.js": {
+    "mtime": 1795113780.3035195,
+    "seen": 1795613151.6697226,
+    "ast_hash": "75a4be4963c55a456e64348445accfca",
+    "semantic_hash": ""
+  },
+  "src/lib/apiV1/sortearPrestadores.test.js": {
+    "mtime": 1795113780.3045204,
+    "seen": 1795613151.6697264,
+    "ast_hash": "b614f7b5d7fe14bdaa82a293e1ef03f7",
+    "semantic_hash": ""
+  },
+  "src/lib/bancoFalsoMemoria.testutil.js": {
+    "mtime": 1795113780.305519,
+    "seen": 1795613151.6708338,
+    "ast_hash": "0cd2667f51b41f4e2e2c46a6deddf450",
+    "semantic_hash": ""
+  },
+  "src/lib/exportSupertabelaExcel.limites.test.js": {
+    "mtime": 1795113780.3125186,
+    "seen": 1795613151.6853564,
+    "ast_hash": "9494304d45b6f2483a7b72b0675b925e",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/baseline-sem-observacoes.json": {
+    "mtime": 1795021261.4648793,
+    "seen": 1795613151.686232,
+    "ast_hash": "c1e9842828bb6b4c70b3f28b2996a02e",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/gerarImpressaoHonorariosPdf.test.js": {
+    "mtime": 1795025643.5210693,
+    "seen": 1795613151.6862378,
+    "ast_hash": "7fe9160780ca07c6a012b3f6f4abd4a5",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/honorariosObservacoes.geral.test.js": {
+    "mtime": 1795021971.907585,
+    "seen": 1795613151.6862404,
+    "ast_hash": "8ccc642aa6f7d8174b5d6f2a6745e40c",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/modoImpressaoHonorarios.js": {
+    "mtime": 1795098782.6243384,
+    "seen": 1795613151.6862466,
+    "ast_hash": "0b04ff84f94feebe4e577fc3aecb6609",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/modoImpressaoHonorarios.test.js": {
+    "mtime": 1795098782.6263387,
+    "seen": 1795613151.6862493,
+    "ast_hash": "fa088ecb6a1684f0fb30d061d590385a",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoHonorarios/paginaFalsaHonorarios.testutil.js": {
+    "mtime": 1795021261.4768386,
+    "seen": 1795613151.6862524,
+    "ast_hash": "4db526c50a6227380a0006f5a38467fd",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/baseline-sem-observacoes.json": {
+    "mtime": 1795021261.636991,
+    "seen": 1795613151.6862557,
+    "ast_hash": "bbfd0d5ccfacdff8070219d243c68f13",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/baselineSemObservacoes.test.js": {
+    "mtime": 1795021261.637992,
+    "seen": 1795613151.686259,
+    "ast_hash": "524d14615de2b88b5b7cf4d8c298bec2",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/gerarImpressaoPlanosPdf.test.js": {
+    "mtime": 1795025643.767513,
+    "seen": 1795613151.68693,
+    "ast_hash": "4085dd7522e8e7ee18805dfe4a32017c",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/limiteExibicaoPlanos.js": {
+    "mtime": 1795113780.3145187,
+    "seen": 1795613151.6869442,
+    "ast_hash": "f9ed00e16a498a568da2a5e24b2fe53e",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/modoImpressaoPlanos.finalidade.test.js": {
+    "mtime": 1795113780.3155181,
+    "seen": 1795613151.6871927,
+    "ast_hash": "3af9deb296d6094c02c3f993e3c0cc19",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/paginaFalsaPlanos.testutil.js": {
+    "mtime": 1795021261.6409912,
+    "seen": 1795613151.6874719,
+    "ast_hash": "080e9c6d8611a7079c959a282e8d608d",
+    "semantic_hash": ""
+  },
+  "src/lib/impressaoPlanos/planosObservacoes.geral.test.js": {
+    "mtime": 1795021971.9135857,
+    "seen": 1795613151.687476,
+    "ast_hash": "da0321b745653bd0332ea3ac4ec2e2d0",
+    "semantic_hash": ""
+  },
+  "src/lib/matrizCarenciasLimites.js": {
+    "mtime": 1795113780.321525,
+    "seen": 1795613151.6879568,
+    "ast_hash": "ff73e3200d48638c37589d9a086b14ec",
+    "semantic_hash": ""
+  },
+  "src/lib/matrizCarenciasLimites.test.js": {
+    "mtime": 1795113780.3225186,
+    "seen": 1795613151.6879592,
+    "ast_hash": "fdbfff8520d15f3e15ceb0bae16cdc74",
+    "semantic_hash": ""
+  },
+  "src/lib/negociacaoVinculo.js": {
+    "mtime": 1795027040.9887574,
+    "seen": 1795613151.6886702,
+    "ast_hash": "193f240cde995491da5cc4d057f06b78",
+    "semantic_hash": ""
+  },
+  "src/lib/negociacaoVinculo.test.js": {
+    "mtime": 1795027040.9897609,
+    "seen": 1795613151.6886725,
+    "ast_hash": "e9972491af252886f5e910cbdc807c43",
+    "semantic_hash": ""
+  },
+  "src/lib/pdf/blocoInformacoesPdf.js": {
+    "mtime": 1795025643.543074,
+    "seen": 1795613151.68969,
+    "ast_hash": "25b13e2d2347e39faa6afdfc1f609379",
+    "semantic_hash": ""
+  },
+  "src/lib/pdf/blocoInformacoesPdf.test.js": {
+    "mtime": 1795025643.169332,
+    "seen": 1795613151.6896927,
+    "ast_hash": "db30f0628802cdcf4e1e4ad1e55effb5",
+    "semantic_hash": ""
+  },
+  "src/lib/pdf/distribuirObservacoes.js": {
+    "mtime": 1795021971.915585,
+    "seen": 1795613151.689695,
+    "ast_hash": "ed6bca842b90e81183b3790cae4d511a",
+    "semantic_hash": ""
+  },
+  "src/lib/pdf/distribuirObservacoes.test.js": {
+    "mtime": 1795021971.916585,
+    "seen": 1795613151.689697,
+    "ast_hash": "6e3ab6b238f83981d443c83386ea8fb8",
+    "semantic_hash": ""
+  },
+  "src/lib/planosConfigCompat.test.js": {
+    "mtime": 1795437383.66345,
+    "seen": 1795613151.6904495,
+    "ast_hash": "804b56f3a09ad9c3649c68f314037637",
+    "semantic_hash": ""
+  },
+  "src/lib/procedimentoLimitesCarencias.js": {
+    "mtime": 1795113780.3375425,
+    "seen": 1795613151.6910734,
+    "ast_hash": "82603ac6c0865bbbfff0169981145e09",
+    "semantic_hash": ""
+  },
+  "src/lib/procedimentoLimitesCarencias.test.js": {
+    "mtime": 1795113780.3395188,
+    "seen": 1795613151.6910758,
+    "ast_hash": "ef6a8eb21ee387d20d953d6b16baea76",
+    "semantic_hash": ""
+  },
+  "src/lib/rc/rcCards.js": {
+    "mtime": 1795097077.640108,
+    "seen": 1795613151.691554,
+    "ast_hash": "565428991e4512bb6b61e570ba7fdcc4",
+    "semantic_hash": ""
+  },
+  "src/lib/rc/rcCards.test.js": {
+    "mtime": 1795097077.6409748,
+    "seen": 1795613151.6915565,
+    "ast_hash": "d414dabe244ef812b9788265d4533815",
+    "semantic_hash": ""
+  },
+  "src/lib/rc/rotuloAtendimentoRc.js": {
+    "mtime": 1795097077.641104,
+    "seen": 1795613151.692021,
+    "ast_hash": "c86b1056e63f85deaf9ea3f8d7bb9b2d",
+    "semantic_hash": ""
+  },
+  "src/lib/rc/rotuloAtendimentoRc.test.js": {
+    "mtime": 1795097077.641104,
+    "seen": 1795613151.692023,
+    "ast_hash": "6ec17c4b6eb32bf8d981a29590022433",
+    "semantic_hash": ""
+  },
+  "src/lib/repasse/emailsPrestador.test.js": {
+    "mtime": 1795027040.9967906,
+    "seen": 1795613151.692146,
+    "ast_hash": "076ff9d7456c90cd452c9a68c5079b42",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/BuscaProcedimentos.jsx": {
+    "mtime": 1795113780.359522,
+    "seen": 1795613151.7027376,
+    "ast_hash": "deef25666b546f3970dc8fac7c3cbccd",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/PainelProcedimento.jsx": {
+    "mtime": 1795113780.3605213,
+    "seen": 1795613151.7027397,
+    "ast_hash": "966ec8c86cf476b38a77556de140ec50",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/TabelaPlanosPublico.test.jsx": {
+    "mtime": 1795113780.3645198,
+    "seen": 1795613151.7027435,
+    "ast_hash": "972c3ca0d0264854bcca4f3c219de9aa",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/TextoObservacao.jsx": {
+    "mtime": 1795113780.3655264,
+    "seen": 1795613151.7027452,
+    "ast_hash": "7d752c39a49aff1f4862d75d44fb5481",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/iconesTabelaPlanos.jsx": {
+    "mtime": 1795113780.3675404,
+    "seen": 1795613151.7027466,
+    "ast_hash": "93a178e0e39d3c34134772197ca7e333",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/logicaTabelaPlanos.js": {
+    "mtime": 1795113780.3695226,
+    "seen": 1795613151.702748,
+    "ast_hash": "a5b0dece52e8a141e485c0e2b5b5ca5d",
+    "semantic_hash": ""
+  },
+  "src/pages/Publico/TabelaPlanosPublico/logicaTabelaPlanos.test.js": {
+    "mtime": 1795113780.3705196,
+    "seen": 1795613151.70275,
+    "ast_hash": "5e7be2fcdf29bc7acb3c37ad08a24193",
+    "semantic_hash": ""
+  },
+  "src/pages/Supertabela/Supertabela_planos/MatrizCarenciasLimitesTabela.jsx": {
+    "mtime": 1795437383.6654499,
+    "seen": 1795613151.7030969,
+    "ast_hash": "069286449c8d3088ec0d4acc20ffb22e",
+    "semantic_hash": ""
+  },
+  "zap-emerlab/server/router.atendente.test.js": {
+    "mtime": 1795437894.9128966,
+    "seen": 1795613151.707346,
+    "ast_hash": "5633e552d06e2bbdfcc6989242c61630",
+    "semantic_hash": ""
+  },
+  "zap-emerlab/server/router.atribuicao.test.js": {
+    "mtime": 1795613105.0307333,
+    "seen": 1795613151.7073476,
+    "ast_hash": "439b5f4f4c7c1d9baa0ee41d78661ab1",
+    "semantic_hash": ""
+  },
+  "docs/api/planos.md": {
+    "mtime": 1795113780.264852,
+    "seen": 1795613151.713904,
+    "ast_hash": "1b8b88435f238bf9d2a777b1fc3e591b",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-18-honorarios-modo-cidade.md": {
+    "mtime": 1795098782.6173363,
+    "seen": 1795613151.7148101,
+    "ast_hash": "24436661967b6eb5c62e09ad0d916093",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-18-observacoes-por-grupo.md": {
+    "mtime": 1795021971.9005885,
+    "seen": 1795613151.7148123,
+    "ast_hash": "b212b676c539d120242bf4cea7e61f8e",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-18-quebra-bloco-informacoes.md": {
+    "mtime": 1795025643.0900476,
+    "seen": 1795613151.7148137,
+    "ast_hash": "cd608368d1c8f762bea7e9ddbba1332b",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-18-tabela-planos-publica.md": {
+    "mtime": 1795024364.4586642,
+    "seen": 1795613151.714815,
+    "ast_hash": "68d3b3a678fb52d92b41d46fcb89150b",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-19-limites-carencias-por-procedimento.md": {
+    "mtime": 1795113780.2658522,
+    "seen": 1795613151.714817,
+    "ast_hash": "793a0aefe5bd2357ba79450644cb2252",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-11-19-matriz-carencias-limites.md": {
+    "mtime": 1795113780.2668521,
+    "seen": 1795613151.7148185,
+    "ast_hash": "0b0249a564dd27fedfaab4294ef1954f",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-18-honorarios-modo-cidade-design.md": {
+    "mtime": 1795098782.6183364,
+    "seen": 1795613151.7149925,
+    "ast_hash": "30b2db6a0da3d6ceed6aadeb1878d787",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-18-observacoes-por-grupo-design.md": {
+    "mtime": 1795021971.9035883,
+    "seen": 1795613151.7149954,
+    "ast_hash": "7a03e84fd2f3847656aa41f37939c596",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-18-rc-sem-endereco-residencial-design.md": {
+    "mtime": 1795097077.6385837,
+    "seen": 1795613151.714997,
+    "ast_hash": "86dd2f05c5fa107c860584bcf09ad270",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-18-tabela-planos-publica-design.md": {
+    "mtime": 1795024234.4466596,
+    "seen": 1795613151.7149994,
+    "ast_hash": "ab1b119d1010d3bee5354f1014fd9c48",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-19-limites-carencias-por-procedimento-design.md": {
+    "mtime": 1795113780.2688525,
+    "seen": 1795613151.7150016,
+    "ast_hash": "05b2a33a60f62711347f38ef4450895a",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-11-19-matriz-carencias-limites-design.md": {
+    "mtime": 1795113780.2698588,
+    "seen": 1795613151.7150028,
+    "ast_hash": "1430d4e7390ea3b0bbfa1746a3048414",
     "semantic_hash": ""
   },
   "package-lock.json": {
