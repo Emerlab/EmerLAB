@@ -118,3 +118,17 @@ describe('atribuição feita pelo bot da WATI', () => {
         expect(achou).toBe(false)
     })
 })
+
+describe('entregue/lida em dobro (v1 e v2)', () => {
+    const { tickRepetido, ticksRecentes } = __teste
+    it('só o primeiro de cada tipo recarrega; entregue e lida são tipos diferentes', () => {
+        ticksRecentes.clear()
+        const t = Date.now()
+        expect(tickRepetido('5554996032507', 'sentMessageDELIVERED', t)).toBe(false)
+        expect(tickRepetido('5554996032507', 'sentMessageDELIVERED_v2', t + 100)).toBe(true)
+        expect(tickRepetido('5554996032507', 'sentMessageREAD', t + 2000)).toBe(false)
+        expect(tickRepetido('5554996032507', 'sentMessageREAD_v2', t + 2100)).toBe(true)
+        expect(tickRepetido('5551991988866', 'sentMessageDELIVERED', t + 200)).toBe(false) // outra conversa
+        expect(tickRepetido('5554996032507', 'sentMessageDELIVERED', t + 11000)).toBe(false) // passou a janela
+    })
+})
