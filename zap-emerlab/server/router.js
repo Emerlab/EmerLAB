@@ -718,8 +718,15 @@ async function montarConversas(canal, busca) {
         canal === 'whatsapp'
             ? buscarContatosWhatsapp(busca)
             : wati.listarContatosCanal(canal).then((lista) => lista.map((c) => normalizarContatoCanal(c, canal)))
+    // WATI limitou (429): a lista sai só com o que o banco já tem (nome, prévia, atendente), em vez de erro na tela
+    // de todo mundo até a pausa acabar. Só sem busca: uma busca incompleta enganaria quem procura um contato.
+    const contatosOuBanco = buscarContatos.catch((e) => {
+        if (e?.status !== 429 || busca) throw e
+        console.warn('[zap] lista sem contatos da WATI (429): usando o banco')
+        return []
+    })
     const [contatos, metasTodas] = await Promise.all([
-        etapa('lista: contatos WATI', buscarContatos),
+        etapa('lista: contatos WATI', contatosOuBanco),
         // os atendentes (e as abas de cada um) consultam a mesma lista; recarga por aviso em tempo real usa fresh=1
         memo('conversas:lista', CACHE_LISTA_MS, () =>
             etapa('lista: banco', () => db()
