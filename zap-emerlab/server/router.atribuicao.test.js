@@ -132,3 +132,26 @@ describe('entregue/lida em dobro (v1 e v2)', () => {
         expect(tickRepetido('5554996032507', 'sentMessageDELIVERED', t + 11000)).toBe(false) // passou a janela
     })
 })
+
+describe('histórico de mensagens no banco (fase 1)', () => {
+    const { linhaMensagem } = __teste
+    it('guarda o item da WATI como veio, com a origem no id', () => {
+        const item = { id: 'abc', eventType: 'message', text: 'oi', owner: false, created: '2026-11-26T13:00:00Z', whatsappMessageId: 'wamid.X' }
+        expect(linhaMensagem('5554996032507', item, 'webhook')).toMatchObject({
+            id: 'webhook:abc',
+            wa_id: '5554996032507',
+            em: '2026-11-26T13:00:00.000Z',
+            evento: 'message',
+            minha: false,
+            wamid: 'wamid.X',
+            origem: 'webhook',
+            raw: item,
+        })
+    })
+    it('marca como minha o que o atendente enviou e ignora item sem id ou sem horário', () => {
+        const enviada = { id: 'z', text: 'ola', owner: true, created: '2026-11-26T13:01:00Z', statusString: 'DELIVERED' }
+        expect(linhaMensagem('5554996032507', enviada, 'wati')).toMatchObject({ id: 'wati:z', minha: true, status: 'delivered', wamid: null })
+        expect(linhaMensagem('5554996032507', { text: 'sem id', created: '2026-11-26T13:00:00Z' }, 'wati')).toBeNull()
+        expect(linhaMensagem('5554996032507', { id: 'q', text: 'sem hora' }, 'wati')).toBeNull()
+    })
+})

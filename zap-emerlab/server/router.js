@@ -435,6 +435,34 @@ function normalizarMensagem(m) {
     }
 }
 
+// Histórico no banco (supabase/migracao-mensagens.sql), fase 1: grava o item da WATI como veio — do webhook e do que o
+// painel já lê do getMessages — sem mudar o que o chat mostra. Falha em silêncio (sem tabela, o painel segue igual).
+function linhaMensagem(waId, m, origem) {
+    const idBruto = m?.id || m?.whatsappMessageId
+    const em = emDaMensagemWati(m)
+    if (!idBruto || !em) return null
+    return {
+        id: `${origem}:${idBruto}`,
+        wa_id: normalizarWaId(waId),
+        em,
+        evento: String(m.eventType || 'message').slice(0, 60),
+        minha: normalizarMensagem(m).minha,
+        wamid: m.whatsappMessageId ? String(m.whatsappMessageId) : null,
+        status: String(m.statusString || m.status || '').toLowerCase() || null,
+        origem,
+        raw: m,
+    }
+}
+
+async function gravarMensagens(waId, itens, origem) {
+    const linhas = itens.map((m) => linhaMensagem(waId, m, origem)).filter(Boolean)
+    if (!linhas.length) return
+    await etapa('banco: gravar mensagens', () => db().from('zap_mensagens').upsert(linhas, { onConflict: 'id' })).then(
+        () => {},
+        () => {},
+    )
+}
+
 /** Liga replyContextId ao preview da mensagem citada (quando ela está no lote carregado). */
 function anexarRespostasCitadas(lista) {
     const porWamid = new Map()
@@ -1089,6 +1117,7 @@ async function mensagens(usuario, waId, query) {
         throw e
     }
     await registrarAnuncio(waId, anuncioDe(itens), meta?.anuncio)
+    await gravarMensagens(waId, itens, 'wati')
     const lista = itens.map(normalizarMensagem).sort((a, b) => msData(a.em) - msData(b.em))
     await Promise.all([nomesArquivosEnviados(waId, lista), wamidsDoWebhook(waId, lista)])
     anexarRespostasCitadas(lista)
@@ -2139,6 +2168,7 @@ async function processarWebhook(b) {
                 .then(() => {}, () => {}),
         )
     }
+    await gravarMensagens(waId, [b], 'webhook')
     // status antes do RPC: cliente em resolvida → painel reabre; precisa reabrir na WATI também
     const metaAntes = await metaConversa(waId).catch(() => null)
     ok(
@@ -2527,4 +2557,4 @@ async function tratarPedido(req, res, rotaForcada) {
 }
 
 // Somente para os testes automatizados (não faz parte da API)
-export const __teste = { tickRepetido, ticksRecentes, sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
+export const __teste = { linhaMensagem, tickRepetido, ticksRecentes, sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
