@@ -179,6 +179,8 @@ async function enviarUmaVez(waId, fn) {
         try {
             const r = await fn(alvo)
             alvoWatiOk.set(chave, alvo)
+            // a mensagem enviada ainda não está no banco (o webhook chega depois): o próximo chat lê da WATI
+            await marcarMensagensConferidas(waId, null, null)
             return r
         } catch (e) {
             ultimoErro = e
@@ -197,6 +199,8 @@ async function comAlvoWati(waId, fn) {
         try {
             const r = await fn(alvo)
             alvoWatiOk.set(normalizarWaId(waId), alvo)
+            // atribuir, resolver, etc. geram avisos no histórico que o webhook não traz: a próxima leitura confere na WATI
+            await marcarMensagensConferidas(waId, null, null)
             return r
         } catch (e) {
             ultimoErro = erroMaisUtil(ultimoErro, e)
@@ -456,11 +460,84 @@ function linhaMensagem(waId, m, origem) {
 
 async function gravarMensagens(waId, itens, origem) {
     const linhas = itens.map((m) => linhaMensagem(waId, m, origem)).filter(Boolean)
-    if (!linhas.length) return
-    await etapa('banco: gravar mensagens', () => db().from('zap_mensagens').upsert(linhas, { onConflict: 'id' })).then(
-        () => {},
-        () => {},
+    if (!linhas.length) return false
+    // true só se gravou: o chat sai do banco, então uma mensagem que não entrou precisa derrubar a marca de "em dia"
+    return etapa('banco: gravar mensagens', () => db().from('zap_mensagens').upsert(linhas, { onConflict: 'id' })).then(
+        (r) => !r?.error,
+        () => false,
     )
+}
+
+// Fase 2: o chat (1ª página) sai do banco enquanto a conversa foi conferida com a WATI há pouco. O webhook grava cada
+// mensagem nova em `zap_mensagens`, então o banco = última leitura da WATI + o que chegou depois. A cada
+// MENSAGENS_VALIDADE_MS a WATI é lida de novo (rede de segurança para webhook perdido, edições e avisos de sistema,
+// que o webhook não traz). Sem a migração (supabase/migracao-mensagens-fase2.sql) ou com ZAP_MENSAGENS_BANCO=0, tudo
+// continua vindo da WATI como antes. Qualquer dúvida na leitura devolve null e o chat cai para a WATI.
+const MENSAGENS_VALIDADE_MS = 3 * 60 * 1000
+const mensagensDoBancoLigado = () => process.env.ZAP_MENSAGENS_BANCO !== '0'
+const idDaMensagem = (m) => String(m?.id || m?.whatsappMessageId || '')
+const NIVEL_STATUS = { sent: 1, delivered: 2, read: 3 }
+const nivelStatus = (s) => NIVEL_STATUS[String(s || '').toLowerCase()] || 0
+const melhorStatus = (a, b) => (nivelStatus(b) > nivelStatus(a) ? b : a)
+
+async function lerMensagensDoBanco(waId, meta, tamanho = 50) {
+    if (!mensagensDoBancoLigado() || !meta?.mensagens_ok_em) return null
+    if (Date.now() - msData(meta.mensagens_ok_em) >= MENSAGENS_VALIDADE_MS) return null
+    const r = await etapa('banco: ler mensagens', () =>
+        db().from('zap_mensagens').select('id, em, origem, status, raw').eq('wa_id', normalizarWaId(waId)).order('em', { ascending: false }).limit(tamanho * 3),
+    ).catch(() => null)
+    if (!r || r.error || !r.data?.length) return null
+    // a mesma mensagem pode estar duas vezes (do webhook e da WATI, mesmo id): vale a da WATI, que é a completa
+    const porId = new Map()
+    for (const linha of r.data) {
+        const id = idDaMensagem(linha.raw)
+        if (!id) continue
+        const atual = porId.get(id)
+        const base = atual && !(linha.origem === 'wati' && atual.origem !== 'wati') ? atual : linha
+        porId.set(id, { ...base, status: melhorStatus(atual?.status || '', linha.status || '') })
+    }
+    const unicas = [...porId.values()].sort((a, b) => msData(b.em) - msData(a.em))
+    const pagina = unicas.slice(0, tamanho)
+    // mídia/template que só o webhook trouxe: o formato do webhook não é igual ao do getMessages, então confere na WATI
+    if (pagina.some((l) => l.origem === 'webhook' && String(l.raw?.type || 'text').toLowerCase() !== 'text')) return null
+    return {
+        mensagens: pagina.map((l) => ({ ...l.raw, created: l.raw.created || l.em, ...(l.status ? { statusString: String(l.status).toLowerCase() } : {}) })),
+        temMais: unicas.length > tamanho || Boolean(meta.mensagens_tem_mais),
+    }
+}
+
+/** Marca que o banco está em dia com a WATI agora (ou, com `null`, que precisa conferir na próxima leitura). */
+async function marcarMensagensConferidas(waId, temMais, quando = new Date().toISOString()) {
+    if (!mensagensDoBancoLigado()) return
+    const campos = quando ? { mensagens_ok_em: quando, mensagens_tem_mais: Boolean(temMais) } : { mensagens_ok_em: null }
+    try {
+        const variantes = variantesWaId(waId)
+        await db().from('zap_conversas').update(campos).in('wa_id', variantes).then(() => {}, () => {})
+        for (const v of variantes) invalidar(`conversas:meta:${v}`)
+    } catch {
+        /* só otimização: nunca deve derrubar um envio ou uma leitura que já deu certo */
+    }
+}
+
+/** O webhook de entregue/lida sobe o status da mensagem no banco (nunca desce). Devolve false se não achou a linha. */
+async function aplicarTickNoBanco(waId, b, evento) {
+    if (!mensagensDoBancoLigado()) return false
+    const tipo = /READ/i.test(evento) ? 'read' : /DELIVERED/i.test(evento) ? 'delivered' : null
+    if (!tipo || (!b?.id && !b?.whatsappMessageId)) return false
+    const filtros = []
+    if (b.id) filtros.push(`id.eq.webhook:${b.id}`, `id.eq.wati:${b.id}`)
+    if (b.whatsappMessageId) filtros.push(`wamid.eq.${String(b.whatsappMessageId).replace(/[,()]/g, '')}`)
+    const achadas = await db()
+        .from('zap_mensagens')
+        .select('id, status')
+        .eq('wa_id', normalizarWaId(waId))
+        .or(filtros.join(','))
+        .then((x) => x, () => null)
+    if (!achadas || achadas.error || !achadas.data?.length) return false // mensagem fora do banco: a próxima leitura confere na WATI
+    const subir = achadas.data.filter((l) => nivelStatus(l.status) < nivelStatus(tipo)).map((l) => l.id)
+    if (!subir.length) return true
+    const u = await db().from('zap_mensagens').update({ status: tipo }).in('id', subir).then((x) => x, () => null)
+    return Boolean(u && !u.error)
 }
 
 /** Liga replyContextId ao preview da mensagem citada (quando ela está no lote carregado). */
@@ -1112,23 +1189,34 @@ async function mensagens(usuario, waId, query) {
     const pagina = Math.max(1, Number(query.get('pagina')) || 1)
     let itens = []
     let temMais = false
-    try {
-        const r = await listarMensagensWati(waId, { pagina, tamanho: 50 })
-        itens = r.mensagens || []
-        temMais = Boolean(r.temMais)
-    } catch (e) {
-        // conversa nova / número ainda sem histórico na WATI: getMessages costuma vir 400 —
-        // abre o chat vazio para o atendente enviar o template
-        if (e instanceof wati.WatiError && (e.status === 400 || e.status === 404 || e.codigo === 'numero_invalido')) {
-            return { mensagens: [], temMais: false }
+    // 1ª página em dia no banco: não vai à WATI (o webhook mantém o banco; ver lerMensagensDoBanco)
+    const doBanco = pagina === 1 ? await lerMensagensDoBanco(waId, meta).catch(() => null) : null
+    if (doBanco) {
+        itens = doBanco.mensagens
+        temMais = doBanco.temMais
+    } else {
+        try {
+            const r = await listarMensagensWati(waId, { pagina, tamanho: 50 })
+            itens = r.mensagens || []
+            temMais = Boolean(r.temMais)
+        } catch (e) {
+            // conversa nova / número ainda sem histórico na WATI: getMessages costuma vir 400 —
+            // abre o chat vazio para o atendente enviar o template
+            if (e instanceof wati.WatiError && (e.status === 400 || e.status === 404 || e.codigo === 'numero_invalido')) {
+                return { mensagens: [], temMais: false }
+            }
+            throw e
         }
-        throw e
+        await registrarAnuncio(waId, anuncioDe(itens), meta?.anuncio)
+        await gravarMensagens(waId, itens, 'wati')
     }
-    await registrarAnuncio(waId, anuncioDe(itens), meta?.anuncio)
-    await gravarMensagens(waId, itens, 'wati')
     const lista = itens.map(normalizarMensagem).sort((a, b) => msData(a.em) - msData(b.em))
     await Promise.all([nomesArquivosEnviados(waId, lista), wamidsDoWebhook(waId, lista)])
     anexarRespostasCitadas(lista)
+    // veio da WATI (1ª página): o banco passa a valer como atual pelos próximos minutos
+    if (!doBanco && pagina === 1) await marcarMensagensConferidas(waId, temMais)
+    // o webhook já mantém a prévia, o atendente e o status no banco; só a leitura da WATI precisa conferir
+    if (doBanco) return { mensagens: lista, temMais }
 
     // espelha a prévia da lista no banco (respostas feitas na WATI não passam pelo webhook às vezes)
     const chat = lista.filter((m) => (m.evento === 'message' || m.evento === 'broadcastMessage') && m.em)
@@ -2152,6 +2240,11 @@ async function processarWebhook(b) {
     // Entregue / lida / respondida (sentMessageDELIVERED_v2, sentMessageREAD_v2, sentMessageREPLIED_v2…): não é
     // mensagem nova. Só marca ticks_em (não mexe em atualizado_em, que a sincronização de status usa) e sai.
     if (EVENTO_TICK.test(evento)) {
+        // sobe o status da mensagem no banco (o chat sai de lá); se a mensagem não está no banco, a próxima leitura confere na WATI
+        if (waId) {
+            const aplicado = await aplicarTickNoBanco(waId, b, evento).catch(() => false)
+            if (!aplicado) await marcarMensagensConferidas(waId, null, null)
+        }
         if (waId && !tickRepetido(waId, evento)) {
             await db().from('zap_conversas').update({ ticks_em: new Date().toISOString() }).in('wa_id', variantesWaId(waId)).then(() => {}, () => {})
             wati.invalidarCache(`msgs:${waId}:`)
@@ -2176,7 +2269,7 @@ async function processarWebhook(b) {
                 .then(() => {}, () => {}),
         )
     }
-    await gravarMensagens(waId, [b], 'webhook')
+    if (!(await gravarMensagens(waId, [b], 'webhook'))) await marcarMensagensConferidas(waId, null, null)
     // status antes do RPC: cliente em resolvida → painel reabre; precisa reabrir na WATI também
     const metaAntes = await metaConversa(waId).catch(() => null)
     ok(
@@ -2565,4 +2658,4 @@ async function tratarPedido(req, res, rotaForcada) {
 }
 
 // Somente para os testes automatizados (não faz parte da API)
-export const __teste = { linhaMensagem, tickRepetido, ticksRecentes, sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
+export const __teste = { mensagens, lerMensagensDoBanco, aplicarTickNoBanco, marcarMensagensConferidas, processarWebhook, linhaMensagem, tickRepetido, ticksRecentes, sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
