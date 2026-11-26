@@ -2091,6 +2091,20 @@ async function sincronizarAtribuicaoDoWebhook(waId, meta, minha, b, agora = Date
     }
 }
 
+// Entregue/lida chegam em dobro (sentMessageDELIVERED e sentMessageDELIVERED_v2) e cada aviso faz todos os atendentes
+// relerem o chat na WATI. Só o primeiro de cada tipo, por conversa, em 10 s, dispara a recarga; entregue e lida são
+// tipos diferentes, então o ✓ azul continua chegando.
+const ticksRecentes = new Map() // waId|tipo → quando
+const TICK_REPETIDO_MS = 10000
+function tickRepetido(waId, evento, agora = Date.now()) {
+    const tipo = String(evento).replace(/_v2$/i, '').toLowerCase()
+    const chave = `${waId}|${tipo}`
+    if (agora - (ticksRecentes.get(chave) || 0) < TICK_REPETIDO_MS) return true
+    if (ticksRecentes.size > 1000) ticksRecentes.clear()
+    ticksRecentes.set(chave, agora)
+    return false
+}
+
 async function processarWebhook(b) {
     const waId = telefoneDoWebhook(b)
     const evento = b.eventType || ''
@@ -2098,7 +2112,7 @@ async function processarWebhook(b) {
     // Entregue / lida / respondida (sentMessageDELIVERED_v2, sentMessageREAD_v2, sentMessageREPLIED_v2…): não é
     // mensagem nova. Só marca ticks_em (não mexe em atualizado_em, que a sincronização de status usa) e sai.
     if (EVENTO_TICK.test(evento)) {
-        if (waId) {
+        if (waId && !tickRepetido(waId, evento)) {
             await db().from('zap_conversas').update({ ticks_em: new Date().toISOString() }).in('wa_id', variantesWaId(waId)).then(() => {}, () => {})
             wati.invalidarCache(`msgs:${waId}:`)
             await avisar('conv', normalizarWaId(waId))
@@ -2495,4 +2509,4 @@ export async function handle(req, res, rotaForcada) {
 }
 
 // Somente para os testes automatizados (não faz parte da API)
-export const __teste = { sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }
+export const __teste = { tickRepetido, ticksRecentes, sincronizarAtribuicaoDoWebhook, precisaSincronizarAtribuicao, ultimaSyncAtribuicao, exigirSerAtendente, verificarNaWati, metaConversa, salvarMeta, listarConversas, descartarCacheDaRecargaFresca, rotaGenerica }

@@ -1,6 +1,7 @@
 // Cliente da API WATI (v1 /{tenantId}/api/v1 e v3 /api/ext/v3)
 // Docs: https://docs.wati.io/reference/introduction
 import { getEnv } from './env.js'
+import { db } from './db.js'
 
 export class WatiError extends Error {
     constructor(message, status = 502, detalhe = null, codigo = 'wati') {
@@ -86,10 +87,96 @@ function v3Url(caminho) {
     return new URL(`${watiBase}/api/ext/v3/${caminho}`)
 }
 
-// Depois de um 429 a WATI fica 30 s sem ser chamada por esta instância: insistir só prolonga o bloqueio
+// Depois de um 429 a WATI fica 30 s sem ser chamada: insistir só prolonga o bloqueio.
+// A pausa vale para LEITURAS (GET). Envio de mensagem não fica preso por causa de um 429 de leitura.
+// Ela é compartilhada entre as instâncias da Vercel pela tabela zap_wati_pausa (supabase/migracao-wati-uso.sql);
+// sem a tabela, ou com o banco lento, cada instância pausa sozinha como antes.
 const PAUSA_LIMITE_MS = 30000
-let pausaAte = 0
-export const watiEmPausa = () => Date.now() < pausaAte
+let pausaAte = 0 // leituras (esta instância)
+let pausaEscritaAte = 0 // envios (esta instância)
+let pausaCompartilhadaAte = 0 // leituras (outras instâncias, lida do banco)
+let pausaCompartilhadaVista = 0
+const CHECAGEM_PAUSA_MS = 2000
+const TETO_CHECAGEM_PAUSA_MS = 800
+export const watiEmPausa = () => Date.now() < Math.max(pausaAte, pausaCompartilhadaAte)
+
+/** Atualiza (no máximo a cada 2 s) a pausa que outra instância gravou. Nunca lança nem segura a chamada por mais de 0,8 s. */
+async function atualizarPausaCompartilhada() {
+    const agora = Date.now()
+    if (agora < pausaAte || agora - pausaCompartilhadaVista < CHECAGEM_PAUSA_MS) return
+    pausaCompartilhadaVista = agora
+    let timer
+    try {
+        const consulta = db().from('zap_wati_pausa').select('ate').eq('id', 'leitura').maybeSingle()
+        const r = await Promise.race([consulta, new Promise((ok) => (timer = setTimeout(() => ok(null), TETO_CHECAGEM_PAUSA_MS)))])
+        const ate = r?.data?.ate ? new Date(r.data.ate).getTime() : 0
+        pausaCompartilhadaAte = Number.isFinite(ate) ? ate : 0
+    } catch {
+        // sem a tabela ou sem banco: segue só com a pausa da própria instância
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
+function gravarPausaCompartilhada(ate) {
+    pausaCompartilhadaAte = ate
+    void Promise.resolve(db().from('zap_wati_pausa').upsert({ id: 'leitura', ate: new Date(ate).toISOString() }, { onConflict: 'id' })).then(
+        () => {},
+        () => {},
+    )
+}
+
+// ---- medição: quantas chamadas cada rota faz à WATI (e quantas levam 429) ----
+// Soma por minuto nesta instância; ao virar o minuto vai para o log ("[wati-uso]") e, se a tabela existir, para
+// zap_wati_uso. Só instâncias que chamam a WATI gravam, e a tabela se limpa sozinha (14 dias).
+const uso = new Map() // "GET getMessages/:id" → { n, limite }
+let usoMinuto = Math.floor(Date.now() / 60000)
+
+/** Rota sem ids (telefones, uuids), para agrupar na contagem. */
+export function rotaDaChamada(url, method = 'GET') {
+    const caminho = String(url?.pathname ?? url ?? '')
+        .replace(/^.*\/api\/(?:ext\/v3|v1)\//, '')
+        .replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id')
+        .replace(/\d{6,}/g, ':id')
+    return `${method} ${caminho}`
+}
+
+function gravarUso(minuto, linhas) {
+    console.info('[wati-uso]', new Date(minuto * 60000).toISOString(), JSON.stringify(linhas))
+    const minutoIso = new Date(minuto * 60000).toISOString()
+    const rows = linhas.map((l) => ({ minuto: minutoIso, rota: l.rota, chamadas: l.chamadas, limites: l.limites }))
+    void Promise.resolve(db().from('zap_wati_uso').insert(rows)).then(
+        () => {},
+        () => {},
+    )
+    // limpeza: 1 em cada 50 gravações apaga o que passou de 14 dias
+    if (Math.random() < 0.02) {
+        const corte = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString()
+        void Promise.resolve(db().from('zap_wati_uso').delete().lt('minuto', corte)).then(
+            () => {},
+            () => {},
+        )
+    }
+}
+
+function descarregarUso() {
+    if (!uso.size) return
+    const linhas = [...uso.entries()].map(([rota, v]) => ({ rota, chamadas: v.n, limites: v.limite }))
+    uso.clear()
+    gravarUso(usoMinuto, linhas)
+}
+
+function contarChamada(rota, limitada) {
+    const minuto = Math.floor(Date.now() / 60000)
+    if (minuto !== usoMinuto) {
+        descarregarUso()
+        usoMinuto = minuto
+    }
+    const a = uso.get(rota) || { n: 0, limite: 0 }
+    a.n += 1
+    if (limitada) a.limite += 1
+    uso.set(rota, a)
+}
 
 // Retry-After da WATI (segundos ou data HTTP); sem ele ou com valor estranho, a pausa padrão. Teto de 5 min.
 function esperaDoLimite(cabecalho) {
@@ -100,7 +187,12 @@ function esperaDoLimite(cabecalho) {
 }
 
 async function chamar(url, { method = 'GET', body, headers, raw = false } = {}) {
-    if (watiEmPausa()) throw new WatiError('A WATI limitou as requisições por alguns segundos. Tente de novo já já.', 429, null, 'limite')
+    const leitura = method === 'GET'
+    if (leitura) await atualizarPausaCompartilhada()
+    if (leitura ? watiEmPausa() : Date.now() < pausaEscritaAte) {
+        throw new WatiError('A WATI limitou as requisições por alguns segundos. Tente de novo já já.', 429, null, 'limite')
+    }
+    const rota = rotaDaChamada(url, method)
     const { watiToken } = getEnv()
     const isForm = typeof FormData !== 'undefined' && body instanceof FormData
     let resp
@@ -117,7 +209,18 @@ async function chamar(url, { method = 'GET', body, headers, raw = false } = {}) 
         signal: AbortSignal.timeout(isForm || raw ? 20000 : 10000),
         })
     } catch {
+        contarChamada(rota, false)
         throw new WatiError('Não foi possível falar com a WATI (rede ou tempo esgotado). Tente novamente.', 502, null, 'wati_fora')
+    }
+    contarChamada(rota, resp.status === 429)
+    if (resp.status === 429) {
+        const ate = Date.now() + esperaDoLimite(resp.headers.get('retry-after'))
+        if (leitura) {
+            pausaAte = ate
+            gravarPausaCompartilhada(ate)
+        } else {
+            pausaEscritaAte = ate
+        }
     }
     if (raw) {
         if (!resp.ok) throw new WatiError('Mídia indisponível na WATI (pode ter expirado).', resp.status === 404 ? 404 : 502, null, 'midia')
@@ -132,7 +235,6 @@ async function chamar(url, { method = 'GET', body, headers, raw = false } = {}) 
     }
     if (resp.status === 401) throw new WatiError('O token da WATI é inválido ou expirou. Avise o administrador (WATI_API_TOKEN).', 502, null, 'token')
     if (resp.status === 403) throw new WatiError('O token da WATI não tem permissão para esta ação (escopo ou plano).', 502, null, 'permissao')
-    if (resp.status === 429) pausaAte = Date.now() + esperaDoLimite(resp.headers.get('retry-after'))
     if (resp.status === 429) throw new WatiError('A WATI limitou as requisições por alguns segundos. Tente de novo já já.', 429, null, 'limite')
     if (resp.status >= 500) throw new WatiError('A WATI está instável no momento. Tente novamente em instantes.', 502, dados, 'wati_fora')
     // http: o status real. Um 400 de HTTP é recusa antes de aceitar; já um 200 com result=false pode ter saído
