@@ -137,6 +137,7 @@ export function rotaDaChamada(url, method = 'GET') {
     const caminho = String(url?.pathname ?? url ?? '')
         .replace(/^.*\/api\/(?:ext\/v3|v1)\//, '')
         .replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id')
+        .replace(/[0-9a-f]{24}/gi, ':id') // id de conversa da v3 (ObjectId)
         .replace(/\d{6,}/g, ':id')
     return `${method} ${caminho}`
 }

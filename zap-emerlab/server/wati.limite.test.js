@@ -82,6 +82,10 @@ describe('medição das chamadas', () => {
         expect(wati.rotaDaChamada(u, 'GET')).toBe('GET getMessages/:id')
         const v3 = new URL('https://wati.teste/api/ext/v3/conversations/0f8fad5b-d9cb-469f-a165-70867728950e/status')
         expect(wati.rotaDaChamada(v3, 'PUT')).toBe('PUT conversations/:id/status')
+        const oid = new URL('https://wati.teste/api/ext/v3/conversations/6aeb349b0f4c2d1e8a7b9c01/status')
+        expect(wati.rotaDaChamada(oid, 'PUT')).toBe('PUT conversations/:id/status')
+        const oidOperador = new URL('https://wati.teste/api/ext/v3/conversations/6aecc5be79441de473a51d73/operator')
+        expect(wati.rotaDaChamada(oidOperador, 'PUT')).toBe('PUT conversations/:id/operator')
     })
 
     it('ao virar o minuto, despeja a contagem anterior no log e no banco', async () => {
