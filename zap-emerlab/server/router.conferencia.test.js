@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const gravacoes = []
 const leituras = []
 let mensagensWati = []
+let linhasLista = []
+let erroContatos = null
 
 vi.mock('./db.js', () => {
     const cadeia = (tabela) => ({
@@ -12,6 +14,7 @@ vi.mock('./db.js', () => {
         },
         update: () => ({ eq: () => Promise.resolve({ error: null }), in: () => Promise.resolve({ error: null }) }),
         select: () => ({
+            order: () => ({ limit: () => Promise.resolve({ data: linhasLista, error: null }) }),
             eq: (_c, wa) => ({
                 maybeSingle: () => {
                     leituras.push(wa)
@@ -42,6 +45,10 @@ vi.mock('./wati.js', () => {
         WatiError,
         watiEmPausa: () => false,
         listarMensagens: async () => ({ mensagens: mensagensWati, temMais: false }),
+        listarContatos: async () => {
+            if (erroContatos) throw erroContatos
+            return { contatos: [] }
+        },
         atualizarStatus: vi.fn(),
         detalheContato: vi.fn(async () => ({ teams: [] })),
     }
@@ -92,6 +99,27 @@ describe('conferência da lista com a WATI', () => {
         mensagensWati = [msg('9', 'oi', agora)]
         await __teste.verificarNaWati([conversa('5554999990003'), conversa('5554999990004'), conversa('5554999990005')], new Map(), new Map())
         expect(gravacoes.filter((x) => x.tabela === 'zap_conversas')).toHaveLength(1)
+    })
+})
+
+describe('lista quando a WATI limita (429)', () => {
+    const admin = { papel: 'admin', email: 'a@emer.com', departamentos: [] }
+    beforeEach(() => {
+        invalidar('conversas:')
+        linhasLista = [{ wa_id: '5554999990020', nome: 'Cliente', ultima_msg: 'oi', ultima_msg_em: new Date().toISOString(), status: 'aberta' }]
+    })
+
+    it('sem busca: responde com o que o banco tem, sem erro', async () => {
+        erroContatos = Object.assign(new Error('limite'), { status: 429 })
+        const r = await __teste.listarConversas(admin, new URLSearchParams())
+        erroContatos = null
+        expect(r.conversas.map((c) => c.waId)).toEqual(['5554999990020'])
+    })
+
+    it('outro erro da WATI continua sendo erro', async () => {
+        erroContatos = Object.assign(new Error('fora do ar'), { status: 500 })
+        await expect(__teste.listarConversas(admin, new URLSearchParams())).rejects.toMatchObject({ status: 500 })
+        erroContatos = null
     })
 })
 
