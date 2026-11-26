@@ -2,6 +2,7 @@
 // Docs: https://docs.wati.io/reference/introduction
 import { getEnv } from './env.js'
 import { db } from './db.js'
+import { etapa } from './etapas.js'
 
 export class WatiError extends Error {
     constructor(message, status = 502, detalhe = null, codigo = 'wati') {
@@ -198,7 +199,7 @@ async function chamar(url, { method = 'GET', body, headers, raw = false } = {}) 
     const isForm = typeof FormData !== 'undefined' && body instanceof FormData
     let resp
     try {
-        resp = await fetch(url, {
+        resp = await etapa(`WATI ${rota}`, () => fetch(url, {
         method,
         headers: {
             Authorization: `Bearer ${watiToken}`,
@@ -208,7 +209,7 @@ async function chamar(url, { method = 'GET', body, headers, raw = false } = {}) 
         body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
         // WATI lenta não pode segurar a função até o maxDuration: 10 s nas chamadas comuns, 20 s em upload e mídia
         signal: AbortSignal.timeout(isForm || raw ? 20000 : 10000),
-        })
+        }))
     } catch {
         contarChamada(rota, false)
         throw new WatiError('Não foi possível falar com a WATI (rede ou tempo esgotado). Tente novamente.', 502, null, 'wati_fora')

@@ -9,6 +9,7 @@
 import crypto from 'node:crypto'
 import process from 'node:process'
 import { getEnv } from './env.js'
+import { etapa } from './etapas.js'
 
 const INTERVALO_MIN_MS = 700 // no máximo ~1 aviso por canal a cada 0,7 s (rajadas viram um só)
 const TIMEOUT_MS = 1500 // quanto quem chamou espera no máximo (webhook da WATI / ação do atendente)
@@ -51,7 +52,7 @@ async function enviar(topico, tipo) {
         // sem aviso o painel apenas espera o próximo polling: nunca derruba quem chamou
     })
     let timer
-    await Promise.race([chamada, new Promise((r) => (timer = setTimeout(r, TIMEOUT_MS)))])
+    await etapa('tempo real: broadcast', () => Promise.race([chamada, new Promise((r) => (timer = setTimeout(r, TIMEOUT_MS)))]))
     clearTimeout(timer)
 }
 

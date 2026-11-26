@@ -6,6 +6,7 @@ import { hashSenha, conferirSenha, criarToken, lerToken, compararSeguro, segredo
 import { db, ok, DbError, buscarUsuarioPorEmail, buscarUsuarioPorId, idsDepartamentos, invalidarUsuarios, listarDepartamentos, invalidarDepartamentos } from './db.js'
 import { memo, invalidar } from './cache.js'
 import { enviarComEtag } from './etag.js'
+import { etapa, medirEtapas } from './etapas.js'
 import { avisar, avisarConversa, configTempoReal, nomeCanal, tempoRealAtivo } from './tempoReal.js'
 import * as wati from './wati.js'
 import * as ms from './microsoft.js'
@@ -275,7 +276,7 @@ function podeVerConversa(usuario, meta) {
 const VALIDADE_META_MS = 2000
 async function metaConversa(waId) {
     return memo(`conversas:meta:${waId}`, VALIDADE_META_MS, async () =>
-        ok(await db().from('zap_conversas').select('*').eq('wa_id', waId).maybeSingle()),
+        ok(await etapa('banco: conversa', () => db().from('zap_conversas').select('*').eq('wa_id', waId).maybeSingle())),
     )
 }
 
@@ -289,9 +290,11 @@ async function exigirConversa(usuario, waId) {
 
 async function salvarMeta(waId, campos, { avisar: avisarOutros = true } = {}) {
     ok(
-        await db()
-            .from('zap_conversas')
-            .upsert({ wa_id: waId, ...campos, atualizado_em: new Date().toISOString() }, { onConflict: 'wa_id' }),
+        await etapa('banco: salvarMeta', () =>
+            db()
+                .from('zap_conversas')
+                .upsert({ wa_id: waId, ...campos, atualizado_em: new Date().toISOString() }, { onConflict: 'wa_id' }),
+        ),
     )
     invalidar('conversas:') // a lista recarregada logo após uma ação (assumir, resolver…) já vem atualizada
     // Só avisa quando algo MUDOU. A conferência da lista grava `salvarMeta(waId, {})` só para marcar «conferida»;
@@ -676,7 +679,7 @@ async function listarConversas(usuario, query) {
     // Calcula uma vez e compartilha: um aviso em tempo real faz todos recarregarem ao mesmo tempo, e antes cada um
     // refazia tudo. Cada atendente só filtra o que tem permissão de ver. A chave começa com «conversas:» para que
     // todo `invalidar('conversas:')` (salvarMeta, webhook, recarga fresca) a descarte.
-    const completa = await memo(`conversas:completa:${canal}:${busca}`, CACHE_LISTA_MS,() => montarConversas(canal, busca))
+    const completa = await memo(`conversas:completa:${canal}:${busca}`, CACHE_LISTA_MS, () => etapa('lista: montar (sem cache)', () => montarConversas(canal, busca)))
     const visiveis = busca ? completa : completa.filter((x) => podeVerConversa(usuario, x.meta))
     return { conversas: visiveis.map((x) => x.item), canal }
 }
@@ -688,15 +691,15 @@ async function montarConversas(canal, busca) {
             ? buscarContatosWhatsapp(busca)
             : wati.listarContatosCanal(canal).then((lista) => lista.map((c) => normalizarContatoCanal(c, canal)))
     const [contatos, metasTodas] = await Promise.all([
-        buscarContatos,
+        etapa('lista: contatos WATI', buscarContatos),
         // os atendentes (e as abas de cada um) consultam a mesma lista; recarga por aviso em tempo real usa fresh=1
-        memo('conversas:lista', CACHE_LISTA_MS,() =>
-            db()
+        memo('conversas:lista', CACHE_LISTA_MS, () =>
+            etapa('lista: banco', () => db()
                 .from('zap_conversas')
                 .select(COLUNAS_LISTA)
                 .order('ultima_msg_em', { ascending: false, nullsFirst: false })
                 .limit(300)
-                .then(ok),
+                .then(ok)),
         ),
     ])
     const metas = metasTodas.filter((m) => canalDe(m.wa_id) === canal)
@@ -727,7 +730,7 @@ async function montarConversas(canal, busca) {
             espelhar.map((c) => salvarMeta(c.waId, { nome: String(nomeParaEspelhar(c)).slice(0, 120) }, { avisar: false })),
         ).catch(() => {})
     }
-    const pessoas = await pessoasDoPainel().catch(() => [])
+    const pessoas = await etapa('lista: pessoas do painel', () => pessoasDoPainel()).catch(() => [])
     let lista = brutos.map((c) => {
         // horário da última mensagem. O last_updated do contato na WATI também muda sem mensagem (chatbot expirando
         // ~3h depois, atributo, atribuição): só serve de palpite enquanto a conversa não foi verificada
@@ -777,7 +780,7 @@ async function montarConversas(canal, busca) {
         const id = normalizarWaId(m.wa_id)
         metaPorId.set(id, fundirMeta(metaPorId.get(id), { ...m, wa_id: id }))
     }
-    await verificarNaWati(lista, metaPorId, contatoEm)
+    await etapa('lista: conferência WATI', () => verificarNaWati(lista, metaPorId, contatoEm))
     lista.sort((a, b) => msData(b.ultimaEm) - msData(a.ultimaEm))
     const metaDe = new Map(brutos.map((c) => [c.waId, c.meta]))
     return lista.map((item) => ({ item, meta: metaDe.get(item.waId) }))
@@ -965,11 +968,11 @@ async function verificarNaWati(lista, metaPorId, contatoEm) {
     if (wati.watiEmPausa()) return
     const escolhidas = escolherParaVerificar(lista, metaPorId, contatoEm)
     if (!escolhidas.length) return
-    const departamentos = await listarDepartamentos().catch(() => [])
+    const departamentos = await etapa('conferência: departamentos', () => listarDepartamentos()).catch(() => [])
     await Promise.allSettled(
         escolhidas.map(async (c) => {
             verificadas.set(c.waId, Date.now())
-            const { mensagens: itens } = await listarMensagensWati(c.waId, { pagina: 1, tamanho: 20 })
+            const { mensagens: itens } = await etapa('conferência: getMessages', () => listarMensagensWati(c.waId, { pagina: 1, tamanho: 20 }))
             // Tudo o que a conferência muda nesta conversa é acumulado e gravado numa única escrita no fim (antes eram até 7).
             // A escrita sempre acontece (mesmo sem nada novo) para marcar a conversa como conferida (atualizado_em).
             const pend = {}
@@ -997,7 +1000,7 @@ async function verificarNaWati(lista, metaPorId, contatoEm) {
                 }
                 // sem atendente, a conversa fica com a equipe (como na WATI): traz a equipe para o setor do painel
                 if (!c.atendenteEmail && (meta?.status || c.status) !== 'resolvida') {
-                    const depto = await departamentoDaWati(c.waId, meta, departamentos).catch(() => undefined)
+                    const depto = await etapa('conferência: equipe do contato', () => departamentoDaWati(c.waId, meta, departamentos)).catch(() => undefined)
                     if (depto) {
                         Object.assign(pend, { departamento_id: depto })
                         c.departamentoId = depto
@@ -1062,7 +1065,7 @@ async function verificarNaWati(lista, metaPorId, contatoEm) {
                     ...(campos.status ? { status: campos.status } : {}),
                 })
             } finally {
-                await salvarMeta(c.waId, pend, { avisar: false })
+                await etapa('conferência: gravar', () => salvarMeta(c.waId, pend, { avisar: false }))
             }
         }),
     )
@@ -1233,10 +1236,10 @@ function textoFinalDaMensagem(texto, meta, usuario, waId) {
 async function enviarTextoHandler(req, usuario, waId) {
     const meta = await exigirConversa(usuario, waId)
     exigirSerAtendente(meta, usuario)
-    await exigirSessaoLivre(waId, meta)
+    await etapa('envio: sessão livre', () => exigirSessaoLivre(waId, meta))
     const { texto, replyContextId } = await lerCorpo(req)
     const final = textoFinalDaMensagem(texto, meta, usuario, waId)
-    const msg = await enviarUmaVez(waId, (alvo) => wati.enviarTexto(alvo, final, replyContextId))
+    const msg = await etapa('envio: WATI', () => enviarUmaVez(waId, (alvo) => wati.enviarTexto(alvo, final, replyContextId)))
     await salvarMeta(waId, {
         ultima_msg: final.slice(0, 500),
         ultima_msg_em: new Date().toISOString(),
@@ -2124,26 +2127,30 @@ async function processarWebhook(b) {
         return
     }
     const minha = Boolean(b.owner) || EVENTOS_ENVIADOS.has(evento) || /^templateMessage/i.test(evento) || String(b.type || '').toLowerCase() === 'template'
-    if (await jaRegistrada(b, minha)) return
+    if (await etapa('webhook: dedupe', () => jaRegistrada(b, minha))) return
     const texto = textoPrevia(b.type, b.text || b.finalText)
     const em = emDaMensagemWati(b) || new Date().toISOString()
     // guarda o wamid primeiro (é o que o "Responder" precisa e o que barra as cópias); sem a tabela, segue normal
     if (b.whatsappMessageId) {
-        await db()
-            .from('zap_mensagens_wamid')
-            .upsert({ id: String(b.id || `${waId}:${b.whatsappMessageId}`), wa_id: waId, wamid: String(b.whatsappMessageId), em, minha })
-            .then(() => {}, () => {})
+        await etapa('webhook: gravar wamid', () =>
+            db()
+                .from('zap_mensagens_wamid')
+                .upsert({ id: String(b.id || `${waId}:${b.whatsappMessageId}`), wa_id: waId, wamid: String(b.whatsappMessageId), em, minha })
+                .then(() => {}, () => {}),
+        )
     }
     // status antes do RPC: cliente em resolvida → painel reabre; precisa reabrir na WATI também
     const metaAntes = await metaConversa(waId).catch(() => null)
     ok(
-        await db().rpc('zap_registrar_mensagem', {
-            p_wa_id: waId,
-            p_nome: minha ? null : b.senderName || null,
-            p_texto: String(texto).slice(0, 500),
-            p_em: em,
-            p_minha: minha,
-        }),
+        await etapa('webhook: RPC registrar', () =>
+            db().rpc('zap_registrar_mensagem', {
+                p_wa_id: waId,
+                p_nome: minha ? null : b.senderName || null,
+                p_texto: String(texto).slice(0, 500),
+                p_em: em,
+                p_minha: minha,
+            }),
+        ),
     )
     // resposta de atendente (na WATI ou no painel) zera o "Não respondidas"; mensagem do bot não conta
     if (minha && respostaHumanaWati(b.operatorName, b.operatorEmail)) {
@@ -2158,13 +2165,13 @@ async function processarWebhook(b) {
     // quem atende segundo a WATI (o bot passa a conversa sem avisar o painel): confere já, com teto de espera
     let tetoSync
     await Promise.race([
-        sincronizarAtribuicaoDoWebhook(waId, metaAntes, minha, b),
+        etapa('webhook: atribuição', () => sincronizarAtribuicaoDoWebhook(waId, metaAntes, minha, b)),
         new Promise((r) => (tetoSync = setTimeout(r, SYNC_ATRIBUICAO_TETO_MS))),
     ])
     clearTimeout(tetoSync)
     if (!minha && b.messageReferral) await registrarAnuncio(waId, anuncioDe([{ ...b, created: em }]), null)
     wati.invalidarCache(`msgs:${waId}:`)
-    await avisarConversa(normalizarWaId(waId))
+    await etapa('webhook: aviso tempo real', () => avisarConversa(normalizarWaId(waId)))
 }
 
 // ---------- Microsoft (Outlook e Teams) ----------
@@ -2327,7 +2334,18 @@ function medirRota(res, rota, metodo) {
     })
 }
 
-export async function handle(req, res, rotaForcada) {
+export function handle(req, res, rotaForcada) {
+    let rotulo = 'pedido'
+    try {
+        const u = new URL(req.url || '/', 'http://local')
+        rotulo = `${req.method || 'GET'} ${rotaGenerica(String(rotaForcada ?? u.searchParams.get('_route') ?? u.pathname.replace(/^\/api\/?/, '')).replace(/^\/+|\/+$/g, ''))}`
+    } catch {
+        // URL estranha: o tratamento abaixo responde o erro
+    }
+    return medirEtapas(rotulo, res, () => tratarPedido(req, res, rotaForcada))
+}
+
+async function tratarPedido(req, res, rotaForcada) {
     try {
         const url = new URL(req.url || '/', 'http://local')
         const rota = String(rotaForcada ?? url.searchParams.get('_route') ?? url.pathname.replace(/^\/api\/?/, ''))
@@ -2358,7 +2376,7 @@ export async function handle(req, res, rotaForcada) {
         if (rota === 'auth/convite' && metodo === 'POST') return await aceitarConvite(req, res)
         if (rota === 'auth/logout' && metodo === 'POST') return enviar(res, 200, { ok: true }, { 'Set-Cookie': cookieSessao(req, '', 0) })
 
-        const usuario = await usuarioDaSessao(req)
+        const usuario = await etapa('sessão', () => usuarioDaSessao(req))
         const responder = (corpo) => enviar(res, 200, corpo)
         // recarga disparada por um aviso em tempo real: o dado novo não pode vir de um cache de 3 s de outra instância
         if (metodo === 'GET' && query.get('fresh') === '1') descartarCacheDaRecargaFresca(rota, partes)
