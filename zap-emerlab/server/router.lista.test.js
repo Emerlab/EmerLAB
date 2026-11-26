@@ -113,7 +113,7 @@ describe('colunas da lista', () => {
         await __teste.listarConversas(usuario({ papel: 'admin' }), query())
         const cols = chamadas.colunas[0]
         expect(cols).not.toBe('*')
-        expect(cols).not.toMatch(/email(?!_)/)
+        expect(cols).not.toMatch(/(?<![_a-z])email(?![_a-z])/)
         expect(cols).not.toMatch(/ticks_em/)
         // o que a lista usa continua lá
         for (const c of ['wa_id', 'atendente_email', 'departamento_id', 'status', 'notas', 'anuncio', 'ultima_cliente_em']) {
