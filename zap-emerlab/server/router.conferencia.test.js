@@ -87,11 +87,11 @@ describe('conferência da lista com a WATI', () => {
         expect(Object.keys(g[0].obj).sort()).toEqual(['atualizado_em', 'wa_id'])
     })
 
-    it('várias conversas: uma escrita para cada', async () => {
+    it('várias conversas: confere só 1 por carga (cada uma é um getMessages; a WATI limita a conta)', async () => {
         const agora = new Date().toISOString()
         mensagensWati = [msg('9', 'oi', agora)]
         await __teste.verificarNaWati([conversa('5554999990003'), conversa('5554999990004'), conversa('5554999990005')], new Map(), new Map())
-        expect(gravacoes.filter((x) => x.tabela === 'zap_conversas')).toHaveLength(3)
+        expect(gravacoes.filter((x) => x.tabela === 'zap_conversas')).toHaveLength(1)
     })
 })
 

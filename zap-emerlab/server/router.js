@@ -818,8 +818,9 @@ async function montarConversas(canal, busca) {
 // as últimas mensagens de algumas conversas (nunca vistas primeiro, depois as ativas há mais tempo sem checar)
 // e grava prévia, horário e quantidade de não lidas, para o card mostrar como no WhatsApp.
 // Com o webhook configurado, a verificação só confirma o que já chegou por ele.
-// com o webhook gravando, a conferência só corrige o que escapou: 3 por carga, ativa de novo após 60 s
-const VERIFICAR_POR_VEZ = 3
+// com o webhook gravando, a conferência só corrige o que escapou: 1 por carga (cada uma é um getMessages, e a WATI
+// limita a 10 req/10 s por conta; eram 3 por carga até o 429 de 26/11), ativa de novo após 60 s
+const VERIFICAR_POR_VEZ = 1
 const INTERVALO_VERIFICACAO = 60000
 const ATIVA_MS = 24 * 3600 * 1000
 const RECONFERIR_ATIVA_MS = 15 * 60 * 1000 // webhook em produção: a conferência periódica é só rede de segurança
